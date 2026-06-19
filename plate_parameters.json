@@ -1,0 +1,10 @@
+{
+    	"name": "main_plate",
+	"length": 80,
+    	"width": 50,
+    	"thickness": 6,
+    	"hole_dia": 14,
+    	"hole_x_spc": 60,
+    	"hole_y_spc": 30
+}
+
