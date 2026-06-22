@@ -1,0 +1,56 @@
+{
+  "name": "example part",
+  "operations": [
+    {
+      "id": "base",
+      "type": "extrude",
+      "plane": "XY",
+      "profile": "rectangle",
+      "width": 80,
+      "height": 50,
+      "distance": 6
+    },
+    {
+      "type": "cut",
+      "target": "base.top",
+      "profile": "circle",
+      "diameter": 10,
+      "positions": [
+  	[-30, -15],
+  	[-30, 15],
+  	[30, -15],
+  	[30, 15]
+      ],
+      "depth": "through"
+    },
+    {
+      "type": "cut",
+      "target": "base.top",
+      "profile": "rectangle",
+      "width": 25,
+      "height": 12,
+      "x": 0,
+      "y": 0,
+      "depth": 3
+    },
+    {
+      "type": "add_extrude",
+      "target": "base.top",
+      "profile": "rectangle",
+      "width": 20,
+      "height": 15,
+      "x": -20,
+      "y": 0,
+      "distance": 8
+    },
+    {
+      "type": "add_extrude",
+      "target": "base.top",
+      "profile": "circle",
+      "diameter": 12,
+      "x": 15,
+      "y": 0,
+      "distance": 5
+    }
+  ]
+}
