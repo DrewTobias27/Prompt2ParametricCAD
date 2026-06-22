@@ -1,0 +1,32 @@
+{
+  "name": "example part",
+  "operations": [
+    {
+      "type": "extrude",
+      "plane": "XY",
+      "profile": "rectangle",
+      "width": 80,
+      "height": 50,
+      "distance": 6
+    },
+    {
+      "type": "cut",
+      "target_face": ">Z",
+      "profile": "circle",
+      "diameter": 10,
+      "x": 20,
+      "y": 10,
+      "depth": "through"
+    },
+    {
+      "type": "add_extrude",
+      "target_face": ">Z",
+      "profile": "rectangle",
+      "width": 20,
+      "height": 15,
+      "x": -20,
+      "y": 0,
+      "distance": 8
+    }
+  ]
+}

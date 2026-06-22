@@ -1,0 +1,5 @@
+*.step
+*.stl
+*.svg
+__pycache__/
+*.pyc
