@@ -1,5 +1,10 @@
 *.step
 *.stl
 *.svg
+*.png
 __pycache__/
 *.pyc
+.pytest_cache/
+.venv/
+generated/*
+!generated/.gitkeep

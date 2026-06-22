@@ -1,7 +1,7 @@
 import cadquery as cq
 import json
 
-with open("part_operations_4.json", "r") as file:
+with open("operations.json", "r") as file:
     model_data = json.load(file)
 
 model_name = model_data["name"]
