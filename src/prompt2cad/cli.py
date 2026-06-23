@@ -6,6 +6,7 @@ from pathlib import Path
 from prompt2cad.exporter import export_step
 from prompt2cad.interpreter import build_model
 from prompt2cad.loader import load_model
+from prompt2cad.schema import validate_model_data
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,6 +34,7 @@ def main() -> None:
     output_path = args.output_path
 
     model_data = load_model(input_path)
+    validate_model_data(model_data)
     part = build_model(model_data)
     export_step(part, output_path)
 

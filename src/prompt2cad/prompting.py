@@ -4,59 +4,7 @@ import json
 
 from openai import OpenAI
 
-
-CAD_MODEL_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {
-        "operations": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "enum": ["extrude"],
-                    },
-                    "id": {
-                        "type": "string",
-                    },
-                    "plane": {
-                        "type": "string",
-                        "enum": ["XY"],
-                    },
-                    "profile": {
-                        "type": "string",
-                        "enum": ["rectangle"],
-                    },
-                    "width": {
-                        "type": "number",
-                        "exclusiveMinimum": 0,
-                    },
-                    "height": {
-                        "type": "number",
-                        "exclusiveMinimum": 0,
-                    },
-                    "distance": {
-                        "type": "number",
-                        "exclusiveMinimum": 0,
-                    },
-                },
-                "required": [
-                    "type",
-                    "id",
-                    "plane",
-                    "profile",
-                    "width",
-                    "height",
-                    "distance",
-                ],
-            },
-        }
-    },
-    "required": ["operations"],
-}
+from prompt2cad.schema import CAD_MODEL_SCHEMA
 
 
 def create_openai_client() -> OpenAI:
