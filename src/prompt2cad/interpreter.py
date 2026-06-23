@@ -3,35 +3,47 @@
 import cadquery as cq
 
 
+def apply_face_tags(
+    part: cq.Workplane,
+    feature_id: str,
+    face_tags: dict,
+) -> cq.Workplane:
+    """Tag named faces on a feature for later operations."""
+    for tag_name, selector in face_tags.items():
+        if not isinstance(tag_name, str):
+            raise ValueError("Face tag names must be strings")
+        if not isinstance(selector, str):
+            raise ValueError("Face tag selectors must be strings")
+
+        part = (
+            part.faces(selector)
+            .workplane()
+            .tag(f"{feature_id}.{tag_name}")
+            .end()
+            .end()
+        )
+
+    return part
+
+
 def build_base_extrusion(
     operation: dict,
     operation_number: int,
 ) -> cq.Workplane:
-    """Build the initial rectangular solid and tag its top workplane."""
+    """Build the initial solid and tag its top workplane."""
     feature_id = operation["id"]
     plane = operation["plane"]
-    profile = operation["profile"]
-    width = operation["width"]
-    height = operation["height"]
     distance = operation["distance"]
 
-    if width <= 0:
-        raise ValueError("Width must be greater than zero")
-    if height <= 0:
-        raise ValueError("Height must be greater than zero")
     if distance <= 0:
         raise ValueError("Distance must be greater than zero")
 
-    if profile == "rectangle":
-        part = cq.Workplane(plane).rect(width, height).extrude(distance)
-    else:
-        raise ValueError(
-            f"Operation {operation_number}: "
-            f"unsupported profile for extrude: {profile}"
-        )
+    workplane = cq.Workplane(plane)
+    workplane = create_profile(workplane, operation, operation_number)
+    part = workplane.extrude(distance)
 
-    part = part.faces(">Z").workplane().tag(f"{feature_id}.top")
-    return part.end().end()
+    face_tags = operation.get("face_tags", {"top": ">Z"})
+    return apply_face_tags(part, feature_id, face_tags)
 
 
 def get_positions(operation: dict) -> list:
@@ -243,7 +255,7 @@ def apply_cut_operation(
     operation: dict,
     operation_number: int,
 ) -> cq.Workplane:
-    """Apply one circular or rectangular cut to an existing model."""
+    """Apply a profile cut to an existing model."""
     if part is None:
         raise ValueError("Cannot cut before a solid has been created")
 
@@ -294,6 +306,60 @@ def apply_add_extrusion(
     return workplane.extrude(distance)
 
 
+def validate_axis_point(axis_point: list, point_name: str) -> tuple:
+    """Validate a 2D or 3D axis point and return it as a 3D tuple."""
+    if len(axis_point) not in (2, 3):
+        raise ValueError(f"{point_name} must contain two or three numbers")
+
+    for coordinate in axis_point:
+        if not isinstance(coordinate, (int, float)):
+            raise ValueError(
+                f"{point_name} coordinates must be integers or floats"
+            )
+
+    if len(axis_point) == 2:
+        return (axis_point[0], axis_point[1], 0)
+
+    return tuple(axis_point)
+
+
+def build_revolve(
+    operation: dict,
+    operation_number: int,
+) -> cq.Workplane:
+    """Build a solid by revolving a profile around an axis."""
+    feature_id = operation["id"]
+    plane = operation["plane"]
+    angle = operation["angle"]
+    axis_start = validate_axis_point(operation["axis_start"], "Axis start")
+    axis_end = validate_axis_point(operation["axis_end"], "Axis end")
+    positions = get_positions(operation)
+
+    if not isinstance(angle, (int, float)):
+        raise ValueError("Revolve angle must be an integer or float")
+    if angle != 360:
+        raise ValueError("Revolve angle must be 360 for now")
+    if axis_start == axis_end:
+        raise ValueError("Revolve axis start and end cannot be the same")
+
+    workplane = cq.Workplane(plane).pushPoints(positions)
+    workplane = create_profile(workplane, operation, operation_number)
+    part = workplane.revolve(
+        angleDegrees=angle,
+        axisStart=axis_start,
+        axisEnd=axis_end,
+    )
+
+    face_tags = operation.get(
+        "face_tags",
+        {
+            "front": ">Y",
+            "back": "<Y",
+        },
+    )
+    return apply_face_tags(part, feature_id, face_tags)
+
+
 def validate_final_model(part: cq.Workplane) -> None:
     """Require one connected, geometrically valid solid."""
     solids = part.solids().vals()
@@ -319,6 +385,8 @@ def build_model(model_data: dict) -> cq.Workplane:
 
         if operation_type == "extrude":
             part = build_base_extrusion(operation, operation_number)
+        elif operation_type == "revolve":
+            part = build_revolve(operation, operation_number)
         elif operation_type == "cut":
             part = apply_cut_operation(part, operation, operation_number)
         elif operation_type == "add_extrude":

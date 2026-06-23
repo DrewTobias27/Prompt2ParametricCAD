@@ -383,3 +383,215 @@ def test_line_arc_sketch():
     expected_added_volume = (rectangle_area + semicircle_area) * 8
 
     assert actual_added_volume == pytest.approx(expected_added_volume)
+
+
+def test_circle_base():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "circle",
+                "diameter": 20,
+                "distance": 6,
+            }
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    expected_volume = math.pi * 10**2 * 6
+
+    assert solid.Volume() == pytest.approx(expected_volume)
+
+
+def test_revolved_cylinder_base():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 10,
+                "height": 20,
+                "positions": [[5, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "face_tags": {
+                    "front": ">Y",
+                    "back": "<Y",
+                },
+            }
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+    expected_volume = math.pi * 10**2 * 20
+
+    assert solid.Volume() == pytest.approx(expected_volume)
+
+
+def test_revolve_rejects_partial_angle():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 10,
+                "height": 20,
+                "positions": [[5, 0]],
+                "angle": 180,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "face_tags": {
+                    "front": ">Y",
+                    "back": "<Y",
+                },
+            }
+        ]
+    }
+
+    with pytest.raises(ValueError):
+        build_model(model_data)
+
+
+def test_cut_revolved_front_face():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 10,
+                "height": 20,
+                "positions": [[5, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "face_tags": {
+                    "front": ">Y",
+                    "back": "<Y",
+                },
+            },
+            {
+                "type": "cut",
+                "target": "base.front",
+                "profile": "circle",
+                "diameter": 4,
+                "positions": [[0, 0]],
+                "depth": "through",
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    original_volume = math.pi * 10**2 * 20
+    expected_removed_volume = math.pi * 2**2 * 20
+
+    assert solid.Volume() == pytest.approx(
+        original_volume - expected_removed_volume
+    )
+
+
+def test_polyline_cut():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            },
+            {
+                "type": "cut",
+                "target": "base.top",
+                "profile": "polyline",
+                "points": [
+                    [-10, -10],
+                    [10, -10],
+                    [10, 0],
+                    [0, 0],
+                    [0, 10],
+                    [-10, 10],
+                ],
+                "positions": [[0, 0]],
+                "depth": "through",
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    base_volume = 80 * 50 * 6
+    actual_removed_volume = base_volume - solid.Volume()
+
+    expected_area = 20 * 20 - 10 * 10
+    expected_removed_volume = expected_area * 6
+
+    assert actual_removed_volume == pytest.approx(expected_removed_volume)
+
+
+def test_line_arc_cut():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            },
+            {
+                "type": "cut",
+                "target": "base.top",
+                "profile": "sketch",
+                "start": [-10, -10],
+                "segments": [
+                    {
+                        "type": "line",
+                        "to": [10, -10],
+                    },
+                    {
+                        "type": "arc",
+                        "through": [20, 0],
+                        "to": [10, 10],
+                    },
+                    {
+                        "type": "line",
+                        "to": [-10, 10],
+                    },
+                ],
+                "close": True,
+                "positions": [[0, 0]],
+                "depth": "through",
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    base_volume = 80 * 50 * 6
+    actual_removed_volume = base_volume - solid.Volume()
+
+    rectangle_area = 20 * 20
+    semicircle_area = 0.5 * math.pi * 10**2
+    expected_removed_volume = (rectangle_area + semicircle_area) * 6
+
+    assert actual_removed_volume == pytest.approx(expected_removed_volume)
