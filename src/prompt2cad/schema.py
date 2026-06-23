@@ -4,6 +4,199 @@ from jsonschema import ValidationError
 from jsonschema import validate
 
 
+POSITIVE_NUMBER_SCHEMA = {
+    "type": "number",
+    "exclusiveMinimum": 0,
+}
+
+POINT_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "number",
+    },
+    "minItems": 2,
+    "maxItems": 2,
+}
+
+POSITIONS_SCHEMA = {
+    "type": "array",
+    "items": POINT_SCHEMA,
+    "minItems": 1,
+}
+
+POLYLINE_POINTS_SCHEMA = {
+    "type": "array",
+    "items": POINT_SCHEMA,
+    "minItems": 3,
+}
+
+CUT_DEPTH_SCHEMA = {
+    "oneOf": [
+        {
+            "type": "string",
+            "enum": ["through"],
+        },
+        POSITIVE_NUMBER_SCHEMA,
+    ],
+}
+
+PROFILE_PROPERTIES = {
+    "rectangle": {
+        "width": POSITIVE_NUMBER_SCHEMA,
+        "height": POSITIVE_NUMBER_SCHEMA,
+    },
+    "circle": {
+        "diameter": POSITIVE_NUMBER_SCHEMA,
+    },
+    "polygon": {
+        "sides": {
+            "type": "integer",
+            "minimum": 3,
+        },
+        "diameter": POSITIVE_NUMBER_SCHEMA,
+    },
+    "polyline": {
+        "points": POLYLINE_POINTS_SCHEMA,
+    },
+}
+
+PROFILE_REQUIRED_FIELDS = {
+    "rectangle": ["width", "height"],
+    "circle": ["diameter"],
+    "polygon": ["sides", "diameter"],
+    "polyline": ["points"],
+}
+
+
+def build_base_extrude_schema(profile: str) -> dict:
+    """Build a schema for a base extrusion operation."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "type": {
+                "type": "string",
+                "enum": ["extrude"],
+            },
+            "id": {
+                "type": "string",
+            },
+            "plane": {
+                "type": "string",
+                "enum": ["XY"],
+            },
+            "profile": {
+                "type": "string",
+                "enum": [profile],
+            },
+            "distance": POSITIVE_NUMBER_SCHEMA,
+            **PROFILE_PROPERTIES[profile],
+        },
+        "required": [
+            "type",
+            "id",
+            "plane",
+            "profile",
+            "distance",
+            *PROFILE_REQUIRED_FIELDS[profile],
+        ],
+    }
+
+
+def build_add_extrude_schema(profile: str) -> dict:
+    """Build a schema for an additive extrusion operation."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "type": {
+                "type": "string",
+                "enum": ["add_extrude"],
+            },
+            "target": {
+                "type": "string",
+            },
+            "profile": {
+                "type": "string",
+                "enum": [profile],
+            },
+            "positions": POSITIONS_SCHEMA,
+            "distance": POSITIVE_NUMBER_SCHEMA,
+            **PROFILE_PROPERTIES[profile],
+        },
+        "required": [
+            "type",
+            "target",
+            "profile",
+            "positions",
+            "distance",
+            *PROFILE_REQUIRED_FIELDS[profile],
+        ],
+    }
+
+
+def build_cut_schema(profile: str) -> dict:
+    """Build a schema for a cut operation."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "type": {
+                "type": "string",
+                "enum": ["cut"],
+            },
+            "target": {
+                "type": "string",
+            },
+            "profile": {
+                "type": "string",
+                "enum": [profile],
+            },
+            "positions": POSITIONS_SCHEMA,
+            "depth": CUT_DEPTH_SCHEMA,
+            **PROFILE_PROPERTIES[profile],
+        },
+        "required": [
+            "type",
+            "target",
+            "profile",
+            "positions",
+            "depth",
+            *PROFILE_REQUIRED_FIELDS[profile],
+        ],
+    }
+
+
+RECTANGLE_EXTRUDE_SCHEMA = build_base_extrude_schema("rectangle")
+CIRCLE_EXTRUDE_SCHEMA = build_base_extrude_schema("circle")
+POLYGON_EXTRUDE_SCHEMA = build_base_extrude_schema("polygon")
+POLYLINE_EXTRUDE_SCHEMA = build_base_extrude_schema("polyline")
+
+RECTANGLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("rectangle")
+CIRCLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("circle")
+POLYGON_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("polygon")
+POLYLINE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("polyline")
+
+RECTANGLE_CUT_SCHEMA = build_cut_schema("rectangle")
+CIRCLE_CUT_SCHEMA = build_cut_schema("circle")
+POLYGON_CUT_SCHEMA = build_cut_schema("polygon")
+POLYLINE_CUT_SCHEMA = build_cut_schema("polyline")
+
+OPERATION_SCHEMAS = [
+    RECTANGLE_EXTRUDE_SCHEMA,
+    CIRCLE_EXTRUDE_SCHEMA,
+    POLYGON_EXTRUDE_SCHEMA,
+    POLYLINE_EXTRUDE_SCHEMA,
+    RECTANGLE_ADD_EXTRUDE_SCHEMA,
+    CIRCLE_ADD_EXTRUDE_SCHEMA,
+    POLYGON_ADD_EXTRUDE_SCHEMA,
+    POLYLINE_ADD_EXTRUDE_SCHEMA,
+    RECTANGLE_CUT_SCHEMA,
+    CIRCLE_CUT_SCHEMA,
+    POLYGON_CUT_SCHEMA,
+    POLYLINE_CUT_SCHEMA,
+]
+
 CAD_MODEL_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -11,47 +204,9 @@ CAD_MODEL_SCHEMA = {
         "operations": {
             "type": "array",
             "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "enum": ["extrude"],
-                    },
-                    "id": {
-                        "type": "string",
-                    },
-                    "plane": {
-                        "type": "string",
-                        "enum": ["XY"],
-                    },
-                    "profile": {
-                        "type": "string",
-                        "enum": ["rectangle"],
-                    },
-                    "width": {
-                        "type": "number",
-                        "exclusiveMinimum": 0,
-                    },
-                    "height": {
-                        "type": "number",
-                        "exclusiveMinimum": 0,
-                    },
-                    "distance": {
-                        "type": "number",
-                        "exclusiveMinimum": 0,
-                    },
-                },
-                "required": [
-                    "type",
-                    "id",
-                    "plane",
-                    "profile",
-                    "width",
-                    "height",
-                    "distance",
-                ],
+                "oneOf": OPERATION_SCHEMAS,
             },
+            "minItems": 1,
         }
     },
     "required": ["operations"],
