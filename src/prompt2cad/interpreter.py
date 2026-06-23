@@ -3,6 +3,9 @@
 import cadquery as cq
 
 
+BASE_OPERATION_TYPES = {"extrude", "revolve"}
+
+
 def apply_face_tags(
     part: cq.Workplane,
     feature_id: str,
@@ -26,6 +29,33 @@ def apply_face_tags(
     return part
 
 
+def get_available_tags(part: cq.Workplane) -> list:
+    """Return the currently known CadQuery tag names."""
+    context = getattr(part, "ctx", None)
+    tags = getattr(context, "tags", {})
+    return sorted(tags.keys())
+
+
+def get_tagged_workplane(
+    part: cq.Workplane,
+    target: str,
+    operation_number: int,
+) -> cq.Workplane:
+    """Return a tagged workplane or raise a clear target error."""
+    try:
+        return part.workplaneFromTagged(target)
+    except Exception as error:
+        available_tags = get_available_tags(part)
+        tag_message = ""
+        if available_tags:
+            tag_message = f" Available tags: {', '.join(available_tags)}."
+
+        raise ValueError(
+            f"Operation {operation_number}: target '{target}' was not found."
+            f"{tag_message}"
+        ) from error
+
+
 def build_base_extrusion(
     operation: dict,
     operation_number: int,
@@ -46,28 +76,41 @@ def build_base_extrusion(
     return apply_face_tags(part, feature_id, face_tags)
 
 
-def get_positions(operation: dict) -> list:
+def get_positions(operation: dict, operation_number: int) -> list:
     """Return and validate one or more profile positions."""
-    if "positions" in operation:
-        positions = operation["positions"]
-    else:
-        positions = [[operation["x"], operation["y"]]]
+    if "positions" not in operation:
+        raise ValueError(
+            f"Operation {operation_number}: positions is required. "
+            "Use positions like [[0, 0]] instead of x and y."
+        )
+
+    positions = operation["positions"]
 
     if len(positions) == 0:
-        raise ValueError("At least one profile position must be defined")
+        raise ValueError(
+            f"Operation {operation_number}: "
+            "at least one profile position must be defined"
+        )
 
     for position in positions:
         if len(position) != 2:
             raise ValueError(
-                "Each profile position must contain exactly x and y"
+                f"Operation {operation_number}: "
+                "each profile position must contain exactly x and y"
             )
 
         x = position[0]
         y = position[1]
         if not isinstance(x, (int, float)):
-            raise ValueError("Profile x position must be an integer or float")
+            raise ValueError(
+                f"Operation {operation_number}: "
+                "profile x position must be an integer or float"
+            )
         if not isinstance(y, (int, float)):
-            raise ValueError("Profile y position must be an integer or float")
+            raise ValueError(
+                f"Operation {operation_number}: "
+                "profile y position must be an integer or float"
+            )
     return positions
 
 
@@ -262,9 +305,9 @@ def apply_cut_operation(
     target = operation["target"]
     depth = operation["depth"]
 
-    positions = get_positions(operation)
+    positions = get_positions(operation, operation_number)
 
-    target_workplane = part.workplaneFromTagged(target)
+    target_workplane = get_tagged_workplane(part, target, operation_number)
     workplane = target_workplane.pushPoints(positions)
     workplane = create_profile(workplane, operation, operation_number)
 
@@ -294,12 +337,12 @@ def apply_add_extrusion(
 
     target = operation["target"]
     distance = operation["distance"]
-    positions = get_positions(operation)
+    positions = get_positions(operation, operation_number)
 
     if distance <= 0:
         raise ValueError("Distance must be greater than zero")
 
-    target_workplane = part.workplaneFromTagged(target)
+    target_workplane = get_tagged_workplane(part, target, operation_number)
     workplane = target_workplane.pushPoints(positions)
     workplane = create_profile(workplane, operation, operation_number)
 
@@ -333,7 +376,7 @@ def build_revolve(
     angle = operation["angle"]
     axis_start = validate_axis_point(operation["axis_start"], "Axis start")
     axis_end = validate_axis_point(operation["axis_end"], "Axis end")
-    positions = get_positions(operation)
+    positions = get_positions(operation, operation_number)
 
     if not isinstance(angle, (int, float)):
         raise ValueError("Revolve angle must be an integer or float")
@@ -375,9 +418,37 @@ def validate_final_model(part: cq.Workplane) -> None:
         raise ValueError("Generated geometry is invalid")
 
 
+def validate_operation_order(operations: list) -> None:
+    """Require exactly one base operation, and require it to be first."""
+    if len(operations) == 0:
+        raise ValueError("At least one operation is required")
+
+    first_operation_type = operations[0].get("type")
+    if first_operation_type not in BASE_OPERATION_TYPES:
+        raise ValueError(
+            "Operation 1 must create the base solid using type "
+            "'extrude' or 'revolve'"
+        )
+
+    base_operation_numbers = [
+        operation_number
+        for operation_number, operation in enumerate(operations, start=1)
+        if operation.get("type") in BASE_OPERATION_TYPES
+    ]
+
+    if len(base_operation_numbers) > 1:
+        extra_base_operation = base_operation_numbers[1]
+        raise ValueError(
+            f"Operation {extra_base_operation}: only one base operation "
+            "is allowed"
+        )
+
+
 def build_model(model_data: dict) -> cq.Workplane:
     """Process an ordered operation list and return the completed CAD model."""
     operations = model_data["operations"]
+    validate_operation_order(operations)
+
     part = None
 
     for operation_number, operation in enumerate(operations, start=1):

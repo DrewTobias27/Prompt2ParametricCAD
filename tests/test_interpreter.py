@@ -7,6 +7,11 @@ import pytest
 
 from prompt2cad.interpreter import build_model
 from prompt2cad.loader import load_model
+from prompt2cad.schema import validate_model_data
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+EXAMPLE_PATHS = sorted((PROJECT_ROOT / "examples").glob("*.json"))
 
 
 def test_rectangular_base_dimensions():
@@ -82,8 +87,7 @@ def test_add_extrusion():
                 "type": "add_extrude",
                 "target": "base.top",
                 "profile": "rectangle",
-                "x": 0,
-                "y": 0,
+                "positions": [[0, 0]],
                 "width": 20,
                 "height": 15,
                 "distance": 8,
@@ -107,8 +111,7 @@ def test_add_extrusion():
                 "profile": "rectangle",
                 "width": 20,
                 "height": 10,
-                "x": 0,
-                "y": 0,
+                "positions": [[0, 0]],
                 "depth": "through",
             },
             20 * 10 * 6,
@@ -120,8 +123,7 @@ def test_add_extrusion():
                 "profile": "rectangle",
                 "width": 20,
                 "height": 10,
-                "x": 0,
-                "y": 0,
+                "positions": [[0, 0]],
                 "depth": 3,
             },
             20 * 10 * 3,
@@ -170,9 +172,16 @@ def test_cut_volumes(cut_operation, expected_removed_volume):
     assert actual_removed_volume == pytest.approx(expected_removed_volume)
 
 
+@pytest.mark.parametrize("input_path", EXAMPLE_PATHS)
+def test_example_files_validate_and_build(input_path):
+    model_data = load_model(input_path)
+
+    validate_model_data(model_data)
+    build_model(model_data)
+
+
 def test_example_model():
-    project_root = Path(__file__).resolve().parents[1]
-    input_path = project_root / "examples" / "example_part.json"
+    input_path = PROJECT_ROOT / "examples" / "example_part.json"
 
     model_data = load_model(input_path)
     part = build_model(model_data)
@@ -462,6 +471,106 @@ def test_revolve_rejects_partial_angle():
         build_model(model_data)
 
 
+def test_rejects_legacy_xy_positions():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            },
+            {
+                "type": "cut",
+                "target": "base.top",
+                "profile": "circle",
+                "x": 0,
+                "y": 0,
+                "diameter": 10,
+                "depth": "through",
+            },
+        ]
+    }
+
+    with pytest.raises(ValueError, match="positions is required"):
+        build_model(model_data)
+
+
+def test_rejects_cut_before_base():
+    model_data = {
+        "operations": [
+            {
+                "type": "cut",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "diameter": 10,
+                "depth": "through",
+            }
+        ]
+    }
+
+    with pytest.raises(ValueError, match="Operation 1 must create"):
+        build_model(model_data)
+
+
+def test_rejects_second_base_operation():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            },
+            {
+                "type": "extrude",
+                "id": "second_base",
+                "plane": "XY",
+                "profile": "circle",
+                "diameter": 20,
+                "distance": 5,
+            },
+        ]
+    }
+
+    with pytest.raises(ValueError, match="only one base operation"):
+        build_model(model_data)
+
+
+def test_invalid_target_tag_has_clear_error():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            },
+            {
+                "type": "cut",
+                "target": "base.Top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "diameter": 10,
+                "depth": "through",
+            },
+        ]
+    }
+
+    with pytest.raises(ValueError, match="target 'base.Top' was not found"):
+        build_model(model_data)
+
+
 def test_cut_revolved_front_face():
     model_data = {
         "operations": [
@@ -596,9 +705,9 @@ def test_line_arc_cut():
 
     assert actual_removed_volume == pytest.approx(expected_removed_volume)
 
+
 def test_api_rectangular_plate_example():
-    project_root = Path(__file__).resolve().parents[1]
-    input_path = project_root / "examples" / "api_rectangular_plate.json"
+    input_path = PROJECT_ROOT / "examples" / "api_rectangular_plate.json"
 
     model_data = load_model(input_path)
     part = build_model(model_data)
