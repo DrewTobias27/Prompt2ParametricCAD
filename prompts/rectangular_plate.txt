@@ -1,0 +1,1 @@
+Make a rectangular plate 80 mm wide, 50 mm tall, and 6 mm thick.

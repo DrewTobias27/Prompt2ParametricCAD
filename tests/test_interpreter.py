@@ -595,3 +595,13 @@ def test_line_arc_cut():
     expected_removed_volume = (rectangle_area + semicircle_area) * 6
 
     assert actual_removed_volume == pytest.approx(expected_removed_volume)
+
+def test_api_rectangular_plate_example():
+    project_root = Path(__file__).resolve().parents[1]
+    input_path = project_root / "examples" / "api_rectangular_plate.json"
+
+    model_data = load_model(input_path)
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    assert solid.Volume() == pytest.approx(80 * 50 * 6)

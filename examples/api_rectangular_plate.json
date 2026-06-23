@@ -1,0 +1,13 @@
+{
+    "operations": [
+        {
+            "type": "extrude",
+            "id": "base",
+            "plane": "XY",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "distance": 6
+        }
+    ]
+}
