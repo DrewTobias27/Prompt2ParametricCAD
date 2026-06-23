@@ -1,0 +1,21 @@
+{
+  "operations": [
+    {
+      "type": "extrude",
+      "id": "base",
+      "plane": "XY",
+      "profile": "circle",
+      "diameter": 60,
+      "distance": 8
+    },
+    {
+      "type": "add_extrude",
+      "target": "base.top",
+      "profile": "rectangle",
+      "positions": [[0, 0]],
+      "width": 20,
+      "height": 14,
+      "distance": 10
+    }
+  ]
+}

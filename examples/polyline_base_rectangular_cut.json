@@ -1,0 +1,27 @@
+{
+  "operations": [
+    {
+      "type": "extrude",
+      "id": "base",
+      "plane": "XY",
+      "profile": "polyline",
+      "points": [
+        [-40, -20],
+        [25, -20],
+        [40, 0],
+        [20, 25],
+        [-35, 15]
+      ],
+      "distance": 6
+    },
+    {
+      "type": "cut",
+      "target": "base.top",
+      "profile": "rectangle",
+      "positions": [[0, 0]],
+      "width": 20,
+      "height": 8,
+      "depth": "through"
+    }
+  ]
+}
