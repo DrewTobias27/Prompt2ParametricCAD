@@ -1,5 +1,6 @@
 """Command-line entry point for Prompt2ParametricCAD."""
 
+import argparse
 from pathlib import Path
 
 from prompt2cad.exporter import export_step
@@ -7,11 +8,29 @@ from prompt2cad.interpreter import build_model
 from prompt2cad.loader import load_model
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Convert a JSON CAD model to a STEP file."
+    )
+    parser.add_argument(
+        "input_path",
+        type=Path,
+        help="Path to the input JSON file containing the CAD model.",
+    )
+    parser.add_argument(
+        "output_path",
+        type=Path,
+        help="Path to the output STEP file.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    """Load one example model, build it, and export it."""
-    project_root = Path(__file__).resolve().parents[2]
-    input_path = project_root / "examples" / "example_part.json"
-    output_path = project_root / "generated" / "example_part.step"
+    """Load a model JSON file, build it, and export it as STEP."""
+    args = parse_args()
+    input_path = args.input_path
+    output_path = args.output_path
 
     model_data = load_model(input_path)
     part = build_model(model_data)
@@ -20,4 +39,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
