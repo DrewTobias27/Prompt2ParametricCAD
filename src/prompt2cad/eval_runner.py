@@ -36,6 +36,15 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Folder containing eval case JSON files.",
     )
+    parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help=(
+            "Run only the named eval case. May be passed more than once. "
+            "Use the case filename without .json."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -65,11 +74,16 @@ def run_eval(
 def run_batch(
     models_dir: Path,
     cases_dir: Path,
+    case_names: list[str] | None = None,
 ) -> list[str]:
     """Run all eval cases against all generated CAD model JSON files."""
     all_failures = []
+    requested_cases = set(case_names or [])
 
     for case_path in sorted(cases_dir.glob("*.json")):
+        if requested_cases and case_path.stem not in requested_cases:
+            continue
+
         model_path = models_dir / case_path.name
 
         if not model_path.exists():
@@ -109,7 +123,7 @@ def main() -> None:
                 "Use either single-case paths or batch-mode folders, not both."
             )
 
-        failures = run_batch(args.models_dir, args.cases_dir)
+        failures = run_batch(args.models_dir, args.cases_dir, args.case)
         if failures:
             raise SystemExit(1)
         return

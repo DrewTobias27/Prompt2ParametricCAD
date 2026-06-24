@@ -330,13 +330,7 @@ def apply_cut_operation(
     workplane = create_profile(workplane, operation, operation_number)
 
     if depth == "through":
-        bounding_box = part.val().BoundingBox()
-        through_depth = max(
-            bounding_box.xlen,
-            bounding_box.ylen,
-            bounding_box.zlen,
-        ) * 2
-        part = workplane.cutBlind(through_depth, both=True)
+        part = workplane.cutThruAll()
     elif isinstance(depth, (int, float)):
         if depth <= 0:
             raise ValueError("Depth must be greater than zero")
@@ -390,12 +384,11 @@ def validate_axis_point(axis_point: list, point_name: str) -> tuple:
     return tuple(axis_point)
 
 
-def build_revolve(
+def build_revolve_tool(
     operation: dict,
     operation_number: int,
 ) -> cq.Workplane:
-    """Build a solid by revolving a profile around an axis."""
-    feature_id = operation["id"]
+    """Build a temporary solid by revolving a profile around an axis."""
     plane = operation["plane"]
     angle = operation["angle"]
     axis_start = validate_axis_point(operation["axis_start"], "Axis start")
@@ -404,18 +397,29 @@ def build_revolve(
 
     if not isinstance(angle, (int, float)):
         raise ValueError("Revolve angle must be an integer or float")
-    if angle != 360:
-        raise ValueError("Revolve angle must be 360 for now")
+    if angle <= 0:
+        raise ValueError("Revolve angle must be greater than zero")
+    if angle > 360:
+        raise ValueError("Revolve angle cannot be greater than 360")
     if axis_start == axis_end:
         raise ValueError("Revolve axis start and end cannot be the same")
 
     workplane = cq.Workplane(plane).pushPoints(positions)
     workplane = create_profile(workplane, operation, operation_number)
-    part = workplane.revolve(
+    return workplane.revolve(
         angleDegrees=angle,
         axisStart=axis_start,
         axisEnd=axis_end,
     )
+
+
+def build_revolve(
+    operation: dict,
+    operation_number: int,
+) -> cq.Workplane:
+    """Build a solid by revolving a profile around an axis."""
+    feature_id = operation["id"]
+    part = build_revolve_tool(operation, operation_number)
 
     face_tags = operation.get(
         "face_tags",
@@ -425,6 +429,32 @@ def build_revolve(
         },
     )
     return apply_face_tags(part, feature_id, face_tags)
+
+
+def apply_add_revolve(
+    part: cq.Workplane,
+    operation: dict,
+    operation_number: int,
+) -> cq.Workplane:
+    """Add a revolve of a sketch to an existing model."""
+    if part is None:
+        raise ValueError("Cannot add before a solid has been created")
+
+    revolve_tool = build_revolve_tool(operation, operation_number)
+    return part.union(revolve_tool)
+
+
+def apply_cut_revolve(
+    part: cq.Workplane,
+    operation: dict,
+    operation_number: int,
+) -> cq.Workplane:
+    """Cut a revolve of a sketch from an existing model."""
+    if part is None:
+        raise ValueError("Cannot cut before a solid has been created")
+
+    revolve_tool = build_revolve_tool(operation, operation_number)
+    return part.cut(revolve_tool)
 
 
 def validate_final_model(part: cq.Workplane) -> None:
@@ -486,6 +516,10 @@ def build_model(model_data: dict) -> cq.Workplane:
             part = apply_cut_operation(part, operation, operation_number)
         elif operation_type == "add_extrude":
             part = apply_add_extrusion(part, operation, operation_number)
+        elif operation_type == "add_revolve":
+            part = apply_add_revolve(part, operation, operation_number)
+        elif operation_type == "cut_revolve":
+            part = apply_cut_revolve(part, operation, operation_number)
         else:
             raise ValueError(
                 f"Operation {operation_number}: "

@@ -1,0 +1,29 @@
+{
+  "name": "shaft_with_revolved_collar",
+  "prompt": "Make a 20 mm diameter by 40 mm long cylinder shaft using a revolve. Add a centered revolved collar around the middle of the shaft. The collar should be 24 mm outer diameter and 6 mm long.",
+  "expected": {
+    "operation_count": 2,
+    "base": {
+      "type": "revolve",
+      "profile": "rectangle",
+      "width": 10,
+      "height": 40,
+      "angle": 360
+    },
+    "bounding_box": {
+      "x": 24,
+      "y": 40,
+      "z": 24
+    },
+    "required_operations": [
+      {
+        "type": "add_revolve",
+        "profile": "rectangle",
+        "width": 2,
+        "height": 6,
+        "angle": 360,
+        "position_count": 1
+      }
+    ]
+  }
+}

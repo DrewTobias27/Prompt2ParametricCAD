@@ -30,7 +30,9 @@ Use these profile fields:
   straight-edged outline
 
 For revolve base operations:
-- Use angle 360.
+- Use angle 360 for complete round parts.
+- Use a smaller positive angle only when the user asks for a partial revolve,
+  half cylinder, quarter cylinder, sector, or other incomplete rotation.
 - Use positions to place the profile away from the revolve axis.
 - Use axis_start and axis_end to define the revolve axis.
 - axis_start and axis_end must be different points.
@@ -44,6 +46,10 @@ For revolve base operations:
 After the base operation, use:
 - type "add_extrude" to add material to an existing face
 - type "cut" to remove material from an existing face
+- type "add_revolve" to add axisymmetric revolved material such as collars,
+  raised rings, lips, or round bosses
+- type "cut_revolve" to remove axisymmetric revolved material such as grooves,
+  turned recesses, ring cuts, or lathe-style relief cuts
 
 For add_extrude and cut operations:
 - Use target "base.top" unless the user clearly requests a different face.
@@ -53,6 +59,22 @@ For add_extrude and cut operations:
 - Use one operation with multiple positions for repeated identical features.
 - Use distance for add_extrude operations.
 - Use depth for cut operations. Use "through" for through-cuts.
+
+For add_revolve and cut_revolve operations:
+- Do not use target. These operations are positioned by plane, positions,
+  axis_start, axis_end, and angle.
+- Use plane "XY".
+- Use positions to place the revolved feature profile relative to the axis.
+- Use angle 360 for complete revolved features unless the user asks for a
+  partial revolved feature.
+- For features around the same axis as a revolved base cylinder, usually reuse
+  axis_start [0, -1] and axis_end [0, 1].
+- A collar on a 20 mm diameter shaft can be made with add_revolve using a
+  rectangle centered at positions [[11, 0]], width 2, and the desired collar
+  length as height.
+- A groove in a 20 mm diameter shaft can be made with cut_revolve using a
+  rectangle centered at positions [[9, 0]], width 2, and the desired groove
+  length as height.
 
 If the user does not provide an exact dimension, choose a simple reasonable
 dimension that keeps the part valid. Prefer simple valid geometry over fancy

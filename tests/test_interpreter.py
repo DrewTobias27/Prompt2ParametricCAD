@@ -445,7 +445,7 @@ def test_revolved_cylinder_base():
     assert solid.Volume() == pytest.approx(expected_volume)
 
 
-def test_revolve_rejects_partial_angle():
+def test_revolved_half_cylinder_base():
     model_data = {
         "operations": [
             {
@@ -467,7 +467,108 @@ def test_revolve_rejects_partial_angle():
         ]
     }
 
-    with pytest.raises(ValueError):
+    part = build_model(model_data)
+    solid = part.solids().val()
+    expected_volume = math.pi * 10**2 * 20 / 2
+
+    assert solid.Volume() == pytest.approx(expected_volume)
+
+
+def test_add_revolved_collar_to_cylinder():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 10,
+                "height": 40,
+                "positions": [[5, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+            },
+            {
+                "type": "add_revolve",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 2,
+                "height": 6,
+                "positions": [[11, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    base_volume = math.pi * 10**2 * 40
+    collar_volume = math.pi * (12**2 - 10**2) * 6
+
+    assert solid.Volume() == pytest.approx(base_volume + collar_volume)
+
+
+def test_cut_revolved_groove_from_cylinder():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 10,
+                "height": 40,
+                "positions": [[5, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+            },
+            {
+                "type": "cut_revolve",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 2,
+                "height": 4,
+                "positions": [[9, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    base_volume = math.pi * 10**2 * 40
+    groove_volume = math.pi * (10**2 - 8**2) * 4
+
+    assert solid.Volume() == pytest.approx(base_volume - groove_volume)
+
+
+def test_revolve_rejects_angle_greater_than_360():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 10,
+                "height": 20,
+                "positions": [[5, 0]],
+                "angle": 361,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+            }
+        ]
+    }
+
+    with pytest.raises(ValueError, match="greater than 360"):
         build_model(model_data)
 
 

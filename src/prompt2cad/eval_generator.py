@@ -31,6 +31,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Regenerate files that already exist.",
     )
+    parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help=(
+            "Generate only the named eval case. May be passed more than once. "
+            "Use the case filename without .json."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -52,12 +61,17 @@ def generate_eval_models(
     cases_dir: Path,
     output_dir: Path,
     overwrite: bool = False,
+    case_names: list[str] | None = None,
 ) -> tuple[list[Path], list[str]]:
     """Generate CAD model JSON files for all eval cases in a folder."""
     generated_paths = []
     failures = []
+    requested_cases = set(case_names or [])
 
     for case_path in sorted(cases_dir.glob("*.json")):
+        if requested_cases and case_path.stem not in requested_cases:
+            continue
+
         output_path = output_dir / case_path.name
 
         if output_path.exists() and not overwrite:
@@ -93,6 +107,7 @@ def main() -> None:
         cases_dir=args.cases_dir,
         output_dir=args.output_dir,
         overwrite=args.overwrite,
+        case_names=args.case,
     )
     if failures:
         raise SystemExit(1)

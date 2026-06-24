@@ -103,6 +103,47 @@ def build_base_extrude_schema(profile: str) -> dict:
     }
 
 
+def build_revolve_feature_schema(operation_type: str, profile: str) -> dict:
+    """Build a schema for an additive or subtractive revolve feature."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "type": {
+                "type": "string",
+                "enum": [operation_type],
+            },
+            "plane": {
+                "type": "string",
+                "enum": ["XY"],
+            },
+            "profile": {
+                "type": "string",
+                "enum": [profile],
+            },
+            "positions": POSITIONS_SCHEMA,
+            "axis_start": POINT_SCHEMA,
+            "axis_end": POINT_SCHEMA,
+            "angle": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 360,
+            },
+            **PROFILE_PROPERTIES[profile],
+        },
+        "required": [
+            "type",
+            "plane",
+            "profile",
+            "positions",
+            "axis_start",
+            "axis_end",
+            "angle",
+            *PROFILE_REQUIRED_FIELDS[profile],
+        ],
+    }
+
+
 def build_add_extrude_schema(profile: str) -> dict:
     """Build a schema for an additive extrusion operation."""
     return {
@@ -193,7 +234,8 @@ def build_revolve_schema(profile: str) -> dict:
             "axis_end": POINT_SCHEMA,
             "angle": {
                 "type": "number",
-                "enum": [360],
+                "exclusiveMinimum": 0,
+                "maximum": 360,
             },
             **PROFILE_PROPERTIES[profile],
         },
@@ -225,10 +267,21 @@ CIRCLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("circle")
 POLYGON_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("polygon")
 POLYLINE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("polyline")
 
+
+RECTANGLE_ADD_REVOLVE_SCHEMA = build_revolve_feature_schema("add_revolve", "rectangle")
+CIRCLE_ADD_REVOLVE_SCHEMA = build_revolve_feature_schema("add_revolve", "circle")
+POLYGON_ADD_REVOLVE_SCHEMA = build_revolve_feature_schema("add_revolve", "polygon")
+POLYLINE_ADD_REVOLVE_SCHEMA = build_revolve_feature_schema("add_revolve", "polyline")
+
 RECTANGLE_CUT_SCHEMA = build_cut_schema("rectangle")
 CIRCLE_CUT_SCHEMA = build_cut_schema("circle")
 POLYGON_CUT_SCHEMA = build_cut_schema("polygon")
 POLYLINE_CUT_SCHEMA = build_cut_schema("polyline")
+
+RECTANGLE_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema("cut_revolve", "rectangle")
+CIRCLE_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema("cut_revolve", "circle")
+POLYGON_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema("cut_revolve", "polygon")
+POLYLINE_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema("cut_revolve", "polyline")
 
 OPERATION_SCHEMAS = [
     RECTANGLE_EXTRUDE_SCHEMA,
@@ -247,6 +300,14 @@ OPERATION_SCHEMAS = [
     CIRCLE_CUT_SCHEMA,
     POLYGON_CUT_SCHEMA,
     POLYLINE_CUT_SCHEMA,
+    RECTANGLE_ADD_REVOLVE_SCHEMA,
+    CIRCLE_ADD_REVOLVE_SCHEMA,
+    POLYGON_ADD_REVOLVE_SCHEMA,
+    POLYLINE_ADD_REVOLVE_SCHEMA,
+    RECTANGLE_CUT_REVOLVE_SCHEMA,
+    CIRCLE_CUT_REVOLVE_SCHEMA,
+    POLYGON_CUT_REVOLVE_SCHEMA,
+    POLYLINE_CUT_REVOLVE_SCHEMA,
 ]
 
 CAD_MODEL_SCHEMA = {
