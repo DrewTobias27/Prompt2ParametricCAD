@@ -31,7 +31,7 @@ POLYLINE_POINTS_SCHEMA = {
 }
 
 CUT_DEPTH_SCHEMA = {
-    "oneOf": [
+    "anyOf": [
         {
             "type": "string",
             "enum": ["through"],
@@ -204,7 +204,7 @@ CAD_MODEL_SCHEMA = {
         "operations": {
             "type": "array",
             "items": {
-                "oneOf": OPERATION_SCHEMAS,
+                "anyOf": OPERATION_SCHEMAS,
             },
             "minItems": 1,
         }
