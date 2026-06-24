@@ -1,0 +1,27 @@
+{
+  "name": "circular_flange_six_bolt_holes",
+  "prompt": "Make an 80 mm diameter circular flange, 8 mm thick, with six 6 mm circular through holes evenly spaced around the center.",
+  "expected": {
+    "operation_count": 2,
+    "base": {
+      "type": "extrude",
+      "profile": "circle",
+      "diameter": 80,
+      "distance": 8
+    },
+    "bounding_box": {
+      "x": 80,
+      "y": 80,
+      "z": 8
+    },
+    "required_operations": [
+      {
+        "type": "cut",
+        "profile": "circle",
+        "diameter": 6,
+        "depth": "through",
+        "position_count": 6
+      }
+    ]
+  }
+}

@@ -18,9 +18,13 @@ def apply_face_tags(
         if not isinstance(selector, str):
             raise ValueError("Face tag selectors must be strings")
 
+        workplane_options = {}
+        if selector in {">X", "<X", ">Y", "<Y"}:
+            workplane_options["centerOption"] = "CenterOfBoundBox"
+
         part = (
             part.faces(selector)
-            .workplane()
+            .workplane(**workplane_options)
             .tag(f"{feature_id}.{tag_name}")
             .end()
             .end()
@@ -72,7 +76,21 @@ def build_base_extrusion(
     workplane = create_profile(workplane, operation, operation_number)
     part = workplane.extrude(distance)
 
-    face_tags = operation.get("face_tags", {"top": ">Z"})
+    default_face_tags = {
+        "top": ">Z",
+        "bottom": "<Z",
+    }
+    if operation["profile"] == "rectangle":
+        default_face_tags.update(
+            {
+                "front": ">Y",
+                "back": "<Y",
+                "right": ">X",
+                "left": "<X",
+            }
+        )
+
+    face_tags = operation.get("face_tags", default_face_tags)
     return apply_face_tags(part, feature_id, face_tags)
 
 
@@ -312,7 +330,13 @@ def apply_cut_operation(
     workplane = create_profile(workplane, operation, operation_number)
 
     if depth == "through":
-        part = workplane.cutThruAll()
+        bounding_box = part.val().BoundingBox()
+        through_depth = max(
+            bounding_box.xlen,
+            bounding_box.ylen,
+            bounding_box.zlen,
+        ) * 2
+        part = workplane.cutBlind(through_depth, both=True)
     elif isinstance(depth, (int, float)):
         if depth <= 0:
             raise ValueError("Depth must be greater than zero")

@@ -1,0 +1,27 @@
+{
+  "name": "revolved_cylinder_front_hole",
+  "prompt": "Make a revolved 20 mm diameter cylinder that is 40 mm long. Add a centered 6 mm circular through hole on the front face.",
+  "expected": {
+    "operation_count": 2,
+    "base": {
+      "type": "revolve",
+      "profile": "rectangle",
+      "angle": 360
+    },
+    "bounding_box": {
+      "x": 20,
+      "y": 40,
+      "z": 20
+    },
+    "required_operations": [
+      {
+        "type": "cut",
+        "target": "base.front",
+        "profile": "circle",
+        "diameter": 6,
+        "depth": "through",
+        "position_count": 1
+      }
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "rectangular_block_front_hole_top_boss",
+  "prompt": "Make an 80 by 50 by 20 mm rectangular block. Add a centered 10 mm circular through hole on the front face. Add a centered 20 by 10 by 6 mm rectangular boss on the top face.",
+  "expected": {
+    "operation_count": 3,
+    "base": {
+      "type": "extrude",
+      "profile": "rectangle",
+      "width": 80,
+      "height": 50,
+      "distance": 20
+    },
+    "bounding_box": {
+      "x": 80,
+      "y": 50,
+      "z": 26
+    },
+    "required_operations": [
+      {
+        "type": "cut",
+        "target": "base.front",
+        "profile": "circle",
+        "diameter": 10,
+        "depth": "through",
+        "position_count": 1
+      },
+      {
+        "type": "add_extrude",
+        "target": "base.top",
+        "profile": "rectangle",
+        "width": 20,
+        "height": 10,
+        "distance": 6,
+        "position_count": 1
+      }
+    ]
+  }
+}

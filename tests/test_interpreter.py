@@ -571,6 +571,40 @@ def test_invalid_target_tag_has_clear_error():
         build_model(model_data)
 
 
+def test_cut_extruded_front_face_with_default_tag():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 20,
+            },
+            {
+                "type": "cut",
+                "target": "base.front",
+                "profile": "circle",
+                "diameter": 10,
+                "positions": [[0, 0]],
+                "depth": "through",
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    original_volume = 80 * 50 * 20
+    expected_removed_volume = math.pi * 5**2 * 50
+
+    assert solid.Volume() == pytest.approx(
+        original_volume - expected_removed_volume
+    )
+
+
 def test_cut_revolved_front_face():
     model_data = {
         "operations": [

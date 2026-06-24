@@ -1,0 +1,29 @@
+{
+  "name": "rectangular_base_hex_boss",
+  "prompt": "Make a 90 by 50 by 8 mm rectangular base with a centered hexagonal boss on top. The boss should be 20 mm across and 10 mm tall.",
+  "expected": {
+    "operation_count": 2,
+    "base": {
+      "type": "extrude",
+      "profile": "rectangle",
+      "width": 90,
+      "height": 50,
+      "distance": 8
+    },
+    "bounding_box": {
+      "x": 90,
+      "y": 50,
+      "z": 18
+    },
+    "required_operations": [
+      {
+        "type": "add_extrude",
+        "profile": "polygon",
+        "sides": 6,
+        "diameter": 20,
+        "distance": 10,
+        "position_count": 1
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "hex_plate_center_hole",
-  "prompt": "Make a hexagonal plate 70 mm across and 8 mm thick with a 20 mm circular through hole in the center.",
+  "prompt": "Make a hexagonal plate with a 70 mm corner-to-corner diameter and 8 mm thickness. Add a 20 mm circular through hole in the center.",
   "expected": {
     "operation_count": 2,
     "base": {

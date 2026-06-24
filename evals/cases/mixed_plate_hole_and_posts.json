@@ -1,0 +1,35 @@
+{
+  "name": "mixed_plate_hole_and_posts",
+  "prompt": "Make a 100 by 60 by 6 mm rectangular base with a centered 20 mm circular through hole and two raised circular posts on top. Each post should be 10 mm diameter and 12 mm tall.",
+  "expected": {
+    "operation_count": 3,
+    "base": {
+      "type": "extrude",
+      "profile": "rectangle",
+      "width": 100,
+      "height": 60,
+      "distance": 6
+    },
+    "bounding_box": {
+      "x": 100,
+      "y": 60,
+      "z": 18
+    },
+    "required_operations": [
+      {
+        "type": "cut",
+        "profile": "circle",
+        "diameter": 20,
+        "depth": "through",
+        "position_count": 1
+      },
+      {
+        "type": "add_extrude",
+        "profile": "circle",
+        "diameter": 10,
+        "distance": 12,
+        "position_count": 2
+      }
+    ]
+  }
+}

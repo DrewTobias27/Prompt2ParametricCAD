@@ -1,0 +1,29 @@
+{
+  "name": "rectangular_plate_two_slots",
+  "prompt": "Make a 100 by 50 by 6 mm rectangular plate with two rectangular through slots. Each slot should be 20 mm long and 6 mm wide.",
+  "expected": {
+    "operation_count": 2,
+    "base": {
+      "type": "extrude",
+      "profile": "rectangle",
+      "width": 100,
+      "height": 50,
+      "distance": 6
+    },
+    "bounding_box": {
+      "x": 100,
+      "y": 50,
+      "z": 6
+    },
+    "required_operations": [
+      {
+        "type": "cut",
+        "profile": "rectangle",
+        "width": 20,
+        "height": 6,
+        "depth": "through",
+        "position_count": 2
+      }
+    ]
+  }
+}

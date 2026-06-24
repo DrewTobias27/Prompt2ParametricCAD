@@ -15,9 +15,11 @@ dimensions.
 The output must be an object with one key: operations.
 
 The first operation should create the base solid:
-- Use type "extrude".
 - Use id "base".
 - Use plane "XY".
+- Use type "extrude" for prismatic parts made by pulling a 2D profile straight.
+- Use type "revolve" for turned/lathe-style parts such as cylinders, shafts,
+  bushings, knobs, or round parts described as revolved.
 - Choose one supported profile: "rectangle", "circle", "polygon", or "polyline".
 
 Use these profile fields:
@@ -27,12 +29,26 @@ Use these profile fields:
 - polyline: points, as an ordered list of [x, y] points forming a closed
   straight-edged outline
 
+For revolve base operations:
+- Use angle 360.
+- Use positions to place the profile away from the revolve axis.
+- Use axis_start and axis_end to define the revolve axis.
+- axis_start and axis_end must be different points.
+- For a vertical revolve axis in the XY plane, use axis_start [0, -1] and
+  axis_end [0, 1].
+- A common cylinder can be made by revolving a rectangle around a vertical
+  axis in the XY plane. For example, a 20 mm diameter by 40 mm long cylinder
+  can use a rectangle with width 10, height 40, positions [[5, 0]],
+  axis_start [0, -1], axis_end [0, 1], and angle 360.
+
 After the base operation, use:
 - type "add_extrude" to add material to an existing face
 - type "cut" to remove material from an existing face
 
 For add_extrude and cut operations:
 - Use target "base.top" unless the user clearly requests a different face.
+- Supported target names include "base.top", "base.bottom", "base.front",
+  "base.back", "base.left", and "base.right" when those faces exist.
 - Always use positions, even for one feature. Example: "positions": [[0, 0]]
 - Use one operation with multiple positions for repeated identical features.
 - Use distance for add_extrude operations.

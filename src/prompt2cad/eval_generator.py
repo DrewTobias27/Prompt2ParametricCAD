@@ -52,9 +52,10 @@ def generate_eval_models(
     cases_dir: Path,
     output_dir: Path,
     overwrite: bool = False,
-) -> list[Path]:
+) -> tuple[list[Path], list[str]]:
     """Generate CAD model JSON files for all eval cases in a folder."""
     generated_paths = []
+    failures = []
 
     for case_path in sorted(cases_dir.glob("*.json")):
         output_path = output_dir / case_path.name
@@ -64,27 +65,37 @@ def generate_eval_models(
             continue
 
         eval_case = load_json(case_path)
-        model_data = prompt_to_model_data(eval_case["prompt"])
+        case_name = eval_case["name"]
 
-        validate_model_data(model_data)
-        build_model(model_data)
+        try:
+            model_data = prompt_to_model_data(eval_case["prompt"])
+            validate_model_data(model_data)
+            build_model(model_data)
+        except Exception as error:
+            failure = f"{case_name}: {error}"
+            failures.append(failure)
+            print(f"FAIL {case_name}")
+            print(f"  - {error}")
+            continue
 
         save_json(model_data, output_path)
         generated_paths.append(output_path)
         print(f"SAVED {output_path}")
 
-    return generated_paths
+    return generated_paths, failures
 
 
 def main() -> None:
     """Generate eval model JSON files from eval case prompts."""
     args = parse_args()
 
-    generate_eval_models(
+    _, failures = generate_eval_models(
         cases_dir=args.cases_dir,
         output_dir=args.output_dir,
         overwrite=args.overwrite,
     )
+    if failures:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
