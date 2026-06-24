@@ -10,6 +10,11 @@
       "height": 60,
       "distance": 6
     },
+    "bounding_box": {
+      "x": 100,
+      "y": 60,
+      "z": 6
+    },
     "required_operations": [
       {
         "type": "cut",

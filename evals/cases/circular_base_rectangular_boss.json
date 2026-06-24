@@ -9,6 +9,10 @@
       "diameter": 60,
       "distance": 8
     },
+    "bounding_box": {
+      "x": 60,
+      "y": 60
+    },
     "required_operations": [
       {
         "type": "add_extrude",

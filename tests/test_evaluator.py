@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from prompt2cad.evaluator import evaluate_model_data
+from prompt2cad.interpreter import build_model
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +23,8 @@ def test_evaluator_accepts_rectangular_plate_four_holes_example():
         PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"
     )
 
-    result = evaluate_model_data(model_data, eval_case)
+    part = build_model(model_data)
+    result = evaluate_model_data(model_data, eval_case, part)
 
     assert result.passed is True
     assert result.failures == []
@@ -39,7 +41,8 @@ def test_evaluator_accepts_circular_base_rectangular_boss_example():
         / "circular_base_rectangular_boss.json"
     )
 
-    result = evaluate_model_data(model_data, eval_case)
+    part = build_model(model_data)
+    result = evaluate_model_data(model_data, eval_case, part)
 
     assert result.passed is True
     assert result.failures == []
@@ -63,7 +66,8 @@ def test_evaluator_reports_missing_expected_operation():
         PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"
     )
 
-    result = evaluate_model_data(model_data, eval_case)
+    part = build_model(model_data)
+    result = evaluate_model_data(model_data, eval_case, part)
 
     assert result.passed is False
     assert len(result.failures) == 2
@@ -102,10 +106,14 @@ def test_evaluator_reports_wrong_base_dimension():
         PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"
     )
 
-    result = evaluate_model_data(model_data, eval_case)
+    part = build_model(model_data)
+    result = evaluate_model_data(model_data, eval_case, part)
 
     assert result.passed is False
-    assert result.failures == ["Expected base width 100, but found 90."]
+    assert result.failures == [
+        "Expected base width 100, but found 90.",
+        "Expected bounding box x 100, but found 90.0.",
+    ]
 
 
 def test_evaluator_reports_wrong_required_operation_dimension():
@@ -139,7 +147,8 @@ def test_evaluator_reports_wrong_required_operation_dimension():
         PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"
     )
 
-    result = evaluate_model_data(model_data, eval_case)
+    part = build_model(model_data)
+    result = evaluate_model_data(model_data, eval_case, part)
 
     assert result.passed is False
     assert result.failures == [
@@ -149,3 +158,17 @@ def test_evaluator_reports_wrong_required_operation_dimension():
             "position_count=4."
         )
     ]
+
+
+def test_evaluator_reports_missing_part_for_bounding_box_check():
+    model_data = load_json(
+        PROJECT_ROOT / "examples" / "rectangular_plate_multiple_holes.json"
+    )
+    eval_case = load_json(
+        PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"
+    )
+
+    result = evaluate_model_data(model_data, eval_case)
+
+    assert result.passed is False
+    assert result.failures == ["Bounding box check requires a built CAD part."]

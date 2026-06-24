@@ -84,10 +84,36 @@ def describe_expected_operation(expected_operation: dict) -> str:
     return ", ".join(expected_parts)
 
 
+def get_bounding_box_dimensions(part) -> dict[str, float]:
+    """Return the x, y, and z dimensions of a CAD part's bounding box."""
+    bounding_box = part.val().BoundingBox()
+    return {
+        "x": bounding_box.xlen,
+        "y": bounding_box.ylen,
+        "z": bounding_box.zlen,
+    }
+
+
+def bounding_box_failures(part, expected_bounding_box: dict) -> list[str]:
+    """Return failures for bounding box dimensions of a CAD part."""
+    failures = []
+    actual_bounding_box = get_bounding_box_dimensions(part)
+
+    for axis, expected_value in expected_bounding_box.items():
+        actual_value = actual_bounding_box[axis]
+        if not values_match(actual_value, expected_value):
+            failures.append(
+                f"Expected bounding box {axis} {expected_value}, "
+                f"but found {actual_value}."
+            )
+
+    return failures
+
 
 def evaluate_model_data(
     model_data: dict,
     eval_case: dict,
+    part=None,
 ) -> EvaluationResult:
     """Evaluate generated model data against one eval case."""
     failures = []
@@ -130,6 +156,18 @@ def evaluate_model_data(
             failures.append(
                 "Missing expected operation: "
                 f"{describe_expected_operation(expected_operation)}."
+            )
+
+    expected_bounding_box = expected.get("bounding_box")
+    if expected_bounding_box is not None:
+        if part is None:
+            failures.append("Bounding box check requires a built CAD part.")
+        else:
+            failures.extend(
+                bounding_box_failures(
+                    part,
+                    expected_bounding_box,
+                )
             )
 
     return EvaluationResult(

@@ -10,6 +10,11 @@
       "height": 40,
       "distance": 6
     },
+    "bounding_box": {
+      "x": 80,
+      "y": 40,
+      "z": 18
+    },
     "required_operations": [
       {
         "type": "add_extrude",

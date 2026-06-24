@@ -54,9 +54,9 @@ def run_eval(
     eval_case = load_json(case_path)
 
     validate_model_data(model_data)
-    build_model(model_data)
+    part = build_model(model_data)
 
-    result = evaluate_model_data(model_data, eval_case)
+    result = evaluate_model_data(model_data, eval_case, part)
     case_name = eval_case["name"]
 
     return case_name, result.failures
