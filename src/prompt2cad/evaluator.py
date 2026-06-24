@@ -3,6 +3,9 @@
 from dataclasses import dataclass
 
 
+SPECIAL_EXPECTED_KEYS = {"position_count"}
+
+
 @dataclass
 class EvaluationResult:
     """Result of checking generated model data against one eval case."""
@@ -16,23 +19,70 @@ def count_positions(operation: dict) -> int:
     return len(operation.get("positions", []))
 
 
+def values_match(actual_value: object, expected_value: object) -> bool:
+    """Return whether an actual field value satisfies an expected field value."""
+    if isinstance(actual_value, (int, float)) and isinstance(
+        expected_value, (int, float)
+    ):
+        return abs(actual_value - expected_value) < 1e-6
+
+    return actual_value == expected_value
+
+
+def operation_field_failures(
+    operation: dict,
+    expected_operation: dict,
+    operation_label: str,
+) -> list[str]:
+    """Return field-level failures for one operation."""
+    failures = []
+
+    for key, expected_value in expected_operation.items():
+        if key in SPECIAL_EXPECTED_KEYS:
+            continue
+
+        actual_value = operation.get(key)
+        if not values_match(actual_value, expected_value):
+            failures.append(
+                f"Expected {operation_label} {key} {expected_value}, "
+                f"but found {actual_value}."
+            )
+
+    expected_position_count = expected_operation.get("position_count")
+    if expected_position_count is not None:
+        actual_position_count = count_positions(operation)
+        if actual_position_count != expected_position_count:
+            failures.append(
+                f"Expected {operation_label} position_count "
+                f"{expected_position_count}, "
+                f"but found {actual_position_count}."
+            )
+
+    return failures
+
+
 def operation_matches_expected(
     operation: dict,
     expected_operation: dict,
 ) -> bool:
     """Return whether one operation satisfies an expected operation pattern."""
-    if operation.get("type") != expected_operation.get("type"):
-        return False
+    failures = operation_field_failures(
+        operation,
+        expected_operation,
+        "operation",
+    )
+    return failures == []
 
-    if operation.get("profile") != expected_operation.get("profile"):
-        return False
 
-    expected_position_count = expected_operation.get("position_count")
-    if expected_position_count is not None:
-        if count_positions(operation) != expected_position_count:
-            return False
+def describe_expected_operation(expected_operation: dict) -> str:
+    """Return a compact text description of an expected operation."""
+    expected_parts = []
 
-    return True
+    for key, expected_value in expected_operation.items():
+        expected_parts.append(f"{key}={expected_value}")
+
+    return ", ".join(expected_parts)
+
 
 
 def evaluate_model_data(
@@ -60,24 +110,13 @@ def evaluate_model_data(
 
     base_operation = operations[0]
     expected_base = expected.get("base", {})
-
-    expected_base_type = expected_base.get("type")
-    if expected_base_type is not None:
-        actual_base_type = base_operation.get("type")
-        if actual_base_type != expected_base_type:
-            failures.append(
-                f"Expected base type {expected_base_type}, "
-                f"but found {actual_base_type}."
-            )
-
-    expected_base_profile = expected_base.get("profile")
-    if expected_base_profile is not None:
-        actual_base_profile = base_operation.get("profile")
-        if actual_base_profile != expected_base_profile:
-            failures.append(
-                f"Expected base profile {expected_base_profile}, "
-                f"but found {actual_base_profile}."
-            )
+    failures.extend(
+        operation_field_failures(
+            base_operation,
+            expected_base,
+            "base",
+        )
+    )
 
     for expected_operation in expected.get("required_operations", []):
         matching_operation = None
@@ -90,9 +129,7 @@ def evaluate_model_data(
         if matching_operation is None:
             failures.append(
                 "Missing expected operation: "
-                f"type={expected_operation.get('type')}, "
-                f"profile={expected_operation.get('profile')}, "
-                f"position_count={expected_operation.get('position_count')}."
+                f"{describe_expected_operation(expected_operation)}."
             )
 
     return EvaluationResult(

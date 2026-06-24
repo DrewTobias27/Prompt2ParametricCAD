@@ -5,12 +5,14 @@
     "operation_count": 2,
     "base": {
       "type": "extrude",
-      "profile": "polyline"
+      "profile": "polyline",
+      "distance": 6
     },
     "required_operations": [
       {
         "type": "cut",
         "profile": "rectangle",
+        "depth": "through",
         "position_count": 1
       }
     ]

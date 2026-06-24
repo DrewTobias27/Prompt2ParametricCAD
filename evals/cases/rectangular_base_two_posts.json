@@ -5,12 +5,17 @@
     "operation_count": 2,
     "base": {
       "type": "extrude",
-      "profile": "rectangle"
+      "profile": "rectangle",
+      "width": 80,
+      "height": 40,
+      "distance": 6
     },
     "required_operations": [
       {
         "type": "add_extrude",
         "profile": "circle",
+        "diameter": 10,
+        "distance": 12,
         "position_count": 2
       }
     ]

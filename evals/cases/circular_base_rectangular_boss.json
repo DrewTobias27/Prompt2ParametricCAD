@@ -5,7 +5,9 @@
     "operation_count": 2,
     "base": {
       "type": "extrude",
-      "profile": "circle"
+      "profile": "circle",
+      "diameter": 60,
+      "distance": 8
     },
     "required_operations": [
       {

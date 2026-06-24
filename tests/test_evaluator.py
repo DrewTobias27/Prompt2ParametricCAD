@@ -69,3 +69,83 @@ def test_evaluator_reports_missing_expected_operation():
     assert len(result.failures) == 2
     assert result.failures[0] == "Expected 2 operations, but found 1."
     assert result.failures[1].startswith("Missing expected operation")
+
+
+def test_evaluator_reports_wrong_base_dimension():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 90,
+                "height": 60,
+                "distance": 6,
+            },
+            {
+                "type": "cut",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [
+                    [-40, -20],
+                    [-40, 20],
+                    [40, -20],
+                    [40, 20],
+                ],
+                "depth": "through",
+                "diameter": 8,
+            },
+        ]
+    }
+    eval_case = load_json(
+        PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"
+    )
+
+    result = evaluate_model_data(model_data, eval_case)
+
+    assert result.passed is False
+    assert result.failures == ["Expected base width 100, but found 90."]
+
+
+def test_evaluator_reports_wrong_required_operation_dimension():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 100,
+                "height": 60,
+                "distance": 6,
+            },
+            {
+                "type": "cut",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [
+                    [-40, -20],
+                    [-40, 20],
+                    [40, -20],
+                    [40, 20],
+                ],
+                "depth": "through",
+                "diameter": 6,
+            },
+        ]
+    }
+    eval_case = load_json(
+        PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"
+    )
+
+    result = evaluate_model_data(model_data, eval_case)
+
+    assert result.passed is False
+    assert result.failures == [
+        (
+            "Missing expected operation: "
+            "type=cut, profile=circle, diameter=8, depth=through, "
+            "position_count=4."
+        )
+    ]

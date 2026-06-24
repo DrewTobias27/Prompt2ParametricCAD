@@ -5,12 +5,17 @@
     "operation_count": 2,
     "base": {
       "type": "extrude",
-      "profile": "polygon"
+      "profile": "polygon",
+      "sides": 6,
+      "diameter": 70,
+      "distance": 8
     },
     "required_operations": [
       {
         "type": "cut",
         "profile": "circle",
+        "diameter": 20,
+        "depth": "through",
         "position_count": 1
       }
     ]
