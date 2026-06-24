@@ -421,13 +421,14 @@ def build_revolve(
     feature_id = operation["id"]
     part = build_revolve_tool(operation, operation_number)
 
-    face_tags = operation.get(
-        "face_tags",
-        {
+    default_face_tags = {}
+    if operation["profile"] == "rectangle":
+        default_face_tags = {
             "front": ">Y",
             "back": "<Y",
-        },
-    )
+        }
+
+    face_tags = operation.get("face_tags", default_face_tags)
     return apply_face_tags(part, feature_id, face_tags)
 
 

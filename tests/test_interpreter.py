@@ -474,6 +474,43 @@ def test_revolved_half_cylinder_base():
     assert solid.Volume() == pytest.approx(expected_volume)
 
 
+def test_revolved_axis_touching_polyline_base():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "polyline",
+                "positions": [[0, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "points": [
+                    [0, -30],
+                    [3.827, -29.239],
+                    [7.071, -27.071],
+                    [9.239, -23.827],
+                    [10, -20],
+                    [10, 20],
+                    [9.239, 23.827],
+                    [7.071, 27.071],
+                    [3.827, 29.239],
+                    [0, 30],
+                ],
+            }
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+    bounding_box = solid.BoundingBox()
+
+    assert bounding_box.xlen == pytest.approx(20)
+    assert bounding_box.ylen == pytest.approx(60)
+    assert bounding_box.zlen == pytest.approx(20)
+
+
 def test_add_revolved_collar_to_cylinder():
     model_data = {
         "operations": [

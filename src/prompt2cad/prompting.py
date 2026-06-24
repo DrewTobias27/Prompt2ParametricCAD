@@ -28,6 +28,8 @@ Use these profile fields:
 - polygon: sides and diameter
 - polyline: points, as an ordered list of [x, y] points forming a closed
   straight-edged outline
+- Do not repeat the first point at the end of a polyline. The interpreter
+  closes the outline automatically.
 
 For revolve base operations:
 - Use angle 360 for complete round parts.
