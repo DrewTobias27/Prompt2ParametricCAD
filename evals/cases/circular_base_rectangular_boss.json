@@ -1,0 +1,18 @@
+{
+  "name": "circular_base_rectangular_boss",
+  "prompt": "Make a 60 mm diameter circular base, 8 mm thick, with a centered rectangular boss on top.",
+  "expected": {
+    "operation_count": 2,
+    "base": {
+      "type": "extrude",
+      "profile": "circle"
+    },
+    "required_operations": [
+      {
+        "type": "add_extrude",
+        "profile": "rectangle",
+        "position_count": 1
+      }
+    ]
+  }
+}

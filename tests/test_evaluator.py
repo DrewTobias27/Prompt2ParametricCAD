@@ -1,0 +1,71 @@
+"""Tests for lightweight CAD generation eval checks."""
+
+import json
+from pathlib import Path
+
+from prompt2cad.evaluator import evaluate_model_data
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_json(path: Path) -> dict:
+    """Load a JSON file from disk."""
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_evaluator_accepts_rectangular_plate_four_holes_example():
+    model_data = load_json(
+        PROJECT_ROOT / "examples" / "rectangular_plate_multiple_holes.json"
+    )
+    eval_case = load_json(
+        PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"
+    )
+
+    result = evaluate_model_data(model_data, eval_case)
+
+    assert result.passed is True
+    assert result.failures == []
+
+
+def test_evaluator_accepts_circular_base_rectangular_boss_example():
+    model_data = load_json(
+        PROJECT_ROOT / "examples" / "circular_base_rectangular_boss.json"
+    )
+    eval_case = load_json(
+        PROJECT_ROOT
+        / "evals"
+        / "cases"
+        / "circular_base_rectangular_boss.json"
+    )
+
+    result = evaluate_model_data(model_data, eval_case)
+
+    assert result.passed is True
+    assert result.failures == []
+
+
+def test_evaluator_reports_missing_expected_operation():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 100,
+                "height": 60,
+                "distance": 6,
+            }
+        ]
+    }
+    eval_case = load_json(
+        PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"
+    )
+
+    result = evaluate_model_data(model_data, eval_case)
+
+    assert result.passed is False
+    assert len(result.failures) == 2
+    assert result.failures[0] == "Expected 2 operations, but found 1."
+    assert result.failures[1].startswith("Missing expected operation")

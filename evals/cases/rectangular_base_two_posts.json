@@ -1,0 +1,18 @@
+{
+  "name": "rectangular_base_two_posts",
+  "prompt": "Make an 80 by 40 by 6 mm rectangular base with two raised circular posts on top. Each post should be 10 mm in diameter and 12 mm tall.",
+  "expected": {
+    "operation_count": 2,
+    "base": {
+      "type": "extrude",
+      "profile": "rectangle"
+    },
+    "required_operations": [
+      {
+        "type": "add_extrude",
+        "profile": "circle",
+        "position_count": 2
+      }
+    ]
+  }
+}

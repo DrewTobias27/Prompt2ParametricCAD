@@ -1,0 +1,18 @@
+{
+  "name": "rectangular_plate_four_holes",
+  "prompt": "Make a 100 by 60 by 6 mm rectangular plate with four 8 mm through holes near the corners.",
+  "expected": {
+    "operation_count": 2,
+    "base": {
+      "type": "extrude",
+      "profile": "rectangle"
+    },
+    "required_operations": [
+      {
+        "type": "cut",
+        "profile": "circle",
+        "position_count": 4
+      }
+    ]
+  }
+}

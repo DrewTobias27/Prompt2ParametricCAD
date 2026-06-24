@@ -1,0 +1,18 @@
+{
+  "name": "hex_plate_center_hole",
+  "prompt": "Make a hexagonal plate 70 mm across and 8 mm thick with a 20 mm circular through hole in the center.",
+  "expected": {
+    "operation_count": 2,
+    "base": {
+      "type": "extrude",
+      "profile": "polygon"
+    },
+    "required_operations": [
+      {
+        "type": "cut",
+        "profile": "circle",
+        "position_count": 1
+      }
+    ]
+  }
+}
