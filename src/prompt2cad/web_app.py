@@ -36,16 +36,19 @@ def home():
             <p>Turn natural language into parametric CAD.</p>
             <textarea id="prompt" rows="4" cols="50" placeholder="Enter your CAD prompt here..."></textarea><br>
             <button id="generateButton" onclick="generateCAD()">Generate CAD</button>
-            <pre id="output"></pre>
             <p id="status"></p>
             <a id="downloadLink" href="#" style="display: none;">Download STEP file</a>
+            <pre id="output"></pre>
             <script>
                 function generateCAD() {
                     const button = document.getElementById("generateButton");
                     const downloadLink = document.getElementById("downloadLink");
+                    const output = document.getElementById("output");
                     const prompt = document.getElementById("prompt").value;
                     const status = document.getElementById("status");
                     status.textContent = "Generating CAD model...";
+                    output.textContent = "";
+                    downloadLink.style.display = "none";
                     button.disabled = true;
                     button.textContent = "Generating...";
                     fetch("/generate", {
@@ -65,7 +68,7 @@ def home():
                             status.textContent = "Error: " + data.message;
                             downloadLink.style.display = "none";
                         }
-                        document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+                        output.textContent = JSON.stringify(data, null, 2);
                     })
                     .catch(error => {
                         status.textContent = "Error: " + error;

@@ -4,6 +4,7 @@ import cadquery as cq
 
 
 BASE_OPERATION_TYPES = {"extrude", "revolve"}
+SIDE_FACE_NAMES = {"front", "back", "left", "right"}
 
 
 def apply_face_tags(
@@ -128,12 +129,33 @@ def get_virtual_target_plane(
     )
 
 
+def get_target_face_name(target: str) -> str | None:
+    """Return the face name from a target like 'base.front'."""
+    if "." not in target:
+        return None
+
+    return target.split(".", 1)[1]
+
+
+def is_side_target(target: str) -> bool:
+    """Return whether a target points to a side face."""
+    return get_target_face_name(target) in SIDE_FACE_NAMES
+
+
 def get_target_workplane(
     part: cq.Workplane,
     target: str,
     operation_number: int,
 ) -> tuple[cq.Workplane, bool]:
     """Return a target workplane and whether it is a virtual fallback."""
+    if is_side_target(target):
+        virtual_plane = get_virtual_target_plane(
+            part,
+            target,
+            operation_number,
+        )
+        return cq.Workplane(virtual_plane), True
+
     try:
         return get_tagged_workplane(part, target, operation_number), False
     except ValueError:
@@ -215,6 +237,38 @@ def get_positions(operation: dict, operation_number: int) -> list:
                 "profile y position must be an integer or float"
             )
     return positions
+
+
+def normalize_side_target_positions(
+    part: cq.Workplane,
+    target: str,
+    positions: list,
+) -> list:
+    """Move obviously misplaced side-target positions back onto the side face."""
+    if not is_side_target(target):
+        return positions
+
+    bounding_box = part.val().BoundingBox()
+    vertical_limit = bounding_box.zlen / 2
+    normalized_positions = []
+
+    for position in positions:
+        first_coordinate = position[0]
+        vertical_coordinate = position[1]
+
+        if (
+            abs(vertical_coordinate) > vertical_limit
+            and abs(first_coordinate) <= vertical_limit
+        ):
+            normalized_positions.append(
+                [vertical_coordinate, first_coordinate]
+            )
+        elif abs(vertical_coordinate) > vertical_limit:
+            normalized_positions.append([first_coordinate, 0])
+        else:
+            normalized_positions.append(position)
+
+    return normalized_positions
 
 
 def create_profile(
@@ -411,6 +465,7 @@ def apply_cut_operation(
     depth = operation["depth"]
 
     positions = get_positions(operation, operation_number)
+    positions = normalize_side_target_positions(part, target, positions)
 
     target_workplane, is_virtual_target = get_target_workplane(
         part,
@@ -468,6 +523,7 @@ def apply_add_extrusion(
     target = operation["target"]
     distance = operation["distance"]
     positions = get_positions(operation, operation_number)
+    positions = normalize_side_target_positions(part, target, positions)
 
     if distance <= 0:
         raise ValueError("Distance must be greater than zero")

@@ -866,6 +866,57 @@ def test_cut_uses_virtual_side_target_for_polyline_base():
     assert solid.Volume() == pytest.approx(base_volume - removed_volume)
 
 
+def test_side_extrude_normalizes_misplaced_vertical_position():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 10,
+                "width": 100,
+                "height": 100,
+            },
+            {
+                "type": "cut",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [
+                    [40, 40],
+                    [-40, 40],
+                    [40, -40],
+                ],
+                "depth": "through",
+                "diameter": 8,
+            },
+            {
+                "type": "add_extrude",
+                "target": "base.front",
+                "profile": "rectangle",
+                "positions": [[30, 0]],
+                "distance": 12,
+                "width": 12,
+                "height": 12,
+            },
+            {
+                "type": "add_extrude",
+                "target": "base.right",
+                "profile": "rectangle",
+                "positions": [[0, 30]],
+                "distance": 12,
+                "width": 12,
+                "height": 12,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solids = part.solids().vals()
+
+    assert len(solids) == 1
+
+
 def test_cut_revolved_front_face():
     model_data = {
         "operations": [

@@ -80,6 +80,15 @@ For add_extrude and cut operations:
   sketch, rounded, or rotated-looking bases.
 - Always use positions, even for one feature. Example: "positions": [[0, 0]]
 - Use one operation with multiple positions for repeated identical features.
+- On top or bottom targets, positions are normal top-view [x, y] coordinates.
+- On side targets such as "base.front", "base.back", "base.left", or
+  "base.right", positions are coordinates on that side face. The second
+  coordinate is vertical height relative to the center of the side face. For
+  thin plates or blocks, keep this second coordinate near 0 so the added
+  extrusion or cut stays on the side face instead of floating above or below
+  the part.
+- Example: for a 10 mm thick square plate, a small boss on "base.front" should
+  usually use a position like [[15, 0]], not [[15, 10]].
 - Use distance for add_extrude operations.
 - Use depth for cut operations. Use "through" for through-cuts.
 
