@@ -1,0 +1,1 @@
+Make a circular base 60 mm in diameter and 8 mm thick. Add a centered rectangular boss on top that is 20 mm wide, 14 mm tall, and 10 mm high.

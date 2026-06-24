@@ -1,0 +1,1 @@
+Make a rectangular plate 100 mm wide, 60 mm tall, and 6 mm thick. Add four circular through holes, each 8 mm in diameter, near the four corners.
