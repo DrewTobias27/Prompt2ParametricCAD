@@ -60,6 +60,91 @@ def get_tagged_workplane(
         ) from error
 
 
+def get_virtual_target_plane(
+    part: cq.Workplane,
+    target: str,
+    operation_number: int,
+) -> cq.Plane:
+    """Create a fallback workplane from the part bounding box."""
+    if "." not in target:
+        raise ValueError(
+            f"Operation {operation_number}: target '{target}' must use "
+            "the format 'feature.face', such as 'base.top'"
+        )
+
+    _, face_name = target.split(".", 1)
+    bounding_box = part.val().BoundingBox()
+
+    center_x = (bounding_box.xmin + bounding_box.xmax) / 2
+    center_y = (bounding_box.ymin + bounding_box.ymax) / 2
+    center_z = (bounding_box.zmin + bounding_box.zmax) / 2
+
+    virtual_faces = {
+        "top": {
+            "origin": (center_x, center_y, bounding_box.zmax),
+            "xDir": (1, 0, 0),
+            "normal": (0, 0, 1),
+        },
+        "bottom": {
+            "origin": (center_x, center_y, bounding_box.zmin),
+            "xDir": (1, 0, 0),
+            "normal": (0, 0, -1),
+        },
+        "front": {
+            "origin": (center_x, bounding_box.ymax, center_z),
+            "xDir": (1, 0, 0),
+            "normal": (0, 1, 0),
+        },
+        "back": {
+            "origin": (center_x, bounding_box.ymin, center_z),
+            "xDir": (1, 0, 0),
+            "normal": (0, -1, 0),
+        },
+        "right": {
+            "origin": (bounding_box.xmax, center_y, center_z),
+            "xDir": (0, 1, 0),
+            "normal": (1, 0, 0),
+        },
+        "left": {
+            "origin": (bounding_box.xmin, center_y, center_z),
+            "xDir": (0, 1, 0),
+            "normal": (-1, 0, 0),
+        },
+    }
+
+    if face_name not in virtual_faces:
+        supported_faces = ", ".join(sorted(virtual_faces))
+        raise ValueError(
+            f"Operation {operation_number}: target '{target}' was not found "
+            f"and cannot be used as a virtual target. Supported virtual "
+            f"faces: {supported_faces}."
+        )
+
+    face = virtual_faces[face_name]
+    return cq.Plane(
+        origin=face["origin"],
+        xDir=face["xDir"],
+        normal=face["normal"],
+    )
+
+
+def get_target_workplane(
+    part: cq.Workplane,
+    target: str,
+    operation_number: int,
+) -> tuple[cq.Workplane, bool]:
+    """Return a target workplane and whether it is a virtual fallback."""
+    try:
+        return get_tagged_workplane(part, target, operation_number), False
+    except ValueError:
+        virtual_plane = get_virtual_target_plane(
+            part,
+            target,
+            operation_number,
+        )
+        return cq.Workplane(virtual_plane), True
+
+
 def build_base_extrusion(
     operation: dict,
     operation_number: int,
@@ -295,8 +380,10 @@ def create_profile(
                     f"Unsupported sketch segment type: {segment['type']}"
                 )
 
-        closing_edge = cq.Edge.makeLine(current, start_vector)
-        edges.append(closing_edge)
+        if current != start_vector:
+            closing_edge = cq.Edge.makeLine(current, start_vector)
+            edges.append(closing_edge)
+
         wire = cq.Wire.assembleEdges(edges)
         workplane = workplane.eachpoint(
             wire,
@@ -325,9 +412,34 @@ def apply_cut_operation(
 
     positions = get_positions(operation, operation_number)
 
-    target_workplane = get_tagged_workplane(part, target, operation_number)
+    target_workplane, is_virtual_target = get_target_workplane(
+        part,
+        target,
+        operation_number,
+    )
     workplane = target_workplane.pushPoints(positions)
     workplane = create_profile(workplane, operation, operation_number)
+
+    if is_virtual_target:
+        bounding_box = part.val().BoundingBox()
+        if depth == "through":
+            tool_depth = max(
+                bounding_box.xlen,
+                bounding_box.ylen,
+                bounding_box.zlen,
+            ) * 2
+        elif isinstance(depth, (int, float)):
+            if depth <= 0:
+                raise ValueError("Depth must be greater than zero")
+            tool_depth = depth
+        else:
+            raise ValueError(
+                f"Operation {operation_number}: "
+                f"unsupported cut depth: {depth}"
+            )
+
+        cutting_tool = workplane.extrude(-tool_depth)
+        return part.cut(cutting_tool)
 
     if depth == "through":
         part = workplane.cutThruAll()
@@ -359,10 +471,17 @@ def apply_add_extrusion(
 
     if distance <= 0:
         raise ValueError("Distance must be greater than zero")
-
-    target_workplane = get_tagged_workplane(part, target, operation_number)
+    target_workplane, is_virtual_target = get_target_workplane(
+        part,
+        target,
+        operation_number,
+    )
     workplane = target_workplane.pushPoints(positions)
     workplane = create_profile(workplane, operation, operation_number)
+
+    if is_virtual_target:
+        extrusion_tool = workplane.extrude(distance)
+        return part.union(extrusion_tool)
 
     return workplane.extrude(distance)
 

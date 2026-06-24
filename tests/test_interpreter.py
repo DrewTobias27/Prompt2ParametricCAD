@@ -511,6 +511,53 @@ def test_revolved_axis_touching_polyline_base():
     assert bounding_box.zlen == pytest.approx(20)
 
 
+def test_revolved_axis_touching_arc_sketch_base():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "sketch",
+                "positions": [[0, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "start": [0, -30],
+                "segments": [
+                    {
+                        "type": "arc",
+                        "through": [5, -28.660254],
+                        "to": [10, -20],
+                    },
+                    {
+                        "type": "line",
+                        "to": [10, 20],
+                    },
+                    {
+                        "type": "arc",
+                        "through": [5, 28.660254],
+                        "to": [0, 30],
+                    },
+                    {
+                        "type": "line",
+                        "to": [0, -30],
+                    },
+                ],
+                "close": True,
+            }
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+    bounding_box = solid.BoundingBox()
+
+    assert bounding_box.xlen == pytest.approx(20)
+    assert bounding_box.ylen == pytest.approx(60)
+    assert bounding_box.zlen == pytest.approx(20)
+
+
 def test_add_revolved_collar_to_cylinder():
     model_data = {
         "operations": [
@@ -741,6 +788,82 @@ def test_cut_extruded_front_face_with_default_tag():
     assert solid.Volume() == pytest.approx(
         original_volume - expected_removed_volume
     )
+
+
+def test_add_extrude_uses_virtual_side_target_for_polyline_base():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "polyline",
+                "distance": 6,
+                "points": [
+                    [0, 0],
+                    [60, 0],
+                    [75, 30],
+                    [15, 30],
+                ],
+            },
+            {
+                "type": "add_extrude",
+                "target": "base.back",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 5,
+                "width": 10,
+                "height": 4,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+    bounding_box = solid.BoundingBox()
+
+    base_volume = 60 * 30 * 6
+    added_volume = 10 * 4 * 5
+
+    assert solid.Volume() == pytest.approx(base_volume + added_volume)
+    assert bounding_box.ymin == pytest.approx(-5)
+
+
+def test_cut_uses_virtual_side_target_for_polyline_base():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "polyline",
+                "distance": 6,
+                "points": [
+                    [0, 0],
+                    [60, 0],
+                    [75, 30],
+                    [15, 30],
+                ],
+            },
+            {
+                "type": "cut",
+                "target": "base.back",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "depth": 5,
+                "width": 10,
+                "height": 4,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    base_volume = 60 * 30 * 6
+    removed_volume = 10 * 4 * 5
+
+    assert solid.Volume() == pytest.approx(base_volume - removed_volume)
 
 
 def test_cut_revolved_front_face():

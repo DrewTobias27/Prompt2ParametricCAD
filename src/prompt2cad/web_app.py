@@ -1,6 +1,7 @@
 """Local web app for Prompt2CAD."""
 
 from pathlib import Path
+import re
 
 import cadquery as cq
 from fastapi import FastAPI
@@ -82,12 +83,26 @@ def home():
     """
 
 
-@app.get("/download/latest_model.step")
-def download_latest_step():
-    step_path = GENERATED_DIR / "latest_model.step"
+def make_safe_filename(prompt: str) -> str:
+    """Convert a prompt into a safe STEP filename."""
+    name = prompt.lower()
+    name = re.sub(r"[^a-z0-9]+", "-", name)
+    name = name.strip("-")
+    name = name[:60]
+
+    if not name:
+        name = "prompt2cad-model"
+
+    return f"{name}.step"
+
+
+@app.get("/download/{filename}")
+def download_step_file(filename: str):
+    """Download a generated STEP file."""
+    step_path = GENERATED_DIR / filename
     return FileResponse(
         path=step_path,
-        filename="prompt2cad_model.step",
+        filename=filename,
         media_type="application/step",
     )
 
@@ -99,13 +114,14 @@ def generate_cad(request: CADRequest):
         model_data = prompt_to_model_data(request.prompt)
         validate_model_data(model_data)
         part = build_model(model_data)
-        step_path = GENERATED_DIR / "latest_model.step"
+        step_filename = make_safe_filename(request.prompt)
+        step_path = GENERATED_DIR / step_filename
         cq.exporters.export(part, str(step_path))
         return {
             "status": "success",
             "model_data": model_data,
             "step_file": str(step_path),
-            "download_url": "/download/latest_model.step",
+            "download_url": f"/download/{step_filename}",
         }
     except Exception as error:
         return {

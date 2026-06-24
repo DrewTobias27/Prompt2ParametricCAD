@@ -20,7 +20,8 @@ The first operation should create the base solid:
 - Use type "extrude" for prismatic parts made by pulling a 2D profile straight.
 - Use type "revolve" for turned/lathe-style parts such as cylinders, shafts,
   bushings, knobs, or round parts described as revolved.
-- Choose one supported profile: "rectangle", "circle", "polygon", or "polyline".
+- Choose one supported profile: "rectangle", "circle", "polygon", "polyline",
+  or "sketch".
 
 Use these profile fields:
 - rectangle: width and height
@@ -30,6 +31,18 @@ Use these profile fields:
   straight-edged outline
 - Do not repeat the first point at the end of a polyline. The interpreter
   closes the outline automatically.
+- sketch: start and segments. Use sketch for outlines that need both straight
+  lines and true circular arcs.
+- sketch line segment: {"type": "line", "to": [x, y]}
+- sketch arc segment: {"type": "arc", "through": [x, y], "to": [x, y]}
+- sketch close must be true. The sketch may explicitly end at the start point,
+  or the interpreter will close it automatically.
+- Prefer sketch arcs over polyline approximations for rounded caps, domes,
+  hemispheres, curved sides, and other circular-arc geometry.
+- For sketch profiles, do not encode the same offset twice. If positions is
+  [[0, 0]], sketch start and segment points may use absolute workplane
+  coordinates. If positions is not [[0, 0]], sketch start and segment points
+  must use local coordinates relative to that position.
 
 For revolve base operations:
 - Use angle 360 for complete round parts.
@@ -44,6 +57,11 @@ For revolve base operations:
   axis in the XY plane. For example, a 20 mm diameter by 40 mm long cylinder
   can use a rectangle with width 10, height 40, positions [[5, 0]],
   axis_start [0, -1], axis_end [0, 1], and angle 360.
+- A capsule or cylinder with hemispherical ends can be made by revolving a
+  sketch profile with arc segments around a vertical axis. For example, a
+  20 mm diameter capsule with a 40 mm straight section can start at [0, -30],
+  arc through [5, -28.660254] to [10, -20], line to [10, 20], arc through
+  [5, 28.660254] to [0, 30], line back to [0, -30], then revolve 360 degrees.
 
 After the base operation, use:
 - type "add_extrude" to add material to an existing face
@@ -56,7 +74,10 @@ After the base operation, use:
 For add_extrude and cut operations:
 - Use target "base.top" unless the user clearly requests a different face.
 - Supported target names include "base.top", "base.bottom", "base.front",
-  "base.back", "base.left", and "base.right" when those faces exist.
+  "base.back", "base.left", and "base.right".
+- If an exact side face tag does not exist, the interpreter can use a virtual
+  bounding-box target on that side. This is useful for polygon, polyline,
+  sketch, rounded, or rotated-looking bases.
 - Always use positions, even for one feature. Example: "positions": [[0, 0]]
 - Use one operation with multiple positions for repeated identical features.
 - Use distance for add_extrude operations.
@@ -67,6 +88,12 @@ For add_revolve and cut_revolve operations:
   axis_start, axis_end, and angle.
 - Use plane "XY".
 - Use positions to place the revolved feature profile relative to the axis.
+- Added revolved solids must overlap or intersect the existing part enough to
+  form one connected solid. Do not place add_revolve features so they merely
+  touch tangentially or float beside the base.
+- For visible external add_revolve features, do not bury the feature inside
+  the base. Place it so it partially overlaps the base for connection but
+  protrudes outside the base enough to be visible.
 - Use angle 360 for complete revolved features unless the user asks for a
   partial revolved feature.
 - For features around the same axis as a revolved base cylinder, usually reuse

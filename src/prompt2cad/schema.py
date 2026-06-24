@@ -30,6 +30,44 @@ POLYLINE_POINTS_SCHEMA = {
     "minItems": 3,
 }
 
+SKETCH_LINE_SEGMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {
+            "type": "string",
+            "enum": ["line"],
+        },
+        "to": POINT_SCHEMA,
+    },
+    "required": ["type", "to"],
+}
+
+SKETCH_ARC_SEGMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {
+            "type": "string",
+            "enum": ["arc"],
+        },
+        "through": POINT_SCHEMA,
+        "to": POINT_SCHEMA,
+    },
+    "required": ["type", "through", "to"],
+}
+
+SKETCH_SEGMENTS_SCHEMA = {
+    "type": "array",
+    "items": {
+        "anyOf": [
+            SKETCH_LINE_SEGMENT_SCHEMA,
+            SKETCH_ARC_SEGMENT_SCHEMA,
+        ],
+    },
+    "minItems": 1,
+}
+
 CUT_DEPTH_SCHEMA = {
     "anyOf": [
         {
@@ -58,6 +96,14 @@ PROFILE_PROPERTIES = {
     "polyline": {
         "points": POLYLINE_POINTS_SCHEMA,
     },
+    "sketch": {
+        "start": POINT_SCHEMA,
+        "segments": SKETCH_SEGMENTS_SCHEMA,
+        "close": {
+            "type": "boolean",
+            "enum": [True],
+        },
+    },
 }
 
 PROFILE_REQUIRED_FIELDS = {
@@ -65,6 +111,7 @@ PROFILE_REQUIRED_FIELDS = {
     "circle": ["diameter"],
     "polygon": ["sides", "diameter"],
     "polyline": ["points"],
+    "sketch": ["start", "segments", "close"],
 }
 
 
@@ -257,57 +304,69 @@ RECTANGLE_EXTRUDE_SCHEMA = build_base_extrude_schema("rectangle")
 CIRCLE_EXTRUDE_SCHEMA = build_base_extrude_schema("circle")
 POLYGON_EXTRUDE_SCHEMA = build_base_extrude_schema("polygon")
 POLYLINE_EXTRUDE_SCHEMA = build_base_extrude_schema("polyline")
+SKETCH_EXTRUDE_SCHEMA = build_base_extrude_schema("sketch")
 RECTANGLE_REVOLVE_SCHEMA = build_revolve_schema("rectangle")
 CIRCLE_REVOLVE_SCHEMA = build_revolve_schema("circle")
 POLYGON_REVOLVE_SCHEMA = build_revolve_schema("polygon")
 POLYLINE_REVOLVE_SCHEMA = build_revolve_schema("polyline")
+SKETCH_REVOLVE_SCHEMA = build_revolve_schema("sketch")
 
 RECTANGLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("rectangle")
 CIRCLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("circle")
 POLYGON_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("polygon")
 POLYLINE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("polyline")
+SKETCH_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("sketch")
 
 
 RECTANGLE_ADD_REVOLVE_SCHEMA = build_revolve_feature_schema("add_revolve", "rectangle")
 CIRCLE_ADD_REVOLVE_SCHEMA = build_revolve_feature_schema("add_revolve", "circle")
 POLYGON_ADD_REVOLVE_SCHEMA = build_revolve_feature_schema("add_revolve", "polygon")
 POLYLINE_ADD_REVOLVE_SCHEMA = build_revolve_feature_schema("add_revolve", "polyline")
+SKETCH_ADD_REVOLVE_SCHEMA = build_revolve_feature_schema("add_revolve", "sketch")
 
 RECTANGLE_CUT_SCHEMA = build_cut_schema("rectangle")
 CIRCLE_CUT_SCHEMA = build_cut_schema("circle")
 POLYGON_CUT_SCHEMA = build_cut_schema("polygon")
 POLYLINE_CUT_SCHEMA = build_cut_schema("polyline")
+SKETCH_CUT_SCHEMA = build_cut_schema("sketch")
 
 RECTANGLE_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema("cut_revolve", "rectangle")
 CIRCLE_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema("cut_revolve", "circle")
 POLYGON_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema("cut_revolve", "polygon")
 POLYLINE_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema("cut_revolve", "polyline")
+SKETCH_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema("cut_revolve", "sketch")
 
 OPERATION_SCHEMAS = [
     RECTANGLE_EXTRUDE_SCHEMA,
     CIRCLE_EXTRUDE_SCHEMA,
     POLYGON_EXTRUDE_SCHEMA,
     POLYLINE_EXTRUDE_SCHEMA,
+    SKETCH_EXTRUDE_SCHEMA,
     RECTANGLE_REVOLVE_SCHEMA,
     CIRCLE_REVOLVE_SCHEMA,
     POLYGON_REVOLVE_SCHEMA,
     POLYLINE_REVOLVE_SCHEMA,
+    SKETCH_REVOLVE_SCHEMA,
     RECTANGLE_ADD_EXTRUDE_SCHEMA,
     CIRCLE_ADD_EXTRUDE_SCHEMA,
     POLYGON_ADD_EXTRUDE_SCHEMA,
     POLYLINE_ADD_EXTRUDE_SCHEMA,
+    SKETCH_ADD_EXTRUDE_SCHEMA,
     RECTANGLE_CUT_SCHEMA,
     CIRCLE_CUT_SCHEMA,
     POLYGON_CUT_SCHEMA,
     POLYLINE_CUT_SCHEMA,
+    SKETCH_CUT_SCHEMA,
     RECTANGLE_ADD_REVOLVE_SCHEMA,
     CIRCLE_ADD_REVOLVE_SCHEMA,
     POLYGON_ADD_REVOLVE_SCHEMA,
     POLYLINE_ADD_REVOLVE_SCHEMA,
+    SKETCH_ADD_REVOLVE_SCHEMA,
     RECTANGLE_CUT_REVOLVE_SCHEMA,
     CIRCLE_CUT_REVOLVE_SCHEMA,
     POLYGON_CUT_REVOLVE_SCHEMA,
     POLYLINE_CUT_REVOLVE_SCHEMA,
+    SKETCH_CUT_REVOLVE_SCHEMA,
 ]
 
 CAD_MODEL_SCHEMA = {
