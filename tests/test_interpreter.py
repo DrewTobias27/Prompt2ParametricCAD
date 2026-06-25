@@ -47,6 +47,9 @@ def test_rectangular_base_dimensions():
         ("height", -1),
         ("distance", 0),
         ("distance", -1),
+        ("width", True),
+        ("height", True),
+        ("distance", True),
     ],
 )
 def test_invalid_base_dimension(dimension, invalid_value):
@@ -66,6 +69,33 @@ def test_invalid_base_dimension(dimension, invalid_value):
 
     operation = model_data["operations"][0]
     operation[dimension] = invalid_value
+
+    with pytest.raises(ValueError):
+        build_model(model_data)
+
+
+def test_rejects_boolean_profile_position():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            },
+            {
+                "type": "cut",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[True, 0]],
+                "diameter": 10,
+                "depth": "through",
+            },
+        ]
+    }
 
     with pytest.raises(ValueError):
         build_model(model_data)
@@ -394,6 +424,81 @@ def test_line_arc_sketch():
     assert actual_added_volume == pytest.approx(expected_added_volume)
 
 
+def test_sketch_ignores_zero_length_line_segment():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "sketch",
+                "distance": 5,
+                "start": [0, 0],
+                "segments": [
+                    {
+                        "type": "line",
+                        "to": [0, 0],
+                    },
+                    {
+                        "type": "line",
+                        "to": [20, 0],
+                    },
+                    {
+                        "type": "line",
+                        "to": [20, 10],
+                    },
+                    {
+                        "type": "line",
+                        "to": [0, 10],
+                    },
+                ],
+                "close": True,
+            }
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    assert solid.Volume() == pytest.approx(20 * 10 * 5)
+
+
+def test_sketch_degrades_collinear_arc_to_line():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "sketch",
+                "distance": 5,
+                "start": [0, 0],
+                "segments": [
+                    {
+                        "type": "arc",
+                        "through": [10, 0],
+                        "to": [20, 0],
+                    },
+                    {
+                        "type": "line",
+                        "to": [20, 10],
+                    },
+                    {
+                        "type": "line",
+                        "to": [0, 10],
+                    },
+                ],
+                "close": True,
+            }
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    assert solid.Volume() == pytest.approx(20 * 10 * 5)
+
+
 def test_circle_base():
     model_data = {
         "operations": [
@@ -594,6 +699,76 @@ def test_add_revolved_collar_to_cylinder():
     collar_volume = math.pi * (12**2 - 10**2) * 6
 
     assert solid.Volume() == pytest.approx(base_volume + collar_volume)
+
+
+def test_add_revolve_projects_tangent_feature_until_connected():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 10,
+                "height": 40,
+                "positions": [[5, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+            },
+            {
+                "type": "add_revolve",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 2,
+                "height": 12,
+                "positions": [[12, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solids = part.solids().vals()
+
+    assert len(solids) == 1
+
+
+def test_add_revolve_projects_far_feature_until_connected():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 10,
+                "height": 40,
+                "positions": [[5, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+            },
+            {
+                "type": "add_revolve",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 2,
+                "height": 12,
+                "positions": [[18, 0]],
+                "angle": 360,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solids = part.solids().vals()
+
+    assert len(solids) == 1
 
 
 def test_cut_revolved_groove_from_cylinder():
@@ -917,6 +1092,147 @@ def test_side_extrude_normalizes_misplaced_vertical_position():
     assert len(solids) == 1
 
 
+def test_side_extrude_overlaps_rounded_virtual_target_until_connected():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "sketch",
+                "distance": 8,
+                "start": [-42, -35],
+                "segments": [
+                    {
+                        "type": "arc",
+                        "through": [-50, -35],
+                        "to": [-50, -27],
+                    },
+                    {
+                        "type": "line",
+                        "to": [-50, 27],
+                    },
+                    {
+                        "type": "arc",
+                        "through": [-50, 35],
+                        "to": [-42, 35],
+                    },
+                    {
+                        "type": "line",
+                        "to": [42, 35],
+                    },
+                    {
+                        "type": "arc",
+                        "through": [50, 35],
+                        "to": [50, 27],
+                    },
+                    {
+                        "type": "line",
+                        "to": [50, -27],
+                    },
+                    {
+                        "type": "arc",
+                        "through": [50, -35],
+                        "to": [42, -35],
+                    },
+                    {
+                        "type": "line",
+                        "to": [-42, -35],
+                    },
+                ],
+                "close": True,
+            },
+            {
+                "type": "cut",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [
+                    [38, 23],
+                    [38, -23],
+                    [-38, 23],
+                    [-38, -23],
+                ],
+                "depth": "through",
+                "diameter": 6,
+            },
+            {
+                "type": "add_extrude",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 4,
+                "width": 40,
+                "height": 20,
+            },
+            {
+                "type": "cut",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "depth": "through",
+                "diameter": 10,
+            },
+            {
+                "type": "add_extrude",
+                "target": "base.front",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 6,
+                "width": 20,
+                "height": 10,
+            },
+            {
+                "type": "cut",
+                "target": "base.right",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "depth": 3,
+                "width": 30,
+                "height": 6,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solids = part.solids().vals()
+
+    assert len(solids) == 1
+
+
+def test_side_extrude_projects_extreme_position_toward_side_center():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "polyline",
+                "distance": 8,
+                "points": [
+                    [-40, -25],
+                    [40, -25],
+                    [30, 25],
+                    [-30, 25],
+                ],
+            },
+            {
+                "type": "add_extrude",
+                "target": "base.front",
+                "profile": "rectangle",
+                "positions": [[40, 0]],
+                "distance": 5,
+                "width": 10,
+                "height": 6,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solids = part.solids().vals()
+
+    assert len(solids) == 1
+
+
 def test_cut_revolved_front_face():
     model_data = {
         "operations": [
@@ -956,6 +1272,61 @@ def test_cut_revolved_front_face():
     assert solid.Volume() == pytest.approx(
         original_volume - expected_removed_volume
     )
+
+
+def test_cut_revolve_discards_disconnected_scrap():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[5, 0]],
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+                "width": 10,
+                "height": 120,
+            },
+            {
+                "type": "add_revolve",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[12, 0]],
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+                "width": 4,
+                "height": 12,
+            },
+            {
+                "type": "cut_revolve",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[13, 0]],
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+                "width": 1,
+                "height": 12,
+            },
+            {
+                "type": "cut",
+                "target": "base.front",
+                "profile": "circle",
+                "positions": [[6, 0]],
+                "depth": "through",
+                "diameter": 6,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solids = part.solids().vals()
+
+    assert len(solids) == 1
+    assert solids[0].isValid()
 
 
 def test_polyline_cut():

@@ -5,6 +5,19 @@ import cadquery as cq
 
 BASE_OPERATION_TYPES = {"extrude", "revolve"}
 SIDE_FACE_NAMES = {"front", "back", "left", "right"}
+VIRTUAL_TARGET_OVERLAP = 0.01
+VIRTUAL_TARGET_OVERLAP_RETRIES = (
+    VIRTUAL_TARGET_OVERLAP,
+    0.1,
+    0.5,
+    1,
+    2,
+    5,
+    10,
+)
+VIRTUAL_TARGET_POSITION_FACTORS = (1, 0.75, 0.5, 0.25, 0)
+ADD_REVOLVE_POSITION_FACTORS = (1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.25)
+GEOMETRY_TOLERANCE = 1e-9
 
 
 def apply_face_tags(
@@ -65,6 +78,7 @@ def get_virtual_target_plane(
     part: cq.Workplane,
     target: str,
     operation_number: int,
+    inset: float = 0,
 ) -> cq.Plane:
     """Create a fallback workplane from the part bounding box."""
     if "." not in target:
@@ -122,10 +136,18 @@ def get_virtual_target_plane(
         )
 
     face = virtual_faces[face_name]
+    origin = face["origin"]
+    normal = face["normal"]
+    if inset:
+        origin = tuple(
+            origin[index] - normal[index] * inset
+            for index in range(3)
+        )
+
     return cq.Plane(
-        origin=face["origin"],
+        origin=origin,
         xDir=face["xDir"],
-        normal=face["normal"],
+        normal=normal,
     )
 
 
@@ -142,17 +164,56 @@ def is_side_target(target: str) -> bool:
     return get_target_face_name(target) in SIDE_FACE_NAMES
 
 
+def clamp(value: float, lower_limit: float, upper_limit: float) -> float:
+    """Clamp a numeric value into an inclusive range."""
+    return max(lower_limit, min(value, upper_limit))
+
+
+def is_number(value: object) -> bool:
+    """Return whether a value is a CAD-safe int or float, excluding booleans."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def validate_positive_number(value: object, value_name: str) -> None:
+    """Validate that a dimension is a positive int or float."""
+    if not is_number(value):
+        raise ValueError(f"{value_name} must be an integer or float")
+
+    if value <= 0:
+        raise ValueError(f"{value_name} must be greater than zero")
+
+
+def points_match(first_point: cq.Vector, second_point: cq.Vector) -> bool:
+    """Return whether two vectors are effectively the same point."""
+    return first_point.sub(second_point).Length <= GEOMETRY_TOLERANCE
+
+
+def points_are_collinear(
+    first_point: cq.Vector,
+    second_point: cq.Vector,
+    third_point: cq.Vector,
+) -> bool:
+    """Return whether three 2D vectors are effectively collinear."""
+    first_vector = second_point.sub(first_point)
+    second_vector = third_point.sub(first_point)
+    cross_z = first_vector.x * second_vector.y - first_vector.y * second_vector.x
+    return abs(cross_z) <= GEOMETRY_TOLERANCE
+
+
 def get_target_workplane(
     part: cq.Workplane,
     target: str,
     operation_number: int,
+    inset: float = 0,
+    prefer_virtual_side: bool = False,
 ) -> tuple[cq.Workplane, bool]:
     """Return a target workplane and whether it is a virtual fallback."""
-    if is_side_target(target):
+    if prefer_virtual_side and is_side_target(target):
         virtual_plane = get_virtual_target_plane(
             part,
             target,
             operation_number,
+            inset,
         )
         return cq.Workplane(virtual_plane), True
 
@@ -163,6 +224,7 @@ def get_target_workplane(
             part,
             target,
             operation_number,
+            inset,
         )
         return cq.Workplane(virtual_plane), True
 
@@ -176,8 +238,7 @@ def build_base_extrusion(
     plane = operation["plane"]
     distance = operation["distance"]
 
-    if distance <= 0:
-        raise ValueError("Distance must be greater than zero")
+    validate_positive_number(distance, "Distance")
 
     workplane = cq.Workplane(plane)
     workplane = create_profile(workplane, operation, operation_number)
@@ -226,12 +287,12 @@ def get_positions(operation: dict, operation_number: int) -> list:
 
         x = position[0]
         y = position[1]
-        if not isinstance(x, (int, float)):
+        if not is_number(x):
             raise ValueError(
                 f"Operation {operation_number}: "
                 "profile x position must be an integer or float"
             )
-        if not isinstance(y, (int, float)):
+        if not is_number(y):
             raise ValueError(
                 f"Operation {operation_number}: "
                 "profile y position must be an integer or float"
@@ -249,6 +310,11 @@ def normalize_side_target_positions(
         return positions
 
     bounding_box = part.val().BoundingBox()
+    face_name = get_target_face_name(target)
+    if face_name in {"front", "back"}:
+        first_limit = bounding_box.xlen / 2
+    else:
+        first_limit = bounding_box.ylen / 2
     vertical_limit = bounding_box.zlen / 2
     normalized_positions = []
 
@@ -268,7 +334,27 @@ def normalize_side_target_positions(
         else:
             normalized_positions.append(position)
 
-    return normalized_positions
+    clamped_positions = []
+    for first_coordinate, vertical_coordinate in normalized_positions:
+        clamped_positions.append(
+            [
+                clamp(first_coordinate, -first_limit, first_limit),
+                clamp(vertical_coordinate, -vertical_limit, vertical_limit),
+            ]
+        )
+
+    return clamped_positions
+
+
+def scale_positions_toward_origin(positions: list, factor: float) -> list:
+    """Scale 2D positions toward the target workplane origin."""
+    return [
+        [
+            position[0] * factor,
+            position[1] * factor,
+        ]
+        for position in positions
+    ]
 
 
 def create_profile(
@@ -282,17 +368,14 @@ def create_profile(
         width = operation["width"]
         height = operation["height"]
 
-        if width <= 0:
-            raise ValueError("Width must be greater than zero")
-        if height <= 0:
-            raise ValueError("Height must be greater than zero")
+        validate_positive_number(width, "Width")
+        validate_positive_number(height, "Height")
 
         workplane = workplane.rect(width, height)
     elif profile == "circle":
         diameter = operation["diameter"]
 
-        if diameter <= 0:
-            raise ValueError("Diameter must be greater than zero")
+        validate_positive_number(diameter, "Diameter")
 
         workplane = workplane.circle(diameter / 2)
     elif profile == "polygon":
@@ -303,8 +386,7 @@ def create_profile(
             raise ValueError("Polygon sides must be an integer")
         if sides < 3:
             raise ValueError("Polygon must have at least three sides")
-        if diameter <= 0:
-            raise ValueError("Diameter must be greater than zero")
+        validate_positive_number(diameter, "Diameter")
 
         workplane = workplane.polygon(sides, diameter)
 
@@ -322,11 +404,11 @@ def create_profile(
 
             x = point[0]
             y = point[1]
-            if not isinstance(x, (int, float)):
+            if not is_number(x):
                 raise ValueError(
                     "Polyline x coordinate must be an integer or float"
                 )
-            if not isinstance(y, (int, float)):
+            if not is_number(y):
                 raise ValueError(
                     "Polyline y coordinate must be an integer or float"
                 )
@@ -347,11 +429,11 @@ def create_profile(
 
         start_x = start[0]
         start_y = start[1]
-        if not isinstance(start_x, (int, float)):
+        if not is_number(start_x):
             raise ValueError(
                 "Sketch start x coordinate must be an integer or float"
             )
-        if not isinstance(start_y, (int, float)):
+        if not is_number(start_y):
             raise ValueError(
                 "Sketch start y coordinate must be an integer or float"
             )
@@ -377,17 +459,18 @@ def create_profile(
                     )
                 end_x = end[0]
                 end_y = end[1]
-                if not isinstance(end_x, (int, float)):
+                if not is_number(end_x):
                     raise ValueError(
                         "Sketch arc end x coordinate must be an integer or float"
                     )
-                if not isinstance(end_y, (int, float)):
+                if not is_number(end_y):
                     raise ValueError(
                         "Sketch arc end y coordinate must be an integer or float"
                     )
                 endpoint = cq.Vector(end_x, end_y, 0)
-                edge = cq.Edge.makeLine(current, endpoint)
-                edges.append(edge)
+                if not points_match(current, endpoint):
+                    edge = cq.Edge.makeLine(current, endpoint)
+                    edges.append(edge)
                 current = endpoint
 
             elif segment["type"] == "arc":
@@ -407,25 +490,42 @@ def create_profile(
                 through_y = through[1]
                 end_x = end[0]
                 end_y = end[1]
-                if not isinstance(end_x, (int, float)):
+                if not is_number(end_x):
                     raise ValueError(
                         "Sketch arc end x coordinate must be an integer or float"
                     )
-                if not isinstance(end_y, (int, float)):
+                if not is_number(end_y):
                     raise ValueError(
                         "Sketch arc end y coordinate must be an integer or float"
                     )
-                if not isinstance(through_x, (int, float)):
+                if not is_number(through_x):
                     raise ValueError(
                         "Sketch arc through x coordinate must be an integer or float"
                     )
-                if not isinstance(through_y, (int, float)):
+                if not is_number(through_y):
                     raise ValueError(
                         "Sketch arc through y coordinate must be an integer or float"
                     )
                 through_vector = cq.Vector(through_x, through_y, 0)
                 endpoint = cq.Vector(end_x, end_y, 0)
-                edge = cq.Edge.makeThreePointArc(current, through_vector, endpoint)
+
+                if points_match(current, endpoint):
+                    current = endpoint
+                    continue
+
+                if (
+                    points_match(current, through_vector)
+                    or points_match(through_vector, endpoint)
+                    or points_are_collinear(current, through_vector, endpoint)
+                ):
+                    edge = cq.Edge.makeLine(current, endpoint)
+                else:
+                    edge = cq.Edge.makeThreePointArc(
+                        current,
+                        through_vector,
+                        endpoint,
+                    )
+
                 edges.append(edge)
                 current = endpoint
 
@@ -437,6 +537,9 @@ def create_profile(
         if current != start_vector:
             closing_edge = cq.Edge.makeLine(current, start_vector)
             edges.append(closing_edge)
+
+        if len(edges) < 2:
+            raise ValueError("Sketch must contain at least two valid edges")
 
         wire = cq.Wire.assembleEdges(edges)
         workplane = workplane.eachpoint(
@@ -450,6 +553,17 @@ def create_profile(
             f"unsupported profile: {profile}"
         )
     return workplane
+
+
+def keep_largest_connected_solid(part: cq.Workplane) -> cq.Workplane:
+    """Discard loose cut leftovers and keep the main connected body."""
+    solids = part.solids().vals()
+
+    if len(solids) <= 1:
+        return part
+
+    largest_solid = max(solids, key=lambda solid: solid.Volume())
+    return part.newObject([largest_solid])
 
 
 def apply_cut_operation(
@@ -471,6 +585,7 @@ def apply_cut_operation(
         part,
         target,
         operation_number,
+        inset=VIRTUAL_TARGET_OVERLAP,
     )
     workplane = target_workplane.pushPoints(positions)
     workplane = create_profile(workplane, operation, operation_number)
@@ -483,9 +598,8 @@ def apply_cut_operation(
                 bounding_box.ylen,
                 bounding_box.zlen,
             ) * 2
-        elif isinstance(depth, (int, float)):
-            if depth <= 0:
-                raise ValueError("Depth must be greater than zero")
+        elif is_number(depth):
+            validate_positive_number(depth, "Depth")
             tool_depth = depth
         else:
             raise ValueError(
@@ -494,13 +608,12 @@ def apply_cut_operation(
             )
 
         cutting_tool = workplane.extrude(-tool_depth)
-        return part.cut(cutting_tool)
+        return keep_largest_connected_solid(part.cut(cutting_tool))
 
     if depth == "through":
         part = workplane.cutThruAll()
-    elif isinstance(depth, (int, float)):
-        if depth <= 0:
-            raise ValueError("Depth must be greater than zero")
+    elif is_number(depth):
+        validate_positive_number(depth, "Depth")
         part = workplane.cutBlind(-depth)
     else:
         raise ValueError(
@@ -508,7 +621,7 @@ def apply_cut_operation(
             f"unsupported cut depth: {depth}"
         )
 
-    return part
+    return keep_largest_connected_solid(part)
 
 
 def apply_add_extrusion(
@@ -525,19 +638,47 @@ def apply_add_extrusion(
     positions = get_positions(operation, operation_number)
     positions = normalize_side_target_positions(part, target, positions)
 
-    if distance <= 0:
-        raise ValueError("Distance must be greater than zero")
+    validate_positive_number(distance, "Distance")
     target_workplane, is_virtual_target = get_target_workplane(
         part,
         target,
         operation_number,
+        prefer_virtual_side=True,
     )
-    workplane = target_workplane.pushPoints(positions)
-    workplane = create_profile(workplane, operation, operation_number)
 
     if is_virtual_target:
-        extrusion_tool = workplane.extrude(distance)
-        return part.union(extrusion_tool)
+        last_result = part
+        for position_factor in VIRTUAL_TARGET_POSITION_FACTORS:
+            retry_positions = scale_positions_toward_origin(
+                positions,
+                position_factor,
+            )
+            for overlap in VIRTUAL_TARGET_OVERLAP_RETRIES:
+                target_workplane, _ = get_target_workplane(
+                    part,
+                    target,
+                    operation_number,
+                    inset=overlap,
+                    prefer_virtual_side=True,
+                )
+                workplane = target_workplane.pushPoints(retry_positions)
+                workplane = create_profile(
+                    workplane,
+                    operation,
+                    operation_number,
+                )
+                extrusion_tool = workplane.extrude(distance + overlap)
+                result = part.union(extrusion_tool)
+
+                if len(result.solids().vals()) == 1:
+                    return result
+
+                last_result = result
+
+        return last_result
+
+    workplane = target_workplane.pushPoints(positions)
+    workplane = create_profile(workplane, operation, operation_number)
 
     return workplane.extrude(distance)
 
@@ -548,7 +689,7 @@ def validate_axis_point(axis_point: list, point_name: str) -> tuple:
         raise ValueError(f"{point_name} must contain two or three numbers")
 
     for coordinate in axis_point:
-        if not isinstance(coordinate, (int, float)):
+        if not is_number(coordinate):
             raise ValueError(
                 f"{point_name} coordinates must be integers or floats"
             )
@@ -557,6 +698,58 @@ def validate_axis_point(axis_point: list, point_name: str) -> tuple:
         return (axis_point[0], axis_point[1], 0)
 
     return tuple(axis_point)
+
+
+def project_2d_point_to_axis(point: list, axis_start: tuple, axis_end: tuple) -> list:
+    """Project a 2D point onto the 2D revolve axis line."""
+    point_x = point[0]
+    point_y = point[1]
+    start_x = axis_start[0]
+    start_y = axis_start[1]
+    axis_x = axis_end[0] - start_x
+    axis_y = axis_end[1] - start_y
+    axis_length_squared = axis_x**2 + axis_y**2
+
+    if axis_length_squared == 0:
+        raise ValueError("Revolve axis start and end cannot be the same")
+
+    point_axis_x = point_x - start_x
+    point_axis_y = point_y - start_y
+    axis_fraction = (
+        point_axis_x * axis_x + point_axis_y * axis_y
+    ) / axis_length_squared
+
+    return [
+        start_x + axis_fraction * axis_x,
+        start_y + axis_fraction * axis_y,
+    ]
+
+
+def scale_revolve_positions_toward_axis(
+    positions: list,
+    axis_start: tuple,
+    axis_end: tuple,
+    factor: float,
+) -> list:
+    """Move revolve feature positions toward the revolve axis."""
+    scaled_positions = []
+
+    for position in positions:
+        projected_position = project_2d_point_to_axis(
+            position,
+            axis_start,
+            axis_end,
+        )
+        scaled_positions.append(
+            [
+                projected_position[0]
+                + (position[0] - projected_position[0]) * factor,
+                projected_position[1]
+                + (position[1] - projected_position[1]) * factor,
+            ]
+        )
+
+    return scaled_positions
 
 
 def build_revolve_tool(
@@ -570,10 +763,7 @@ def build_revolve_tool(
     axis_end = validate_axis_point(operation["axis_end"], "Axis end")
     positions = get_positions(operation, operation_number)
 
-    if not isinstance(angle, (int, float)):
-        raise ValueError("Revolve angle must be an integer or float")
-    if angle <= 0:
-        raise ValueError("Revolve angle must be greater than zero")
+    validate_positive_number(angle, "Revolve angle")
     if angle > 360:
         raise ValueError("Revolve angle cannot be greater than 360")
     if axis_start == axis_end:
@@ -616,8 +806,29 @@ def apply_add_revolve(
     if part is None:
         raise ValueError("Cannot add before a solid has been created")
 
-    revolve_tool = build_revolve_tool(operation, operation_number)
-    return part.union(revolve_tool)
+    axis_start = validate_axis_point(operation["axis_start"], "Axis start")
+    axis_end = validate_axis_point(operation["axis_end"], "Axis end")
+    positions = get_positions(operation, operation_number)
+    last_result = part
+
+    for position_factor in ADD_REVOLVE_POSITION_FACTORS:
+        retry_operation = operation.copy()
+        retry_operation["positions"] = scale_revolve_positions_toward_axis(
+            positions,
+            axis_start,
+            axis_end,
+            position_factor,
+        )
+
+        revolve_tool = build_revolve_tool(retry_operation, operation_number)
+        result = part.union(revolve_tool)
+
+        if len(result.solids().vals()) == 1:
+            return result
+
+        last_result = result
+
+    return last_result
 
 
 def apply_cut_revolve(
@@ -630,7 +841,7 @@ def apply_cut_revolve(
         raise ValueError("Cannot cut before a solid has been created")
 
     revolve_tool = build_revolve_tool(operation, operation_number)
-    return part.cut(revolve_tool)
+    return keep_largest_connected_solid(part.cut(revolve_tool))
 
 
 def validate_final_model(part: cq.Workplane) -> None:

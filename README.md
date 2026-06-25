@@ -41,6 +41,26 @@ Generate a STEP file from a saved JSON model:
 python -m prompt2cad.cli examples/api_rectangular_plate.json generated/api_rectangular_plate.step
 ```
 
+## Local web app
+
+For normal prompt testing, start the web app without reload mode:
+
+```powershell
+.\scripts\run_web_app.ps1
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000/
+```
+
+Leave that terminal running while using the web app. Press `Ctrl+C` to stop it.
+
+Avoid using `--reload` during normal testing. Reload mode watches the project
+folder and can restart the server whenever files are saved, which makes testing
+feel slow and noisy. Use reload mode only when actively editing the web app code.
+
 The current OpenAI prototype can convert a simple natural-language prompt into
 a rectangular base extrusion JSON structure. API-generated outputs can be saved
 as examples and tested locally without making repeated API calls.
