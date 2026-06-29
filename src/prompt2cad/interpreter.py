@@ -615,7 +615,6 @@ def register_add_extrusion_references(
         feature_graph is None
         or operation.get("profile") != "rectangle"
         or not operation.get("id")
-        or len(positions) != 1
     ):
         return
 
@@ -627,14 +626,22 @@ def register_add_extrusion_references(
         feature_graph=feature_graph,
     )
 
-    feature_graph.registry.register_rectangular_prism_faces(
-        operation["id"],
-        target_workplane.plane,
-        operation["width"],
-        operation["height"],
-        operation["distance"],
-        positions[0],
-    )
+    use_instances = len(positions) > 1
+    for index, position in enumerate(positions, start=1):
+        instance_name = None
+        if use_instances:
+            instance_name = f"inst{index:03d}"
+
+        feature_graph.registry.register_rectangular_prism_faces(
+            operation["id"],
+            target_workplane.plane,
+            operation["width"],
+            operation["height"],
+            operation["distance"],
+            position,
+            instance_name=instance_name,
+            semantic_aliases=not use_instances,
+        )
 
 
 def apply_cut_operation(

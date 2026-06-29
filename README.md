@@ -28,7 +28,8 @@ generated/  Output location reserved for generated CAD files
 - Supports additive extrusions and cuts on tagged faces
 - Supports rectangular, circular, polygon, polyline, and line/arc sketch profiles
 - Supports repeated feature positions for simple patterns
-- Uses named face tags such as `base.top` and `base.front` for later operations
+- Tracks a feature graph with sketch entities, build order, parent/child relationships, and references
+- Uses canonical references such as `base.face.f001` with readable aliases such as `base.top`
 - Validates that generated parts are single connected valid solids
 - Exports generated models as STEP files
 - Includes an early OpenAI Structured Outputs prototype for converting natural language into CAD JSON
@@ -39,6 +40,12 @@ Generate a STEP file from a saved JSON model:
 
 ```powershell
 python -m prompt2cad.cli examples/api_rectangular_plate.json generated/api_rectangular_plate.step
+```
+
+Export a debug feature tree from a saved JSON model:
+
+```powershell
+python -m prompt2cad.feature_tree_export examples/api_rectangular_plate.json --output generated/api_rectangular_plate_feature_tree.json
 ```
 
 ## Local web app

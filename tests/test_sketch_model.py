@@ -20,15 +20,17 @@ def test_rectangle_operation_becomes_editable_sketch_entities():
     assert sketch.plane == "XY"
     assert sketch.positions == [(0, 0)]
     assert len(sketch.entities) == 8
-    assert sketch.entity("point_bottom_left").data["point"] == (-40, -25)
-    assert sketch.entity("line_right").data == {
-        "start": "point_bottom_right",
-        "end": "point_top_right",
+    assert sketch.entity("p001").data["point"] == (-40, -25)
+    assert sketch.entity("bottom_left_corner").id == "p001"
+    assert sketch.entity("l002").data == {
+        "start": "p002",
+        "end": "p003",
     }
     assert [dimension.id for dimension in sketch.dimensions] == [
-        "width",
-        "height",
+        "d001",
+        "d002",
     ]
+    assert sketch.dimensions[0].aliases == ["width"]
 
 
 def test_circle_operation_becomes_center_and_circle_entity():
@@ -45,10 +47,12 @@ def test_circle_operation_becomes_center_and_circle_entity():
 
     assert sketch.target == "base.top"
     assert sketch.positions == [(10, 5)]
-    assert sketch.entity("point_center").data["point"] == (0, 0)
-    assert sketch.entity("circle_outer").data == {
-        "center": "point_center",
+    assert sketch.entity("p001").data["point"] == (0, 0)
+    assert sketch.entity("center").id == "p001"
+    assert sketch.entity("c001").data == {
+        "center": "p001",
         "radius": 6,
+        "construction": False,
     }
     assert sketch.dimensions[0].type == "diameter"
 
@@ -75,12 +79,14 @@ def test_polygon_operation_becomes_points_and_lines():
         if entity.type == "line"
     ]
 
-    assert len(points) == 6
+    assert len(points) == 7
     assert len(lines) == 6
-    assert sketch.entity("line_6").data == {
-        "start": "point_6",
-        "end": "point_1",
+    assert sketch.entity("l006").data == {
+        "start": "p007",
+        "end": "p002",
     }
+    assert sketch.entity("center").id == "p001"
+    assert sketch.entity("construction_circumcircle").id == "c001"
 
 
 def test_polyline_operation_preserves_input_points():
@@ -95,12 +101,12 @@ def test_polyline_operation_preserves_input_points():
         }
     )
 
-    assert sketch.entity("point_1").data["point"] == (0, 0)
-    assert sketch.entity("point_2").data["point"] == (20, 0)
-    assert sketch.entity("point_3").data["point"] == (10, 15)
-    assert sketch.entity("line_3").data == {
-        "start": "point_3",
-        "end": "point_1",
+    assert sketch.entity("p001").data["point"] == (0, 0)
+    assert sketch.entity("p002").data["point"] == (20, 0)
+    assert sketch.entity("p003").data["point"] == (10, 15)
+    assert sketch.entity("l003").data == {
+        "start": "p003",
+        "end": "p001",
     }
 
 
@@ -138,9 +144,9 @@ def test_explicit_sketch_operation_preserves_arc_entities():
     assert sketch.closed is True
     assert arc.type == "arc"
     assert arc.data == {
-        "start": "point_2",
-        "through": "point_4",
-        "end": "point_3",
+        "start": "p002",
+        "through": "p004",
+        "end": "p003",
     }
 
 

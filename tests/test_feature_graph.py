@@ -123,7 +123,7 @@ def test_build_model_rejects_target_before_parent_feature_exists():
         build_model_with_graph(model_data)
 
 
-def test_feature_graph_warns_when_rectangle_instances_are_ambiguous():
+def test_feature_graph_records_multi_instance_references():
     model_data = {
         "operations": [
             {
@@ -150,10 +150,23 @@ def test_feature_graph_warns_when_rectangle_instances_are_ambiguous():
 
     _, graph = build_model_with_graph(model_data)
 
-    assert graph.get_feature("feature_1").created_references == []
-    assert graph.validation_warnings[-1].message.startswith(
-        "Feature 'feature_1' did not create graph references"
-    )
+    assert graph.get_feature("feature_1").created_references == [
+        "feature_1.inst001.face.f001",
+        "feature_1.inst001.face.f002",
+        "feature_1.inst001.face.f003",
+        "feature_1.inst001.face.f004",
+        "feature_1.inst001.face.f005",
+        "feature_1.inst001.face.f006",
+        "feature_1.inst002.face.f001",
+        "feature_1.inst002.face.f002",
+        "feature_1.inst002.face.f003",
+        "feature_1.inst002.face.f004",
+        "feature_1.inst002.face.f005",
+        "feature_1.inst002.face.f006",
+    ]
+    assert graph.registry.get_plane("feature_1.inst001.top") is not None
+    assert graph.registry.get_plane("feature_1.inst002.top") is not None
+    assert graph.validation_warnings == []
 
 
 def test_build_model_with_graph_records_created_references():
@@ -196,19 +209,59 @@ def test_build_model_with_graph_records_created_references():
 
     assert len(part.solids().vals()) == 1
     assert base.created_references == [
-        "base.back",
-        "base.bottom",
-        "base.front",
-        "base.left",
-        "base.right",
-        "base.top",
+        "base.face.f001",
+        "base.face.f002",
+        "base.face.f003",
+        "base.face.f004",
+        "base.face.f005",
+        "base.face.f006",
     ]
-    assert "feature_1.right" in boss.created_references
+    assert "feature_1.face.f005" in boss.created_references
+    assert graph.registry.resolve_reference_name("base.top") == "base.face.f001"
+    assert (
+        graph.registry.resolve_reference_name("feature_1.right")
+        == "feature_1.face.f005"
+    )
     assert base.sketch.profile == "rectangle"
-    assert base.sketch.entity("point_top_right").data["point"] == (40, 25)
+    assert base.sketch.entity("top_right_corner").data["point"] == (40, 25)
     assert boss.sketch.target == "base.top"
     assert boss.sketch.positions == [(20, 0)]
     assert cut.sketch.profile == "circle"
     assert cut.parent_feature_id == "feature_1"
     assert graph.children_of("feature_1") == [cut]
     assert graph.validation_warnings == []
+
+
+def test_feature_graph_debug_tree_exports_build_history():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 8,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "add_extrude",
+                "id": "feature_1",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[20, 0]],
+                "distance": 10,
+                "width": 20,
+                "height": 12,
+            },
+        ]
+    }
+
+    _, graph = build_model_with_graph(model_data)
+    debug_tree = graph.to_debug_tree()
+
+    assert debug_tree["build_order"] == ["base", "feature_1"]
+    assert debug_tree["features"][0]["children"] == ["feature_1"]
+    assert debug_tree["features"][1]["canonical_target"] == "base.face.f001"
+    assert debug_tree["features"][0]["sketch"]["entities"][0]["id"] == "p001"
+    assert debug_tree["registry"]["aliases"]["base.top"] == "base.face.f001"

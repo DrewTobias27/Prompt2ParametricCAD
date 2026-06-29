@@ -28,6 +28,29 @@ class FeatureNode:
     sketch: SketchDefinition | None = None
     created_references: list[str] = field(default_factory=list)
 
+    def to_debug_dict(
+        self,
+        children: list[str],
+        canonical_target: str | None,
+    ) -> dict:
+        """Return a JSON-friendly feature-tree node."""
+        sketch = None
+        if self.sketch is not None:
+            sketch = self.sketch.to_debug_dict()
+
+        return {
+            "id": self.id,
+            "type": self.operation_type,
+            "operation_number": self.operation_number,
+            "target": self.target,
+            "canonical_target": canonical_target,
+            "parent_feature_id": self.parent_feature_id,
+            "children": children,
+            "created_references": self.created_references,
+            "sketch": sketch,
+            "operation": self.operation,
+        }
+
 
 @dataclass(frozen=True)
 class GraphValidationWarning:
@@ -35,6 +58,13 @@ class GraphValidationWarning:
 
     operation_number: int
     message: str
+
+    def to_debug_dict(self) -> dict:
+        """Return a JSON-friendly warning."""
+        return {
+            "operation_number": self.operation_number,
+            "message": self.message,
+        }
 
 
 class FeatureGraph:
@@ -129,7 +159,7 @@ class FeatureGraph:
                 f"'{parent_feature_id}' has not been built"
             )
 
-        if target not in self.registry.references:
+        if not self.registry.has_reference(target):
             self.validation_warnings.append(
                 GraphValidationWarning(
                     operation_number=operation_number,
@@ -171,6 +201,28 @@ class FeatureGraph:
             return False
 
         return bool(feature_node.operation.get("id"))
+
+    def to_debug_tree(self) -> dict:
+        """Return a JSON-friendly feature tree for inspection/export."""
+        return {
+            "build_order": self.build_order,
+            "features": [
+                self.features[feature_id].to_debug_dict(
+                    children=self.children_by_feature_id.get(feature_id, []),
+                    canonical_target=self.registry.resolve_reference_name(
+                        self.features[feature_id].target
+                    )
+                    if self.features[feature_id].target is not None
+                    else None,
+                )
+                for feature_id in self.build_order
+            ],
+            "validation_warnings": [
+                warning.to_debug_dict()
+                for warning in self.validation_warnings
+            ],
+            "registry": self.registry.to_debug_dict(),
+        }
 
     @staticmethod
     def get_operation_feature_id(

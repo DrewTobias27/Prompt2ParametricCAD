@@ -14,6 +14,30 @@ from math import cos, pi, sin
 
 
 Point2D = tuple[float, float]
+SUPPORTED_PROFILE_TYPES = {"rectangle", "circle", "polygon", "polyline", "sketch"}
+SUPPORTED_SKETCH_ENTITY_TYPES = {
+    "point",
+    "line",
+    "arc",
+    "circle",
+    "ellipse",
+    "spline",
+    "slot",
+    "construction_line",
+    "construction_axis",
+}
+PROFILE_ENTITY_SCAFFOLD = {
+    "rectangle": {"point", "line"},
+    "circle": {"point", "circle"},
+    "polygon": {"point", "line", "circle"},
+    "polyline": {"point", "line"},
+    "sketch": {"point", "line", "arc"},
+}
+FUTURE_PROFILE_SCAFFOLD = {
+    "ellipse": {"point", "ellipse"},
+    "slot": {"point", "line", "arc"},
+    "spline": {"point", "spline"},
+}
 
 
 @dataclass(frozen=True)
@@ -23,6 +47,16 @@ class SketchEntity:
     id: str
     type: str
     data: dict
+    aliases: list[str] = field(default_factory=list)
+
+    def to_debug_dict(self) -> dict:
+        """Return a JSON-friendly view of the entity."""
+        return {
+            "id": self.id,
+            "type": self.type,
+            "aliases": self.aliases,
+            "data": self.data,
+        }
 
 
 @dataclass(frozen=True)
@@ -33,6 +67,17 @@ class SketchDimension:
     type: str
     value: float | int
     target: str
+    aliases: list[str] = field(default_factory=list)
+
+    def to_debug_dict(self) -> dict:
+        """Return a JSON-friendly view of the dimension."""
+        return {
+            "id": self.id,
+            "type": self.type,
+            "value": self.value,
+            "target": self.target,
+            "aliases": self.aliases,
+        }
 
 
 @dataclass(frozen=True)
@@ -49,12 +94,30 @@ class SketchDefinition:
     source_operation: dict = field(default_factory=dict)
 
     def entity(self, entity_id: str) -> SketchEntity | None:
-        """Return a sketch entity by id, if it exists."""
+        """Return a sketch entity by id or alias, if it exists."""
         for sketch_entity in self.entities:
-            if sketch_entity.id == entity_id:
+            if entity_id == sketch_entity.id or entity_id in sketch_entity.aliases:
                 return sketch_entity
 
         return None
+
+    def to_debug_dict(self) -> dict:
+        """Return a JSON-friendly sketch description."""
+        return {
+            "profile": self.profile,
+            "plane": self.plane,
+            "target": self.target,
+            "positions": self.positions,
+            "closed": self.closed,
+            "entities": [
+                sketch_entity.to_debug_dict()
+                for sketch_entity in self.entities
+            ],
+            "dimensions": [
+                dimension.to_debug_dict()
+                for dimension in self.dimensions
+            ],
+        }
 
 
 def operation_to_sketch(operation: dict) -> SketchDefinition:
@@ -93,77 +156,161 @@ def normalize_positions(operation: dict) -> list[Point2D]:
     return [(position[0], position[1]) for position in positions]
 
 
+def numbered_id(prefix: str, index: int) -> str:
+    """Return a stable structural entity id such as p001 or l002."""
+    return f"{prefix}{index:03d}"
+
+
+def point_entity(index: int, point: Point2D, aliases: list[str] | None = None) -> SketchEntity:
+    """Create a structurally named point entity."""
+    return SketchEntity(
+        id=numbered_id("p", index),
+        type="point",
+        data={"point": point},
+        aliases=aliases or [],
+    )
+
+
+def line_entity(
+    index: int,
+    start: str,
+    end: str,
+    aliases: list[str] | None = None,
+) -> SketchEntity:
+    """Create a structurally named line entity."""
+    return SketchEntity(
+        id=numbered_id("l", index),
+        type="line",
+        data={
+            "start": start,
+            "end": end,
+        },
+        aliases=aliases or [],
+    )
+
+
+def arc_entity(
+    index: int,
+    start: str,
+    through: str,
+    end: str,
+    aliases: list[str] | None = None,
+) -> SketchEntity:
+    """Create a structurally named arc entity."""
+    return SketchEntity(
+        id=numbered_id("a", index),
+        type="arc",
+        data={
+            "start": start,
+            "through": through,
+            "end": end,
+        },
+        aliases=aliases or [],
+    )
+
+
+def circle_entity(
+    index: int,
+    center: str,
+    radius: float,
+    aliases: list[str] | None = None,
+    construction: bool = False,
+) -> SketchEntity:
+    """Create a structurally named circle entity."""
+    return SketchEntity(
+        id=numbered_id("c", index),
+        type="circle",
+        data={
+            "center": center,
+            "radius": radius,
+            "construction": construction,
+        },
+        aliases=aliases or [],
+    )
+
+
+def dimension_entity(
+    index: int,
+    dimension_type: str,
+    value: float | int,
+    target: str,
+    aliases: list[str] | None = None,
+) -> SketchDimension:
+    """Create a structurally named dimension."""
+    return SketchDimension(
+        id=numbered_id("d", index),
+        type=dimension_type,
+        value=value,
+        target=target,
+        aliases=aliases or [],
+    )
+
+
 def rectangle_to_entities(
     operation: dict,
 ) -> tuple[list[SketchEntity], list[SketchDimension]]:
-    """Represent a rectangle as four named corner points and four lines."""
+    """Represent a rectangle as structural points and lines."""
     width = operation["width"]
     height = operation["height"]
     half_width = width / 2
     half_height = height / 2
     corners = [
-        ("bottom_left", (-half_width, -half_height)),
-        ("bottom_right", (half_width, -half_height)),
-        ("top_right", (half_width, half_height)),
-        ("top_left", (-half_width, half_height)),
+        ((-half_width, -half_height), ["bottom_left_corner"]),
+        ((half_width, -half_height), ["bottom_right_corner"]),
+        ((half_width, half_height), ["top_right_corner"]),
+        ((-half_width, half_height), ["top_left_corner"]),
     ]
 
     entities = [
-        SketchEntity(
-            id=f"point_{corner_name}",
-            type="point",
-            data={"point": point},
+        point_entity(
+            index=index,
+            point=point,
+            aliases=aliases,
         )
-        for corner_name, point in corners
+        for index, (point, aliases) in enumerate(corners, start=1)
     ]
     entities.extend(
         [
-            SketchEntity(
-                id="line_bottom",
-                type="line",
-                data={
-                    "start": "point_bottom_left",
-                    "end": "point_bottom_right",
-                },
+            line_entity(
+                index=1,
+                start="p001",
+                end="p002",
+                aliases=["bottom_edge"],
             ),
-            SketchEntity(
-                id="line_right",
-                type="line",
-                data={
-                    "start": "point_bottom_right",
-                    "end": "point_top_right",
-                },
+            line_entity(
+                index=2,
+                start="p002",
+                end="p003",
+                aliases=["right_edge"],
             ),
-            SketchEntity(
-                id="line_top",
-                type="line",
-                data={
-                    "start": "point_top_right",
-                    "end": "point_top_left",
-                },
+            line_entity(
+                index=3,
+                start="p003",
+                end="p004",
+                aliases=["top_edge"],
             ),
-            SketchEntity(
-                id="line_left",
-                type="line",
-                data={
-                    "start": "point_top_left",
-                    "end": "point_bottom_left",
-                },
+            line_entity(
+                index=4,
+                start="p004",
+                end="p001",
+                aliases=["left_edge"],
             ),
         ]
     )
     dimensions = [
-        SketchDimension(
-            id="width",
-            type="linear",
+        dimension_entity(
+            index=1,
+            dimension_type="linear",
             value=width,
-            target="line_bottom",
+            target="l001",
+            aliases=["width"],
         ),
-        SketchDimension(
-            id="height",
-            type="linear",
+        dimension_entity(
+            index=2,
+            dimension_type="linear",
             value=height,
-            target="line_right",
+            target="l002",
+            aliases=["height"],
         ),
     ]
     return entities, dimensions
@@ -175,26 +322,25 @@ def circle_to_entities(
     """Represent a circle by center point and circular entity."""
     diameter = operation["diameter"]
     entities = [
-        SketchEntity(
-            id="point_center",
-            type="point",
-            data={"point": (0, 0)},
+        point_entity(
+            index=1,
+            point=(0, 0),
+            aliases=["center"],
         ),
-        SketchEntity(
-            id="circle_outer",
-            type="circle",
-            data={
-                "center": "point_center",
-                "radius": diameter / 2,
-            },
+        circle_entity(
+            index=1,
+            center="p001",
+            radius=diameter / 2,
+            aliases=["outer_circle"],
         ),
     ]
     dimensions = [
-        SketchDimension(
-            id="diameter",
-            type="diameter",
+        dimension_entity(
+            index=1,
+            dimension_type="diameter",
             value=diameter,
-            target="circle_outer",
+            target="c001",
+            aliases=["diameter"],
         )
     ]
     return entities, dimensions
@@ -214,26 +360,49 @@ def polygon_to_entities(
         points.append((radius * cos(angle), radius * sin(angle)))
 
     entities = [
-        SketchEntity(
-            id=f"point_{index + 1}",
-            type="point",
-            data={"point": point},
-        )
-        for index, point in enumerate(points)
-    ]
-    entities.extend(make_line_loop_entities("line", len(points)))
-    dimensions = [
-        SketchDimension(
-            id="diameter",
-            type="diameter",
-            value=diameter,
-            target="construction_circumcircle",
+        point_entity(
+            index=1,
+            point=(0, 0),
+            aliases=["center"],
         ),
-        SketchDimension(
-            id="sides",
-            type="count",
+    ]
+    entities.extend(
+        [
+        point_entity(
+            index=index,
+            point=point,
+        )
+        for index, point in enumerate(points, start=2)
+        ]
+    )
+    polygon_point_ids = [
+        numbered_id("p", index)
+        for index in range(2, sides + 2)
+    ]
+    entities.extend(make_line_loop_entities(polygon_point_ids))
+    entities.append(
+        circle_entity(
+            index=1,
+            center="p001",
+            radius=radius,
+            aliases=["construction_circumcircle"],
+            construction=True,
+        )
+    )
+    dimensions = [
+        dimension_entity(
+            index=1,
+            dimension_type="diameter",
+            value=diameter,
+            target="c001",
+            aliases=["diameter"],
+        ),
+        dimension_entity(
+            index=2,
+            dimension_type="count",
             value=sides,
             target="polygon",
+            aliases=["sides"],
         ),
     ]
     return entities, dimensions
@@ -245,14 +414,17 @@ def polyline_to_entities(
     """Represent a closed polyline as points and connecting lines."""
     points = operation["points"]
     entities = [
-        SketchEntity(
-            id=f"point_{index + 1}",
-            type="point",
-            data={"point": (point[0], point[1])},
+        point_entity(
+            index=index,
+            point=(point[0], point[1]),
         )
-        for index, point in enumerate(points)
+        for index, point in enumerate(points, start=1)
     ]
-    entities.extend(make_line_loop_entities("line", len(points)))
+    entities.extend(
+        make_line_loop_entities(
+            [numbered_id("p", index) for index in range(1, len(points) + 1)]
+        )
+    )
     return entities, []
 
 
@@ -262,58 +434,62 @@ def sketch_segments_to_entities(
     """Represent explicit sketch line/arc segments."""
     start = operation["start"]
     entities = [
-        SketchEntity(
-            id="point_1",
-            type="point",
-            data={"point": (start[0], start[1])},
+        point_entity(
+            index=1,
+            point=(start[0], start[1]),
+            aliases=["start_point"],
         )
     ]
-    current_point_id = "point_1"
+    current_point_id = "p001"
     next_point_number = 2
+    line_count = 0
+    arc_count = 0
 
     for index, segment in enumerate(operation["segments"], start=1):
         endpoint = segment["to"]
-        endpoint_id = f"point_{next_point_number}"
-        entities.append(
-            SketchEntity(
-                id=endpoint_id,
-                type="point",
-                data={"point": (endpoint[0], endpoint[1])},
+        endpoint_point = (endpoint[0], endpoint[1])
+
+        if endpoint_point == (start[0], start[1]):
+            endpoint_id = "p001"
+        else:
+            endpoint_id = numbered_id("p", next_point_number)
+            entities.append(
+                point_entity(
+                    index=next_point_number,
+                    point=endpoint_point,
+                )
             )
-        )
-        next_point_number += 1
+            next_point_number += 1
 
         if segment["type"] == "line":
+            line_count += 1
             entities.append(
-                SketchEntity(
-                    id=f"segment_{index}",
-                    type="line",
-                    data={
-                        "start": current_point_id,
-                        "end": endpoint_id,
-                    },
+                line_entity(
+                    index=line_count,
+                    start=current_point_id,
+                    end=endpoint_id,
+                    aliases=[f"segment_{index}"],
                 )
             )
         elif segment["type"] == "arc":
             through = segment["through"]
-            through_point_id = f"point_{next_point_number}"
+            through_point_id = numbered_id("p", next_point_number)
             entities.append(
-                SketchEntity(
-                    id=through_point_id,
-                    type="point",
-                    data={"point": (through[0], through[1])},
+                point_entity(
+                    index=next_point_number,
+                    point=(through[0], through[1]),
+                    aliases=[f"arc_{index}_through_point"],
                 )
             )
             next_point_number += 1
+            arc_count += 1
             entities.append(
-                SketchEntity(
-                    id=f"segment_{index}",
-                    type="arc",
-                    data={
-                        "start": current_point_id,
-                        "through": through_point_id,
-                        "end": endpoint_id,
-                    },
+                arc_entity(
+                    index=arc_count,
+                    start=current_point_id,
+                    through=through_point_id,
+                    end=endpoint_id,
+                    aliases=[f"segment_{index}"],
                 )
             )
         else:
@@ -324,16 +500,14 @@ def sketch_segments_to_entities(
     return entities, []
 
 
-def make_line_loop_entities(prefix: str, point_count: int) -> list[SketchEntity]:
-    """Create line entities connecting point_1 through point_n as a loop."""
+def make_line_loop_entities(point_ids: list[str]) -> list[SketchEntity]:
+    """Create line entities connecting point ids as a loop."""
+    point_count = len(point_ids)
     return [
-        SketchEntity(
-            id=f"{prefix}_{index + 1}",
-            type="line",
-            data={
-                "start": f"point_{index + 1}",
-                "end": f"point_{((index + 1) % point_count) + 1}",
-            },
+        line_entity(
+            index=index + 1,
+            start=point_ids[index],
+            end=point_ids[(index + 1) % point_count],
         )
         for index in range(point_count)
     ]
