@@ -2,102 +2,14 @@
 
 import cadquery as cq
 
+from prompt2cad.feature_graph import FeatureGraph
+
 
 BASE_OPERATION_TYPES = {"extrude", "revolve"}
 SIDE_FACE_NAMES = {"front", "back", "left", "right"}
 VIRTUAL_TARGET_POSITION_FACTORS = (1, 0.75, 0.5, 0.25, 0)
 ADD_REVOLVE_POSITION_FACTORS = (1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.25)
 GEOMETRY_TOLERANCE = 1e-9
-
-
-def vector_to_tuple(vector: cq.Vector) -> tuple:
-    """Convert a CadQuery vector to a plain xyz tuple."""
-    return (vector.x, vector.y, vector.z)
-
-
-def inset_plane(plane: cq.Plane, inset: float) -> cq.Plane:
-    """Move a face plane inward along its opposite normal."""
-    if not inset:
-        return plane
-
-    origin = plane.origin.sub(plane.zDir.multiply(inset))
-    return cq.Plane(
-        origin=vector_to_tuple(origin),
-        xDir=vector_to_tuple(plane.xDir),
-        normal=vector_to_tuple(plane.zDir),
-    )
-
-
-def face_plane_from_local(
-    base_plane: cq.Plane,
-    origin: tuple,
-    x_dir: cq.Vector,
-    normal: cq.Vector,
-) -> cq.Plane:
-    """Build a world-space face plane from local feature coordinates."""
-    world_origin = base_plane.toWorldCoords(origin)
-    return cq.Plane(
-        origin=vector_to_tuple(world_origin),
-        xDir=vector_to_tuple(x_dir),
-        normal=vector_to_tuple(normal),
-    )
-
-
-def register_rectangular_extrusion_face_planes(
-    face_planes: dict | None,
-    feature_id: str | None,
-    target_plane: cq.Plane,
-    width: float,
-    height: float,
-    distance: float,
-    position: list,
-) -> None:
-    """Remember local face planes for a rectangular extrusion feature."""
-    if face_planes is None or not feature_id:
-        return
-
-    x = position[0]
-    y = position[1]
-    half_width = width / 2
-    half_height = height / 2
-    half_distance = distance / 2
-
-    face_planes[f"{feature_id}.top"] = face_plane_from_local(
-        target_plane,
-        (x, y, distance),
-        target_plane.xDir,
-        target_plane.zDir,
-    )
-    face_planes[f"{feature_id}.bottom"] = face_plane_from_local(
-        target_plane,
-        (x, y, 0),
-        target_plane.xDir,
-        target_plane.zDir.multiply(-1),
-    )
-    face_planes[f"{feature_id}.front"] = face_plane_from_local(
-        target_plane,
-        (x, y + half_height, half_distance),
-        target_plane.xDir,
-        target_plane.yDir,
-    )
-    face_planes[f"{feature_id}.back"] = face_plane_from_local(
-        target_plane,
-        (x, y - half_height, half_distance),
-        target_plane.xDir,
-        target_plane.yDir.multiply(-1),
-    )
-    face_planes[f"{feature_id}.right"] = face_plane_from_local(
-        target_plane,
-        (x + half_width, y, half_distance),
-        target_plane.yDir,
-        target_plane.xDir,
-    )
-    face_planes[f"{feature_id}.left"] = face_plane_from_local(
-        target_plane,
-        (x - half_width, y, half_distance),
-        target_plane.yDir,
-        target_plane.xDir.multiply(-1),
-    )
 
 
 def apply_face_tags(
@@ -286,11 +198,13 @@ def get_target_workplane(
     operation_number: int,
     inset: float = 0,
     prefer_virtual_side: bool = False,
-    face_planes: dict | None = None,
+    feature_graph: FeatureGraph | None = None,
 ) -> tuple[cq.Workplane, bool]:
     """Return a target workplane and whether it is a virtual fallback."""
-    if face_planes is not None and target in face_planes:
-        return cq.Workplane(inset_plane(face_planes[target], inset)), True
+    if feature_graph is not None:
+        target_plane = feature_graph.registry.get_plane(target, inset=inset)
+        if target_plane is not None:
+            return cq.Workplane(target_plane), True
 
     if prefer_virtual_side and is_side_target(target):
         virtual_plane = get_virtual_target_plane(
@@ -316,7 +230,7 @@ def get_target_workplane(
 def build_base_extrusion(
     operation: dict,
     operation_number: int,
-    face_planes: dict | None = None,
+    feature_graph: FeatureGraph | None = None,
 ) -> cq.Workplane:
     """Build the initial solid and tag its top workplane."""
     feature_id = operation["id"]
@@ -344,9 +258,8 @@ def build_base_extrusion(
         )
 
     face_tags = operation.get("face_tags", default_face_tags)
-    if operation["profile"] == "rectangle":
-        register_rectangular_extrusion_face_planes(
-            face_planes,
+    if operation["profile"] == "rectangle" and feature_graph is not None:
+        feature_graph.registry.register_rectangular_prism_faces(
             feature_id,
             cq.Plane.named(plane),
             operation["width"],
@@ -689,17 +602,17 @@ def apply_add_extrusion_face_tags(
     return apply_face_tags(part, feature_id, face_tags)
 
 
-def register_add_extrusion_face_planes(
-    face_planes: dict | None,
+def register_add_extrusion_references(
+    feature_graph: FeatureGraph | None,
     part: cq.Workplane,
     operation: dict,
     target: str,
     operation_number: int,
     positions: list,
 ) -> None:
-    """Remember local face planes for a single rectangular added extrusion."""
+    """Remember feature references for a single added extrusion."""
     if (
-        face_planes is None
+        feature_graph is None
         or operation.get("profile") != "rectangle"
         or not operation.get("id")
         or len(positions) != 1
@@ -711,11 +624,10 @@ def register_add_extrusion_face_planes(
         target,
         operation_number,
         prefer_virtual_side=True,
-        face_planes=face_planes,
+        feature_graph=feature_graph,
     )
 
-    register_rectangular_extrusion_face_planes(
-        face_planes,
+    feature_graph.registry.register_rectangular_prism_faces(
         operation["id"],
         target_workplane.plane,
         operation["width"],
@@ -729,7 +641,7 @@ def apply_cut_operation(
     part: cq.Workplane,
     operation: dict,
     operation_number: int,
-    face_planes: dict | None = None,
+    feature_graph: FeatureGraph | None = None,
 ) -> cq.Workplane:
     """Apply a profile cut to an existing model."""
     if part is None:
@@ -745,7 +657,7 @@ def apply_cut_operation(
         part,
         target,
         operation_number,
-        face_planes=face_planes,
+        feature_graph=feature_graph,
     )
     workplane = target_workplane.pushPoints(positions)
     workplane = create_profile(workplane, operation, operation_number)
@@ -788,7 +700,7 @@ def apply_add_extrusion(
     part: cq.Workplane,
     operation: dict,
     operation_number: int,
-    face_planes: dict | None = None,
+    feature_graph: FeatureGraph | None = None,
 ) -> cq.Workplane:
     """Add an extrusion of a sketch to an existing model."""
     if part is None:
@@ -805,7 +717,7 @@ def apply_add_extrusion(
         target,
         operation_number,
         prefer_virtual_side=True,
-        face_planes=face_planes,
+        feature_graph=feature_graph,
     )
 
     if is_virtual_target:
@@ -820,7 +732,7 @@ def apply_add_extrusion(
                 target,
                 operation_number,
                 prefer_virtual_side=True,
-                face_planes=face_planes,
+                feature_graph=feature_graph,
             )
             workplane = target_workplane.pushPoints(retry_positions)
             workplane = create_profile(
@@ -832,8 +744,8 @@ def apply_add_extrusion(
             result = part.union(extrusion_tool)
 
             if len(result.solids().vals()) == 1:
-                register_add_extrusion_face_planes(
-                    face_planes,
+                register_add_extrusion_references(
+                    feature_graph,
                     part,
                     operation,
                     target,
@@ -850,8 +762,8 @@ def apply_add_extrusion(
     workplane = create_profile(workplane, operation, operation_number)
 
     result = workplane.extrude(distance)
-    register_add_extrusion_face_planes(
-        face_planes,
+    register_add_extrusion_references(
+        feature_graph,
         part,
         operation,
         target,
@@ -1063,22 +975,26 @@ def validate_operation_order(operations: list) -> None:
         )
 
 
-def build_model(model_data: dict) -> cq.Workplane:
-    """Process an ordered operation list and return the completed CAD model."""
+def build_model_with_graph(model_data: dict) -> tuple[cq.Workplane, FeatureGraph]:
+    """Build a CAD model and return its editable feature graph."""
     operations = model_data["operations"]
     validate_operation_order(operations)
 
     part = None
-    face_planes = {}
+    feature_graph = FeatureGraph()
 
     for operation_number, operation in enumerate(operations, start=1):
         operation_type = operation["type"]
+        feature_node = feature_graph.add_feature(
+            operation,
+            operation_number,
+        )
 
         if operation_type == "extrude":
             part = build_base_extrusion(
                 operation,
                 operation_number,
-                face_planes=face_planes,
+                feature_graph=feature_graph,
             )
         elif operation_type == "revolve":
             part = build_revolve(operation, operation_number)
@@ -1087,14 +1003,14 @@ def build_model(model_data: dict) -> cq.Workplane:
                 part,
                 operation,
                 operation_number,
-                face_planes=face_planes,
+                feature_graph=feature_graph,
             )
         elif operation_type == "add_extrude":
             part = apply_add_extrusion(
                 part,
                 operation,
                 operation_number,
-                face_planes=face_planes,
+                feature_graph=feature_graph,
             )
         elif operation_type == "add_revolve":
             part = apply_add_revolve(part, operation, operation_number)
@@ -1106,9 +1022,17 @@ def build_model(model_data: dict) -> cq.Workplane:
                 f"unsupported operation type: {operation_type}"
             )
 
+        feature_graph.refresh_created_references(feature_node.id)
+
     if part is None:
         raise ValueError("No valid operations were processed to create a part.")
 
     validate_final_model(part)
 
+    return part, feature_graph
+
+
+def build_model(model_data: dict) -> cq.Workplane:
+    """Process an ordered operation list and return the completed CAD model."""
+    part, _ = build_model_with_graph(model_data)
     return part
