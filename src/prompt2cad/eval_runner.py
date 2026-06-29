@@ -71,6 +71,24 @@ def run_eval(
     return case_name, result.failures
 
 
+def resolve_model_path(models_dir: Path, case_path: Path) -> Path:
+    """Return the generated model path or a case fixture fallback."""
+    model_path = models_dir / case_path.name
+    if model_path.exists():
+        return model_path
+
+    eval_case = load_json(case_path)
+    fixture_model = eval_case.get("fixture_model")
+    if fixture_model is None:
+        return model_path
+
+    fixture_path = Path(fixture_model)
+    if fixture_path.is_absolute():
+        return fixture_path
+
+    return (case_path.parent / fixture_path).resolve()
+
+
 def run_batch(
     models_dir: Path,
     cases_dir: Path,
@@ -84,10 +102,10 @@ def run_batch(
         if requested_cases and case_path.stem not in requested_cases:
             continue
 
-        model_path = models_dir / case_path.name
+        model_path = resolve_model_path(models_dir, case_path)
 
         if not model_path.exists():
-            failure = f"Missing generated model file: {model_path}"
+            failure = f"Missing generated or fixture model file: {model_path}"
             all_failures.append(failure)
             print(f"FAIL {case_path.stem}")
             print(f"  - {failure}")
