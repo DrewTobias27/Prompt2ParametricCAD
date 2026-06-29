@@ -4,6 +4,10 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
 $env:PYTHONPATH = "src"
+$pythonExe = "python"
+if ($env:PROMPT2CAD_PYTHON) {
+    $pythonExe = $env:PROMPT2CAD_PYTHON
+}
 
 if (-not $env:OPENAI_API_KEY) {
     Write-Host "Warning: OPENAI_API_KEY is not set in this terminal."
@@ -11,4 +15,4 @@ if (-not $env:OPENAI_API_KEY) {
     Write-Host ""
 }
 
-..\..\..\work\cadquery-env\Scripts\python.exe -m uvicorn prompt2cad.web_app:app --host 127.0.0.1 --port 8000
+& $pythonExe -m uvicorn prompt2cad.web_app:app --host 127.0.0.1 --port 8000

@@ -71,6 +71,7 @@ lessons/          Historical development snapshots
 ```
 
 For a deeper system overview, see `docs/architecture.md`.
+For fresh setup instructions, see `docs/setup.md`.
 
 ## Running the web app
 
@@ -78,6 +79,12 @@ Install the project dependencies into your Python environment:
 
 ```powershell
 python -m pip install -r requirements.txt
+```
+
+To verify the local environment:
+
+```powershell
+.\scripts\check_setup.ps1
 ```
 
 From the repository root, start the local server:
