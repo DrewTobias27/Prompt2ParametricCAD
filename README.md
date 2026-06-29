@@ -1,56 +1,78 @@
 # Prompt2ParametricCAD
 
-A learning-focused project exploring how structured design instructions can
-generate validated parametric CAD models with Python and CadQuery.
+Prompt2ParametricCAD is a prototype system for generating editable-style
+parametric CAD models from structured operations and natural-language design
+prompts.
+
+The project converts a CAD request into a validated JSON feature sequence, then
+interprets that sequence with [CadQuery](https://cadquery.readthedocs.io/) to
+build and export a STEP model. The long-term goal is to move from simple STEP
+generation toward a feature-aware representation that can support better editing,
+debugging, and eventual export into CAD systems with recognizable feature trees.
+
+## What it does
+
+- Converts natural-language prompts into CAD operation JSON with OpenAI
+  Structured Outputs
+- Provides a manual web builder for creating parts without writing JSON by hand
+- Builds CadQuery models from ordered parametric operations
+- Exports generated models as STEP files
+- Supports geometry validation before export
+- Tracks a feature graph with build order, parent/child relationships, sketches,
+  face references, and aliases
+- Includes regression evals for both generated operation JSON and built geometry
+
+## Current CAD capabilities
+
+Supported base features:
+
+- Rectangular extrusions
+- Circular extrusions
+- Polygon extrusions
+- Polyline and line/arc sketch extrusions
+- Full and partial revolved solids
+
+Supported added features:
+
+- Additive extrusions
+- Cutting extrusions
+- Additive revolves
+- Cutting revolves
+- Repeated feature positions
+- Mirror-style and circular-pattern feature placement in the web builder
+
+Supported sketch/profile types:
+
+- Rectangle
+- Circle
+- Polygon
+- Polyline
+- Line/arc sketch profiles
+
+Supported references:
+
+- Canonical feature references such as `base.face.f001`
+- Readable aliases such as `base.top`, `base.front`, and `feature_1.right`
+- Parent/child feature tracking for downstream feature-tree work
 
 ## Repository structure
 
 ```text
-lessons/    Runnable snapshots of the project's learning progression
-src/        Evolving application code
-examples/   Clean example operation files
-prompts/    Natural-language prompt examples
-tests/      Automated application tests
-generated/  Output location reserved for generated CAD files
+src/prompt2cad/   Core package: schema, interpreter, prompting, web app, evals
+examples/         Example CAD operation JSON files
+evals/cases/      Evaluation definitions and expected constraints
+evals/fixtures/   Hand-authored reference models for deterministic evals
+prompts/          Prompt examples for API testing
+tests/            Automated tests
+scripts/          Local helper scripts
+generated/        Ignored output folder for generated JSON, STEP, and debug files
+docs/             Design notes and architecture review
+lessons/          Historical development snapshots
 ```
 
-## Lessons
+## Running the web app
 
-- Lesson 1: Parameterized plate generation from JSON
-- Lesson 2: Ordered JSON operation interpreter
-- Lesson 3: Patterned holes and operation-aware validation
-- Lesson 4: Tagged workplanes plus circular and rectangular cuts/extrusions
-
-## Current capabilities
-
-- Builds CadQuery models from ordered JSON operations
-- Supports base extrusions and revolved base solids
-- Supports additive extrusions and cuts on tagged faces
-- Supports rectangular, circular, polygon, polyline, and line/arc sketch profiles
-- Supports repeated feature positions for simple patterns
-- Tracks a feature graph with sketch entities, build order, parent/child relationships, and references
-- Uses canonical references such as `base.face.f001` with readable aliases such as `base.top`
-- Validates that generated parts are single connected valid solids
-- Exports generated models as STEP files
-- Includes an early OpenAI Structured Outputs prototype for converting natural language into CAD JSON
-
-## Example CLI usage
-
-Generate a STEP file from a saved JSON model:
-
-```powershell
-python -m prompt2cad.cli examples/api_rectangular_plate.json generated/api_rectangular_plate.step
-```
-
-Export a debug feature tree from a saved JSON model:
-
-```powershell
-python -m prompt2cad.feature_tree_export examples/api_rectangular_plate.json --output generated/api_rectangular_plate_feature_tree.json
-```
-
-## Local web app
-
-For normal prompt testing, start the web app without reload mode:
+From the repository root:
 
 ```powershell
 .\scripts\run_web_app.ps1
@@ -62,16 +84,110 @@ Then open:
 http://127.0.0.1:8000/
 ```
 
-Leave that terminal running while using the web app. Press `Ctrl+C` to stop it.
+The web app has two main workflows:
 
-Avoid using `--reload` during normal testing. Reload mode watches the project
-folder and can restart the server whenever files are saved, which makes testing
-feel slow and noisy. Use reload mode only when actively editing the web app code.
+1. Describe a part in natural language and generate CAD through the OpenAI API.
+2. Use the manual builder to choose a base shape, dimensions, features, cuts,
+   extrusions, and patterns.
 
-The current OpenAI prototype can convert a simple natural-language prompt into
-a rectangular base extrusion JSON structure. API-generated outputs can be saved
-as examples and tested locally without making repeated API calls.
+The API workflow requires an `OPENAI_API_KEY` environment variable in the
+terminal running the server. The manual-builder workflow can generate structured
+model data without relying as heavily on natural-language prompting.
 
-Each historical lesson remains self-contained and writes its ignored CAD
-exports beside its own script. New application code writes outputs to
-`generated/`.
+## Command-line usage
+
+Generate a STEP file from a saved operation JSON file:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m prompt2cad.cli examples/api_rectangular_plate.json generated/api_rectangular_plate.step
+```
+
+Export a debug feature tree from a saved operation JSON file:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m prompt2cad.feature_tree_export examples/api_rectangular_plate.json --output generated/api_rectangular_plate_feature_tree.json
+```
+
+Generate eval models from prompts:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m prompt2cad.eval_generator --overwrite
+```
+
+Run evals against generated models:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m prompt2cad.eval_runner --models-dir generated\evals --cases-dir evals\cases
+```
+
+Run a single eval case:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m prompt2cad.eval_runner --models-dir generated\evals --cases-dir evals\cases --case rigorous_plate_holes_boss
+```
+
+Some eval cases can use tracked fixture models from `evals/fixtures/`, so they
+can run deterministically without making API calls.
+
+## Testing
+
+Run the automated test suite:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m pytest
+```
+
+The test suite covers:
+
+- JSON schema validation
+- CAD operation interpretation
+- Sketch and arc representation
+- Feature graph and reference naming
+- Feature-tree debug export
+- Web/eval helper behavior
+- Geometry-focused evaluator checks
+
+Recent evaluator improvements check more than operation presence. Evals can now
+assert connected solid count, solid validity, bounding-box dimensions, approximate
+volume, repeated feature counts, required graph references, aliases, feature
+parents, and sketch profiles.
+
+## Dependencies
+
+The current prototype uses:
+
+- Python
+- CadQuery
+- FastAPI
+- Uvicorn
+- OpenAI Python SDK
+- pytest
+
+A pinned dependency file is a planned cleanup item so the project can be set up
+more easily on a fresh machine.
+
+## Roadmap
+
+Near-term priorities:
+
+- Improve feature placement on side faces, curved faces, and corner-adjacent
+  geometry
+- Make manual-builder feature targeting clearer and more reliable
+- Expand deterministic eval fixtures for difficult geometry cases
+- Add dependency pinning and cleaner setup instructions
+- Improve front-end polish and generated-part previews
+
+Longer-term priorities:
+
+- Strengthen the feature graph into a more complete editable feature tree
+- Preserve sketch entities, references, dimensions, and parent/child dependencies
+  in a CAD-system-friendly format
+- Add more robust validation and repair suggestions for invalid generated parts
+- Explore export paths beyond neutral STEP files, including workflows that better
+  preserve parametric intent
