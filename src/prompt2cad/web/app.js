@@ -131,6 +131,7 @@ function updateFeatureCardFields(featureCard) {
     const featureProfile = featureCard.querySelector(".feature-profile").value;
     const featureOperation = featureCard.querySelector(".feature-operation").value;
     const useReasonableDimensions = featureCard.querySelector(".feature-reasonable").checked;
+    const depthMode = featureCard.querySelector(".feature-depth-mode").value;
     const rectangleFields = featureCard.querySelector(".feature-rectangle-fields");
     const circleFields = featureCard.querySelector(".feature-circle-fields");
     const polygonFields = featureCard.querySelector(".feature-polygon-fields");
@@ -138,6 +139,7 @@ function updateFeatureCardFields(featureCard) {
     const positionFields = featureCard.querySelector(".feature-position-fields");
     const mirrorFields = featureCard.querySelector(".feature-mirror-fields");
     const circularPatternFields = featureCard.querySelector(".feature-circular-pattern-fields");
+    const cutDepthModeFields = featureCard.querySelector(".feature-cut-depth-mode-fields");
     const amountFields = featureCard.querySelector(".feature-amount-fields");
     const amountLabel = featureCard.querySelector(".feature-amount-label");
     const pattern = featureCard.querySelector(".feature-pattern").value;
@@ -162,13 +164,101 @@ function updateFeatureCardFields(featureCard) {
         "hidden",
         pattern !== "circular",
     );
-    amountFields.classList.toggle("hidden", usesApiAssistance);
+    cutDepthModeFields.classList.toggle(
+        "hidden",
+        usesApiAssistance || featureOperation !== "cut",
+    );
+    amountFields.classList.toggle(
+        "hidden",
+        usesApiAssistance || (featureOperation === "cut" && depthMode === "through"),
+    );
 
     if (featureOperation === "cut") {
         amountLabel.textContent = "Cut depth";
     } else {
         amountLabel.textContent = "Extrusion distance";
     }
+}
+
+
+function baseTargetOptions() {
+    return [
+        ["base.top", "Base top"],
+        ["base.bottom", "Base bottom"],
+        ["base.front", "Base front"],
+        ["base.back", "Base back"],
+        ["base.left", "Base left"],
+        ["base.right", "Base right"],
+    ];
+}
+
+
+function featureFaceOptions(featureCard, featureNumber) {
+    const operation = featureCard.querySelector(".feature-operation").value;
+    const profile = featureCard.querySelector(".feature-profile").value;
+
+    if (operation !== "add_extrude") {
+        return [];
+    }
+
+    const faces = [
+        ["top", "top"],
+        ["bottom", "bottom"],
+    ];
+    if (profile === "rectangle") {
+        faces.push(
+            ["front", "front"],
+            ["back", "back"],
+            ["left", "left"],
+            ["right", "right"],
+        );
+    }
+
+    return faces.map(([faceValue, faceLabel]) => [
+        `feature_${featureNumber}.${faceValue}`,
+        `Feature ${featureNumber} ${faceLabel}`,
+    ]);
+}
+
+
+function setTargetOptions(selectElement, options) {
+    const previousValue = selectElement.value;
+    selectElement.innerHTML = "";
+
+    for (const [value, label] of options) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        selectElement.appendChild(option);
+    }
+
+    if (options.some(([value]) => value === previousValue)) {
+        selectElement.value = previousValue;
+    }
+}
+
+
+function renumberFeatureCards() {
+    const featureCards = Array.from(document.querySelectorAll(".feature-card"));
+
+    for (const [index, featureCard] of featureCards.entries()) {
+        const featureNumber = index + 1;
+        featureCard.dataset.featureNumber = String(featureNumber);
+        featureCard.querySelector(".feature-title").textContent = `Feature ${featureNumber}`;
+
+        const targetSelect = featureCard.querySelector(".feature-target");
+        const targetOptions = baseTargetOptions();
+
+        for (let priorIndex = 0; priorIndex < index; priorIndex += 1) {
+            targetOptions.push(
+                ...featureFaceOptions(featureCards[priorIndex], priorIndex + 1),
+            );
+        }
+
+        setTargetOptions(targetSelect, targetOptions);
+    }
+
+    featureCount = featureCards.length;
 }
 
 
@@ -180,7 +270,7 @@ function addFeatureCard() {
     featureCard.className = "feature-card";
     featureCard.innerHTML = `
         <div class="feature-card-header">
-            <h4>Feature ${featureCount}</h4>
+            <h4 class="feature-title">Feature ${featureCount}</h4>
             <button class="remove-feature-button" type="button">Remove</button>
         </div>
 
@@ -196,12 +286,7 @@ function addFeatureCard() {
             <label>
                 Target face
                 <select class="feature-target">
-                    <option value="base.top">Top</option>
-                    <option value="base.bottom">Bottom</option>
-                    <option value="base.front">Front</option>
-                    <option value="base.back">Back</option>
-                    <option value="base.left">Left</option>
-                    <option value="base.right">Right</option>
+                    <option value="base.top">Base top</option>
                 </select>
             </label>
 
@@ -304,6 +389,16 @@ function addFeatureCard() {
             </label>
         </div>
 
+        <div class="field-group feature-cut-depth-mode-fields">
+            <label>
+                Cut depth type
+                <select class="feature-depth-mode">
+                    <option value="blind">Blind depth</option>
+                    <option value="through">Through cut</option>
+                </select>
+            </label>
+        </div>
+
         <div class="field-group feature-amount-fields">
             <label>
                 <span class="feature-amount-label">Extrusion distance</span>
@@ -315,16 +410,19 @@ function addFeatureCard() {
     const removeButton = featureCard.querySelector(".remove-feature-button");
     removeButton.addEventListener("click", () => {
         featureCard.remove();
+        renumberFeatureCards();
     });
 
     const featureOperationSelect = featureCard.querySelector(".feature-operation");
     featureOperationSelect.addEventListener("change", () => {
         updateFeatureCardFields(featureCard);
+        renumberFeatureCards();
     });
 
     const featureProfileSelect = featureCard.querySelector(".feature-profile");
     featureProfileSelect.addEventListener("change", () => {
         updateFeatureCardFields(featureCard);
+        renumberFeatureCards();
     });
 
     const featurePatternSelect = featureCard.querySelector(".feature-pattern");
@@ -337,7 +435,13 @@ function addFeatureCard() {
         updateFeatureCardFields(featureCard);
     });
 
+    const featureDepthModeSelect = featureCard.querySelector(".feature-depth-mode");
+    featureDepthModeSelect.addEventListener("change", () => {
+        updateFeatureCardFields(featureCard);
+    });
+
     featureList.appendChild(featureCard);
+    renumberFeatureCards();
     updateFeatureCardFields(featureCard);
 }
 
@@ -409,6 +513,8 @@ function buildExactFeatureOperation(featureCard) {
     const operationType = featureCard.querySelector(".feature-operation").value;
     const target = featureCard.querySelector(".feature-target").value;
     const profile = featureCard.querySelector(".feature-profile").value;
+    const featureNumber = featureCard.dataset.featureNumber;
+    const depthMode = featureCard.querySelector(".feature-depth-mode").value;
     const amount = Number(featureCard.querySelector(".feature-amount").value);
 
     const operation = {
@@ -425,8 +531,9 @@ function buildExactFeatureOperation(featureCard) {
     };
 
     if (operationType === "cut") {
-        operation.depth = amount;
+        operation.depth = depthMode === "through" ? "through" : amount;
     } else {
+        operation.id = `feature_${featureNumber}`;
         operation.distance = amount;
     }
 
@@ -481,16 +588,33 @@ async function suggestFeatureOperation(featureCard) {
 
 function applyExactFeaturePlacement(featureCard, operation) {
     const operationType = featureCard.querySelector(".feature-operation").value;
+    const featureNumber = featureCard.dataset.featureNumber;
+    const depthMode = featureCard.querySelector(".feature-depth-mode").value;
     const amount = Number(featureCard.querySelector(".feature-amount").value);
 
     operation.positions = transformFeaturePositions(featureCard, operation.positions);
 
     if (operationType === "cut") {
-        operation.depth = amount;
+        operation.depth = depthMode === "through" ? "through" : amount;
+        delete operation.id;
         delete operation.distance;
     } else {
+        operation.id = `feature_${featureNumber}`;
         operation.distance = amount;
         delete operation.depth;
+    }
+
+    return operation;
+}
+
+
+function applyFeatureId(featureCard, operation) {
+    const featureNumber = featureCard.dataset.featureNumber;
+
+    if (operation.type === "add_extrude") {
+        operation.id = `feature_${featureNumber}`;
+    } else {
+        delete operation.id;
     }
 
     return operation;
@@ -508,12 +632,17 @@ async function buildFeatureOperations() {
         if (useReasonableDimensions || profile === "polyline") {
             const suggestedOperation = await suggestFeatureOperation(featureCard);
             if (!useReasonableDimensions) {
-                operations.push(applyExactFeaturePlacement(featureCard, suggestedOperation));
+                operations.push(
+                    applyFeatureId(
+                        featureCard,
+                        applyExactFeaturePlacement(featureCard, suggestedOperation),
+                    ),
+                );
             } else {
-                operations.push(suggestedOperation);
+                operations.push(applyFeatureId(featureCard, suggestedOperation));
             }
         } else {
-            operations.push(buildExactFeatureOperation(featureCard));
+            operations.push(applyFeatureId(featureCard, buildExactFeatureOperation(featureCard)));
         }
     }
 

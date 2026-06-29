@@ -201,6 +201,9 @@ def build_add_extrude_schema(profile: str) -> dict:
                 "type": "string",
                 "enum": ["add_extrude"],
             },
+            "id": {
+                "type": "string",
+            },
             "target": {
                 "type": "string",
             },
@@ -210,6 +213,12 @@ def build_add_extrude_schema(profile: str) -> dict:
             },
             "positions": POSITIONS_SCHEMA,
             "distance": POSITIVE_NUMBER_SCHEMA,
+            "face_tags": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "string",
+                },
+            },
             **PROFILE_PROPERTIES[profile],
         },
         "required": [

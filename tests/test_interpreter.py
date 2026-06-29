@@ -1092,6 +1092,48 @@ def test_side_extrude_normalizes_misplaced_vertical_position():
     assert len(solids) == 1
 
 
+def test_added_extrusion_side_face_can_be_targeted():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 8,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "add_extrude",
+                "id": "feature_1",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[20, 0]],
+                "distance": 10,
+                "width": 20,
+                "height": 12,
+            },
+            {
+                "type": "add_extrude",
+                "target": "feature_1.right",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 8,
+                "width": 8,
+                "height": 6,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+    bounding_box = solid.BoundingBox()
+
+    assert len(part.solids().vals()) == 1
+    assert bounding_box.xmax > 37
+
+
 def test_side_extrude_overlaps_rounded_virtual_target_until_connected():
     model_data = {
         "operations": [
