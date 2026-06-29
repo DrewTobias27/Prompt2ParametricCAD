@@ -7,6 +7,76 @@ from openai import OpenAI
 from prompt2cad.schema import CAD_MODEL_SCHEMA
 
 
+BASE_SUGGESTION_INSTRUCTIONS = """
+You create exactly one base extrusion operation for a CadQuery-based CAD
+interpreter. Return only valid model data with one key: operations.
+
+The operations array must contain exactly one operation.
+The operation must:
+- use type "extrude"
+- use id "base"
+- use plane "XY"
+- use the requested profile exactly
+- use millimeters
+- choose simple reasonable dimensions when exact dimensions are not provided
+
+Supported profiles:
+- rectangle: include width, height, and distance
+- circle: include diameter and distance
+- polygon: include sides, diameter, and distance
+- polyline: include points and distance
+
+For polyline:
+- points must be an ordered list of [x, y] points
+- points must form a simple closed outline when connected in order
+- do not repeat the first point at the end
+- prefer simple, buildable outlines such as L-shapes, trapezoids, brackets,
+  tabs, and stepped plates
+
+Prefer simple valid geometry over fancy geometry.
+""".strip()
+
+
+FEATURE_SUGGESTION_INSTRUCTIONS = """
+You create exactly one feature operation for an existing CadQuery-based CAD
+model. Return only valid model data with one key: operations.
+
+The operations array must contain exactly one operation.
+The operation must:
+- use the requested operation_type exactly
+- use the requested target exactly
+- use the requested profile exactly
+- use millimeters
+- choose simple reasonable dimensions and positions when exact values are not
+  provided
+
+Supported operation types:
+- add_extrude: add material to a target face
+- cut: remove material from a target face
+
+Supported profiles:
+- rectangle: include width and height
+- circle: include diameter
+- polygon: include sides and diameter
+- polyline: include points
+
+For all feature operations:
+- include positions as a list containing one [x, y] point
+- if unsure, use [[0, 0]]
+- for add_extrude, include distance
+- for cut, include depth. Use a positive number unless a through cut is clearly
+  requested.
+
+For polyline:
+- points must be an ordered list of [x, y] points
+- points must form a simple closed outline when connected in order
+- do not repeat the first point at the end
+- keep the outline small enough to fit on a typical base face
+
+Prefer simple valid geometry over fancy geometry.
+""".strip()
+
+
 CAD_PROMPT_INSTRUCTIONS = """
 You convert natural language CAD requests into JSON for a CadQuery-based
 CAD interpreter. Return only valid model data. Use millimeters for all
@@ -138,6 +208,68 @@ def prompt_to_model_data(user_prompt: str) -> dict:
             "format": {
                 "type": "json_schema",
                 "name": "cad_model",
+                "schema": CAD_MODEL_SCHEMA,
+                "strict": True,
+            }
+        },
+    )
+
+    return json.loads(response.output_text)
+
+
+def suggest_base_model_data(
+    profile: str,
+    description: str = "",
+    distance: float | None = None,
+) -> dict:
+    """Suggest one base extrusion model from a selected profile."""
+    client = create_openai_client()
+    request_data = {
+        "profile": profile,
+        "description": description,
+        "distance": distance,
+    }
+
+    response = client.responses.create(
+        model="gpt-5-mini",
+        instructions=BASE_SUGGESTION_INSTRUCTIONS,
+        input=json.dumps(request_data),
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "cad_base_model",
+                "schema": CAD_MODEL_SCHEMA,
+                "strict": True,
+            }
+        },
+    )
+
+    return json.loads(response.output_text)
+
+
+def suggest_feature_model_data(
+    operation_type: str,
+    target: str,
+    profile: str,
+    description: str = "",
+) -> dict:
+    """Suggest one feature operation from selected manual builder controls."""
+    client = create_openai_client()
+    request_data = {
+        "operation_type": operation_type,
+        "target": target,
+        "profile": profile,
+        "description": description,
+    }
+
+    response = client.responses.create(
+        model="gpt-5-mini",
+        instructions=FEATURE_SUGGESTION_INSTRUCTIONS,
+        input=json.dumps(request_data),
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "cad_feature_model",
                 "schema": CAD_MODEL_SCHEMA,
                 "strict": True,
             }

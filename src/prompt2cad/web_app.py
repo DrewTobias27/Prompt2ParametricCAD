@@ -5,11 +5,14 @@ import re
 
 import cadquery as cq
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from prompt2cad.interpreter import build_model
 from prompt2cad.prompting import prompt_to_model_data
+from prompt2cad.prompting import suggest_base_model_data
+from prompt2cad.prompting import suggest_feature_model_data
 from prompt2cad.schema import validate_model_data
 
 
@@ -17,73 +20,35 @@ class CADRequest(BaseModel):
     prompt: str
 
 
+class CADBuildRequest(BaseModel):
+    model_data: dict
+    filename_hint: str = "manual-builder-model"
+
+
+class CADSuggestBaseRequest(BaseModel):
+    profile: str
+    description: str = ""
+    distance: float | None = None
+
+
+class CADSuggestFeatureRequest(BaseModel):
+    operation_type: str
+    target: str
+    profile: str
+    description: str = ""
+
+
 app = FastAPI()
 GENERATED_DIR = Path("generated/web")
+WEB_DIR = Path(__file__).parent / "web"
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 def home():
     """Return the home page."""
-    return """
-    <!doctype html>
-    <html>
-        <head>
-            <title>Prompt2CAD Web App</title>
-        </head>
-        <body>
-            <h1>Prompt2CAD</h1>
-            <p>Turn natural language into parametric CAD.</p>
-            <textarea id="prompt" rows="4" cols="50" placeholder="Enter your CAD prompt here..."></textarea><br>
-            <button id="generateButton" onclick="generateCAD()">Generate CAD</button>
-            <p id="status"></p>
-            <a id="downloadLink" href="#" style="display: none;">Download STEP file</a>
-            <pre id="output"></pre>
-            <script>
-                function generateCAD() {
-                    const button = document.getElementById("generateButton");
-                    const downloadLink = document.getElementById("downloadLink");
-                    const output = document.getElementById("output");
-                    const prompt = document.getElementById("prompt").value;
-                    const status = document.getElementById("status");
-                    status.textContent = "Generating CAD model...";
-                    output.textContent = "";
-                    downloadLink.style.display = "none";
-                    button.disabled = true;
-                    button.textContent = "Generating...";
-                    fetch("/generate", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({ prompt: prompt })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === "success") {
-                            status.textContent = "Success";
-                            downloadLink.style.display = "block";
-                            downloadLink.href = data.download_url;
-                        } else {
-                            status.textContent = "Error: " + data.message;
-                            downloadLink.style.display = "none";
-                        }
-                        output.textContent = JSON.stringify(data, null, 2);
-                    })
-                    .catch(error => {
-                        status.textContent = "Error: " + error;
-                        console.error("Error:", error);
-                        downloadLink.style.display = "none";
-                    })
-                    .finally(() => {
-                        button.disabled = false;
-                        button.textContent = "Generate CAD";
-                    });
-                }
-            </script>
-        </body>
-    </html>
-    """
+    return FileResponse(WEB_DIR / "index.html")
 
 
 def make_safe_filename(prompt: str) -> str:
@@ -97,6 +62,22 @@ def make_safe_filename(prompt: str) -> str:
         name = "prompt2cad-model"
 
     return f"{name}.step"
+
+
+def export_model_data(model_data: dict, filename_hint: str) -> dict:
+    """Validate, build, export, and return web response data for a CAD model."""
+    validate_model_data(model_data)
+    part = build_model(model_data)
+    step_filename = make_safe_filename(filename_hint)
+    step_path = GENERATED_DIR / step_filename
+    cq.exporters.export(part, str(step_path))
+
+    return {
+        "status": "success",
+        "model_data": model_data,
+        "step_file": str(step_path),
+        "download_url": f"/download/{step_filename}",
+    }
 
 
 @app.get("/download/{filename}")
@@ -115,16 +96,95 @@ def generate_cad(request: CADRequest):
     """Generate CAD model data from a natural language prompt."""
     try:
         model_data = prompt_to_model_data(request.prompt)
+        return export_model_data(model_data, request.prompt)
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error),
+            "model_data": model_data if "model_data" in locals() else None,
+        }
+
+
+@app.post("/build")
+def build_cad(request: CADBuildRequest):
+    """Build CAD directly from structured model data."""
+    model_data = request.model_data
+
+    try:
+        return export_model_data(model_data, request.filename_hint)
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error),
+            "model_data": model_data if "model_data" in locals() else None,
+        }
+
+
+@app.post("/suggest-base")
+def suggest_base(request: CADSuggestBaseRequest):
+    """Suggest one base extrusion model for the manual builder."""
+    try:
+        model_data = suggest_base_model_data(
+            profile=request.profile,
+            description=request.description,
+            distance=request.distance,
+        )
         validate_model_data(model_data)
-        part = build_model(model_data)
-        step_filename = make_safe_filename(request.prompt)
-        step_path = GENERATED_DIR / step_filename
-        cq.exporters.export(part, str(step_path))
+
+        operations = model_data["operations"]
+        if len(operations) != 1:
+            raise ValueError("Suggested base model must contain exactly one operation")
+
+        operation = operations[0]
+        if operation["type"] != "extrude":
+            raise ValueError("Suggested base operation must be an extrusion")
+
+        if operation["profile"] != request.profile:
+            raise ValueError(
+                "Suggested base operation profile did not match selected profile"
+            )
+
         return {
             "status": "success",
             "model_data": model_data,
-            "step_file": str(step_path),
-            "download_url": f"/download/{step_filename}",
+        }
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error),
+            "model_data": model_data if "model_data" in locals() else None,
+        }
+
+
+@app.post("/suggest-feature")
+def suggest_feature(request: CADSuggestFeatureRequest):
+    """Suggest one feature operation for the manual builder."""
+    try:
+        model_data = suggest_feature_model_data(
+            operation_type=request.operation_type,
+            target=request.target,
+            profile=request.profile,
+            description=request.description,
+        )
+        validate_model_data(model_data)
+
+        operations = model_data["operations"]
+        if len(operations) != 1:
+            raise ValueError("Suggested feature must contain exactly one operation")
+
+        operation = operations[0]
+        if operation["type"] != request.operation_type:
+            raise ValueError("Suggested feature operation type did not match selection")
+
+        if operation["target"] != request.target:
+            raise ValueError("Suggested feature target did not match selection")
+
+        if operation["profile"] != request.profile:
+            raise ValueError("Suggested feature profile did not match selection")
+
+        return {
+            "status": "success",
+            "model_data": model_data,
         }
     except Exception as error:
         return {
