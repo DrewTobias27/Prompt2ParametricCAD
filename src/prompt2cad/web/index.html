@@ -2,9 +2,132 @@
 <html>
     <head>
         <title>Prompt2CAD</title>
+        <link rel="stylesheet" href="/static/styles.css">
     </head>
     <body>
-        <h1>Prompt2CAD</h1>
-        <p>Turn natural language into parametric CAD.</p>
+        <div class="page">
+            <div class="card">
+                <h1>Prompt2CAD</h1>
+                <p class="subtitle">Turn natural language into parametric CAD.</p>
+
+                <div class="mode-tabs">
+                    <button id="promptModeButton" class="mode-tab active" type="button">
+                        Prompt Builder
+                    </button>
+                    <button id="manualModeButton" class="mode-tab" type="button">
+                        Manual Builder
+                    </button>
+                </div>
+
+                <section id="promptBuilder" class="builder-section">
+                    <h2>Prompt Builder</h2>
+                    <p class="section-description">
+                        Describe the part in natural language and let the model create the CAD operations.
+                    </p>
+
+                    <textarea id="prompt" rows="5" cols="60" placeholder="Describe the CAD model you want..."></textarea>
+
+                    <div class="actions">
+                        <button id="generateButton">Generate CAD</button>
+                    </div>
+                </section>
+
+                <section id="manualBuilder" class="builder-section manual-builder hidden">
+                    <h2>Manual Builder</h2>
+                    <p class="section-description">
+                        Build the same CAD JSON with guided controls instead of a freeform sentence.
+                    </p>
+
+                    <h3>Main frame</h3>
+                    <label for="baseProfile">Shape</label>
+                    <select id="baseProfile">
+                        <option value="rectangle">Rectangle</option>
+                        <option value="circle">Circle</option>
+                        <option value="polygon">Polygon</option>
+                        <option value="polyline">Polyline</option>
+                    </select>
+
+                    <label class="checkbox-row">
+                        <input id="useReasonableDefaults" type="checkbox" checked>
+                        Use reasonable dimensions
+                    </label>
+
+                    <div id="rectangleFields" class="field-group">
+                        <label>
+                            Width
+                            <input id="baseWidth" type="number" value="80">
+                        </label>
+
+                        <label>
+                            Height
+                            <input id="baseHeight" type="number" value="50">
+                        </label>
+                    </div>
+
+                    <div id="circleFields" class="field-group">
+                        <label>
+                            Diameter
+                            <input id="baseDiameter" type="number" value="60">
+                        </label>
+                    </div>
+
+                    <div id="thicknessFields" class="field-group">
+                        <label>
+                            Thickness
+                            <input id="baseDistance" type="number" value="6">
+                        </label>
+                    </div>
+
+                    <div id="polygonFields" class="field-group">
+                        <label>
+                            Diameter
+                            <input id="polygonDiameter" type="number" value="70">
+                        </label>
+
+                        <label>
+                            Number of sides
+                            <input id="polygonSides" type="number" value="6" min="3">
+                        </label>
+                    </div>
+
+                    <div id="polylineFields" class="field-group">
+                        <label for="polylineDescription">Polyline description</label>
+                        <textarea
+                            id="polylineDescription"
+                            rows="3"
+                            placeholder="Example: an L-shaped plate with a 70 mm bottom leg and 40 mm vertical leg"
+                        ></textarea>
+                    </div>
+
+                    <div class="feature-section">
+                        <h3>Features</h3>
+                        <p class="section-description">
+                            Add cuts or extrusions after the base shape.
+                        </p>
+
+                        <div id="featureList" class="feature-list"></div>
+
+                        <button id="addFeatureButton" class="secondary-button" type="button">
+                            Add Feature
+                        </button>
+                    </div>
+
+                    <button id="buildManualButton">Build Manual Model</button>
+                </section>
+
+                <hr>
+
+                <section class="output-section">
+                    <h2>Output</h2>
+                    <p id="status"></p>
+
+                    <a id="downloadLink" class="download-link" href="#" style="display: none;">Download STEP file</a>
+
+                    <pre id="output" aria-live="polite"></pre>
+                </section>
+
+                <script src="/static/app.js"></script>
+            </div>
+        </div>
     </body>
 </html>
