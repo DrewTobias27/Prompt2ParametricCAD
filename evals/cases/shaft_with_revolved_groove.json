@@ -1,6 +1,7 @@
 {
   "name": "shaft_with_revolved_groove",
   "prompt": "Make a 20 mm diameter by 40 mm long cylinder shaft using a revolve. Cut a centered revolved groove around the middle of the shaft. The groove should reduce the shaft diameter to 16 mm and be 4 mm long.",
+  "fixture_model": "../fixtures/shaft_with_revolved_groove.json",
   "expected": {
     "operation_count": 2,
     "base": {
@@ -14,6 +15,11 @@
       "x": 20,
       "y": 40,
       "z": 20
+    },
+    "solid": {
+      "single_solid": true,
+      "valid": true,
+      "minimum_volume": 1
     },
     "required_operations": [
       {

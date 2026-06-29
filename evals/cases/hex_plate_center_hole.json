@@ -1,6 +1,7 @@
 {
   "name": "hex_plate_center_hole",
   "prompt": "Make a hexagonal plate with a 70 mm corner-to-corner diameter and 8 mm thickness. Add a 20 mm circular through hole in the center.",
+  "fixture_model": "../fixtures/hex_plate_center_hole.json",
   "expected": {
     "operation_count": 2,
     "base": {
@@ -9,6 +10,11 @@
       "sides": 6,
       "diameter": 70,
       "distance": 8
+    },
+    "solid": {
+      "single_solid": true,
+      "valid": true,
+      "minimum_volume": 1
     },
     "required_operations": [
       {

@@ -1,6 +1,7 @@
 {
   "name": "half_cylinder_base",
   "prompt": "Make a 20 mm diameter half-cylinder that is 40 mm long using a 180 degree revolve.",
+  "fixture_model": "../fixtures/half_cylinder_base.json",
   "expected": {
     "operation_count": 1,
     "base": {
@@ -12,6 +13,11 @@
       "x": 20,
       "y": 40,
       "z": 10
+    },
+    "solid": {
+      "single_solid": true,
+      "valid": true,
+      "minimum_volume": 1
     },
     "required_operations": []
   }

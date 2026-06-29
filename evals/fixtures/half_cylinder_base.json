@@ -1,0 +1,27 @@
+{
+  "operations": [
+    {
+      "type": "revolve",
+      "id": "base",
+      "plane": "XY",
+      "profile": "rectangle",
+      "positions": [
+        [
+          5,
+          0
+        ]
+      ],
+      "axis_start": [
+        0,
+        -1
+      ],
+      "axis_end": [
+        0,
+        1
+      ],
+      "angle": 180,
+      "width": 10,
+      "height": 40
+    }
+  ]
+}

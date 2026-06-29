@@ -57,6 +57,28 @@ def save_json(data: dict, path: Path) -> None:
         file.write("\n")
 
 
+def resolve_fixture_model_path(case_path: Path, eval_case: dict) -> Path | None:
+    """Return the fixture model path for an eval case, if one is declared."""
+    fixture_model = eval_case.get("fixture_model")
+    if fixture_model is None:
+        return None
+
+    fixture_path = Path(fixture_model)
+    if fixture_path.is_absolute():
+        return fixture_path
+
+    return (case_path.parent / fixture_path).resolve()
+
+
+def get_model_data_for_eval_case(case_path: Path, eval_case: dict) -> dict:
+    """Return model data for an eval case from a fixture or API prompt."""
+    fixture_path = resolve_fixture_model_path(case_path, eval_case)
+    if fixture_path is not None:
+        return load_json(fixture_path)
+
+    return prompt_to_model_data(eval_case["prompt"])
+
+
 def generate_eval_models(
     cases_dir: Path,
     output_dir: Path,
@@ -82,7 +104,7 @@ def generate_eval_models(
         case_name = eval_case["name"]
 
         try:
-            model_data = prompt_to_model_data(eval_case["prompt"])
+            model_data = get_model_data_for_eval_case(case_path, eval_case)
             validate_model_data(model_data)
             build_model(model_data)
         except Exception as error:

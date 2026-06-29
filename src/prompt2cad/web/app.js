@@ -3,11 +3,14 @@ async function generateCAD() {
     const downloadLink = document.getElementById("downloadLink");
     const output = document.getElementById("output");
     const prompt = document.getElementById("prompt").value;
+    const resultActions = document.getElementById("resultActions");
     const status = document.getElementById("status");
 
     status.textContent = "Generating CAD model...";
+    status.className = "status-message";
     output.textContent = "";
-    downloadLink.style.display = "none";
+    resultActions.classList.add("hidden");
+    downloadLink.classList.add("hidden");
 
     button.disabled = true;
     button.textContent = "Generating...";
@@ -37,6 +40,9 @@ async function generateCAD() {
 
 const generateButton = document.getElementById("generateButton");
 generateButton.addEventListener("click", generateCAD);
+
+
+let lastResultJson = "";
 
 
 function setBuilderMode(mode) {
@@ -74,18 +80,41 @@ function updateManualBuilderFields() {
 function showResult(data) {
     const downloadLink = document.getElementById("downloadLink");
     const output = document.getElementById("output");
+    const resultActions = document.getElementById("resultActions");
     const status = document.getElementById("status");
+
+    lastResultJson = JSON.stringify(data, null, 2);
 
     if (data.status === "success") {
         status.textContent = "Success";
-        downloadLink.style.display = "block";
+        status.className = "status-message success";
         downloadLink.href = data.download_url;
+        downloadLink.classList.remove("hidden");
+        resultActions.classList.remove("hidden");
     } else {
         status.textContent = "Error: " + data.message;
-        downloadLink.style.display = "none";
+        status.className = "status-message error";
+        resultActions.classList.remove("hidden");
+        downloadLink.removeAttribute("href");
+        downloadLink.classList.add("hidden");
     }
 
-    output.textContent = JSON.stringify(data, null, 2);
+    output.textContent = lastResultJson;
+}
+
+
+async function copyResultJson() {
+    const copyJsonButton = document.getElementById("copyJsonButton");
+
+    if (!lastResultJson) {
+        return;
+    }
+
+    await navigator.clipboard.writeText(lastResultJson);
+    copyJsonButton.textContent = "Copied";
+    setTimeout(() => {
+        copyJsonButton.textContent = "Copy JSON";
+    }, 1200);
 }
 
 
@@ -688,11 +717,14 @@ async function buildManualCAD() {
     const button = document.getElementById("buildManualButton");
     const downloadLink = document.getElementById("downloadLink");
     const output = document.getElementById("output");
+    const resultActions = document.getElementById("resultActions");
     const status = document.getElementById("status");
 
     status.textContent = "Building manual CAD model...";
+    status.className = "status-message";
     output.textContent = "";
-    downloadLink.style.display = "none";
+    resultActions.classList.add("hidden");
+    downloadLink.classList.add("hidden");
 
     button.disabled = true;
     button.textContent = "Building...";
@@ -739,6 +771,9 @@ async function buildManualCAD() {
 
 const buildManualButton = document.getElementById("buildManualButton");
 buildManualButton.addEventListener("click", buildManualCAD);
+
+const copyJsonButton = document.getElementById("copyJsonButton");
+copyJsonButton.addEventListener("click", copyResultJson);
 
 const addFeatureButton = document.getElementById("addFeatureButton");
 addFeatureButton.addEventListener("click", addFeatureCard);

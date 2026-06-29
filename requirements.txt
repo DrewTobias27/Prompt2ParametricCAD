@@ -1,6 +1,7 @@
 cadquery==2.7.0
 pytest==9.1.1
-openai
-jsonschema
-fastapi
-uvicorn
+openai==2.43.0
+jsonschema==4.26.0
+fastapi==0.138.0
+uvicorn==0.49.0
+pydantic==2.13.4

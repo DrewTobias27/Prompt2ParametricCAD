@@ -57,6 +57,65 @@ def test_generate_eval_models_saves_model_json(tmp_path, monkeypatch):
     assert saved_model_data["operations"][0]["profile"] == "rectangle"
 
 
+def test_generate_eval_models_uses_fixture_without_api_call(tmp_path, monkeypatch):
+    cases_dir = tmp_path / "cases"
+    fixtures_dir = tmp_path / "fixtures"
+    output_dir = tmp_path / "generated"
+    cases_dir.mkdir()
+    fixtures_dir.mkdir()
+
+    (cases_dir / "fixture_plate.json").write_text(
+        json.dumps(
+            {
+                "name": "fixture_plate",
+                "prompt": "This prompt should not be sent to the API.",
+                "fixture_model": "../fixtures/fixture_plate.json",
+                "expected": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (fixtures_dir / "fixture_plate.json").write_text(
+        json.dumps(
+            {
+                "operations": [
+                    {
+                        "type": "extrude",
+                        "id": "base",
+                        "plane": "XY",
+                        "profile": "rectangle",
+                        "width": 40,
+                        "height": 20,
+                        "distance": 5,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_prompt_to_model_data(prompt: str) -> dict:
+        raise AssertionError("Fixture-backed evals should not call the API.")
+
+    monkeypatch.setattr(
+        eval_generator,
+        "prompt_to_model_data",
+        fake_prompt_to_model_data,
+    )
+
+    generated_paths, failures = eval_generator.generate_eval_models(
+        cases_dir=cases_dir,
+        output_dir=output_dir,
+    )
+
+    output_path = output_dir / "fixture_plate.json"
+    saved_model_data = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert generated_paths == [output_path]
+    assert failures == []
+    assert saved_model_data["operations"][0]["width"] == 40
+
+
 def test_generate_eval_models_skips_existing_files(tmp_path, monkeypatch):
     cases_dir = tmp_path / "cases"
     output_dir = tmp_path / "generated"

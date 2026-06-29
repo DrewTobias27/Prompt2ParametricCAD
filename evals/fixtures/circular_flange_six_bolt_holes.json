@@ -1,0 +1,45 @@
+{
+  "operations": [
+    {
+      "type": "extrude",
+      "id": "base",
+      "plane": "XY",
+      "profile": "circle",
+      "distance": 8,
+      "diameter": 80
+    },
+    {
+      "type": "cut",
+      "target": "base.top",
+      "profile": "circle",
+      "positions": [
+        [
+          30,
+          0
+        ],
+        [
+          15,
+          25.981
+        ],
+        [
+          -15,
+          25.981
+        ],
+        [
+          -30,
+          0
+        ],
+        [
+          -15,
+          -25.981
+        ],
+        [
+          15,
+          -25.981
+        ]
+      ],
+      "depth": "through",
+      "diameter": 6
+    }
+  ]
+}

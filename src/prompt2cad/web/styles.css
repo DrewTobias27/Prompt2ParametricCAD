@@ -102,14 +102,33 @@ button:disabled {
     cursor: not-allowed;
 }
 
-#status {
+.status-message {
     margin: 0;
     color: #475569;
+    font-weight: bold;
+}
+
+.status-message.success {
+    color: #047857;
+}
+
+.status-message.error {
+    color: #b91c1c;
+}
+
+.result-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
 }
 
 #downloadLink {
     display: inline-block;
-    margin: 16px 0;
     color: #2563eb;
     font-weight: bold;
     text-decoration: none;

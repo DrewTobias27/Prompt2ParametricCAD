@@ -70,9 +70,17 @@ docs/             Design notes and architecture review
 lessons/          Historical development snapshots
 ```
 
+For a deeper system overview, see `docs/architecture.md`.
+
 ## Running the web app
 
-From the repository root:
+Install the project dependencies into your Python environment:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+From the repository root, start the local server:
 
 ```powershell
 .\scripts\run_web_app.ps1
@@ -169,8 +177,7 @@ The current prototype uses:
 - OpenAI Python SDK
 - pytest
 
-A pinned dependency file is a planned cleanup item so the project can be set up
-more easily on a fresh machine.
+Pinned package versions are listed in `requirements.txt`.
 
 ## Roadmap
 
@@ -180,7 +187,6 @@ Near-term priorities:
   geometry
 - Make manual-builder feature targeting clearer and more reliable
 - Expand deterministic eval fixtures for difficult geometry cases
-- Add dependency pinning and cleaner setup instructions
 - Improve front-end polish and generated-part previews
 
 Longer-term priorities:

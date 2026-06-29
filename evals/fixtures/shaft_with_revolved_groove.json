@@ -1,0 +1,49 @@
+{
+  "operations": [
+    {
+      "type": "revolve",
+      "id": "base",
+      "plane": "XY",
+      "profile": "rectangle",
+      "positions": [
+        [
+          5,
+          0
+        ]
+      ],
+      "axis_start": [
+        0,
+        -1
+      ],
+      "axis_end": [
+        0,
+        1
+      ],
+      "angle": 360,
+      "width": 10,
+      "height": 40
+    },
+    {
+      "type": "cut_revolve",
+      "plane": "XY",
+      "profile": "rectangle",
+      "positions": [
+        [
+          9,
+          0
+        ]
+      ],
+      "axis_start": [
+        0,
+        -1
+      ],
+      "axis_end": [
+        0,
+        1
+      ],
+      "angle": 360,
+      "width": 2,
+      "height": 4
+    }
+  ]
+}

@@ -119,9 +119,14 @@
 
                 <section class="output-section">
                     <h2>Output</h2>
-                    <p id="status"></p>
+                    <p id="status" class="status-message"></p>
 
-                    <a id="downloadLink" class="download-link" href="#" style="display: none;">Download STEP file</a>
+                    <div id="resultActions" class="result-actions hidden">
+                        <a id="downloadLink" class="download-link" href="#">Download STEP file</a>
+                        <button id="copyJsonButton" class="secondary-button" type="button">
+                            Copy JSON
+                        </button>
+                    </div>
 
                     <pre id="output" aria-live="polite"></pre>
                 </section>
