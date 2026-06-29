@@ -72,6 +72,7 @@ lessons/          Historical development snapshots
 
 For a deeper system overview, see `docs/architecture.md`.
 For fresh setup instructions, see `docs/setup.md`.
+For a portfolio/interview walkthrough, see `docs/demo_script.md`.
 
 ## Running the web app
 
