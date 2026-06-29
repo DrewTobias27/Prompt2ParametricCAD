@@ -28,6 +28,9 @@ def test_feature_graph_tracks_build_order_and_children():
     assert base.sketch is None
     assert graph.children_of("base") == [boss]
     assert graph.get_feature("base") == base
+    assert graph.validation_warnings[0].message.startswith(
+        "Target 'base.top' is not a registered feature reference"
+    )
 
 
 def test_feature_graph_rejects_duplicate_feature_ids():
@@ -50,6 +53,107 @@ def test_feature_graph_rejects_duplicate_feature_ids():
             },
             operation_number=2,
         )
+
+
+def test_feature_graph_rejects_target_before_parent_is_built():
+    graph = FeatureGraph()
+
+    with pytest.raises(
+        ValueError,
+        match="target parent feature 'missing' has not been built",
+    ):
+        graph.add_feature(
+            {
+                "type": "cut",
+                "target": "missing.top",
+                "profile": "circle",
+                "diameter": 10,
+                "depth": "through",
+            },
+            operation_number=1,
+        )
+
+
+def test_feature_graph_rejects_malformed_target():
+    graph = FeatureGraph()
+
+    with pytest.raises(
+        ValueError,
+        match="target 'base' must use the format 'feature.reference'",
+    ):
+        graph.add_feature(
+            {
+                "type": "cut",
+                "target": "base",
+                "profile": "circle",
+                "diameter": 10,
+                "depth": "through",
+            },
+            operation_number=1,
+        )
+
+
+def test_build_model_rejects_target_before_parent_feature_exists():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 8,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "cut",
+                "target": "feature_99.top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "depth": "through",
+                "diameter": 4,
+            },
+        ]
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="target parent feature 'feature_99' has not been built",
+    ):
+        build_model_with_graph(model_data)
+
+
+def test_feature_graph_warns_when_rectangle_instances_are_ambiguous():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 8,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "add_extrude",
+                "id": "feature_1",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[-10, 0], [10, 0]],
+                "distance": 5,
+                "width": 8,
+                "height": 8,
+            },
+        ]
+    }
+
+    _, graph = build_model_with_graph(model_data)
+
+    assert graph.get_feature("feature_1").created_references == []
+    assert graph.validation_warnings[-1].message.startswith(
+        "Feature 'feature_1' did not create graph references"
+    )
 
 
 def test_build_model_with_graph_records_created_references():
@@ -107,3 +211,4 @@ def test_build_model_with_graph_records_created_references():
     assert cut.sketch.profile == "circle"
     assert cut.parent_feature_id == "feature_1"
     assert graph.children_of("feature_1") == [cut]
+    assert graph.validation_warnings == []

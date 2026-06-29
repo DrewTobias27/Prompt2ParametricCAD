@@ -29,6 +29,14 @@ class FeatureNode:
     created_references: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class GraphValidationWarning:
+    """A non-blocking issue found while building the feature graph."""
+
+    operation_number: int
+    message: str
+
+
 class FeatureGraph:
     """Track model features, relationships, and geometric references."""
 
@@ -37,6 +45,7 @@ class FeatureGraph:
         self.features: dict[str, FeatureNode] = {}
         self.build_order: list[str] = []
         self.children_by_feature_id: dict[str, list[str]] = {}
+        self.validation_warnings: list[GraphValidationWarning] = []
 
     def add_feature(
         self,
@@ -55,6 +64,7 @@ class FeatureGraph:
             )
 
         target = operation.get("target")
+        self.validate_target(target, operation_number)
         parent_feature_id = self.get_target_feature_id(target)
         sketch = operation_to_sketch(operation) if "profile" in operation else None
         feature_node = FeatureNode(
@@ -84,6 +94,7 @@ class FeatureGraph:
         feature_node.created_references = (
             self.registry.reference_names_for_feature(feature_id)
         )
+        self.validate_created_references(feature_node)
 
     def get_feature(self, feature_id: str) -> FeatureNode | None:
         """Return a feature node by id, if it exists."""
@@ -95,6 +106,71 @@ class FeatureGraph:
             self.features[child_id]
             for child_id in self.children_by_feature_id.get(feature_id, [])
         ]
+
+    def validate_target(
+        self,
+        target: str | None,
+        operation_number: int,
+    ) -> None:
+        """Validate a new feature target against the existing graph."""
+        if target is None:
+            return
+
+        if "." not in target:
+            raise ValueError(
+                f"Operation {operation_number}: target '{target}' must use "
+                "the format 'feature.reference', such as 'base.top'"
+            )
+
+        parent_feature_id = self.get_target_feature_id(target)
+        if parent_feature_id not in self.features:
+            raise ValueError(
+                f"Operation {operation_number}: target parent feature "
+                f"'{parent_feature_id}' has not been built"
+            )
+
+        if target not in self.registry.references:
+            self.validation_warnings.append(
+                GraphValidationWarning(
+                    operation_number=operation_number,
+                    message=(
+                        f"Target '{target}' is not a registered feature "
+                        "reference; builder will fall back to CadQuery tags "
+                        "or virtual target logic"
+                    ),
+                )
+            )
+
+    def validate_created_references(self, feature_node: FeatureNode) -> None:
+        """Warn when a feature cannot create graph references yet."""
+        if not self.should_create_planar_references(feature_node):
+            return
+
+        if feature_node.created_references:
+            return
+
+        self.validation_warnings.append(
+            GraphValidationWarning(
+                operation_number=feature_node.operation_number,
+                message=(
+                    f"Feature '{feature_node.id}' did not create graph "
+                    "references. This is usually because the operation "
+                    "created multiple instances or uses unsupported "
+                    "reference extraction."
+                ),
+            )
+        )
+
+    @staticmethod
+    def should_create_planar_references(feature_node: FeatureNode) -> bool:
+        """Return whether this feature is expected to create planar refs."""
+        if feature_node.operation_type not in {"extrude", "add_extrude"}:
+            return False
+
+        if feature_node.operation.get("profile") != "rectangle":
+            return False
+
+        return bool(feature_node.operation.get("id"))
 
     @staticmethod
     def get_operation_feature_id(
