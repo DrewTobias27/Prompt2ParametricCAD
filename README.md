@@ -59,6 +59,7 @@ Supported references:
 
 ```text
 src/prompt2cad/   Core package: schema, interpreter, prompting, web app, evals
+frontend/         React/Vite frontend scaffold for the Vercel-ready UI
 examples/         Example CAD operation JSON files
 evals/cases/      Evaluation definitions and expected constraints
 evals/fixtures/   Hand-authored reference models for deterministic evals
@@ -99,6 +100,34 @@ Then open:
 ```text
 http://127.0.0.1:8000/
 ```
+
+## React frontend migration
+
+The repository also includes a new React/Vite frontend in `frontend/`. This is
+the starting point for the Vercel-ready UI while the existing FastAPI-served web
+app remains available.
+
+Start the Python backend first:
+
+```powershell
+.\scripts\run_web_app.ps1
+```
+
+Then, in a second terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:5173/
+```
+
+For deployment notes, see `docs/frontend_migration.md`.
 
 The web app has two main workflows:
 
