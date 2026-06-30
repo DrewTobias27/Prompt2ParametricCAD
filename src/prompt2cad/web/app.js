@@ -1473,9 +1473,10 @@ function updateDesignReviewWarnings() {
 
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const PREVIEW_WIDTH = 640;
-const PREVIEW_HEIGHT = 360;
-const PREVIEW_PADDING = 32;
+const PREVIEW_WIDTH = 820;
+const PREVIEW_HEIGHT = 500;
+const PREVIEW_PADDING = 30;
+const SMALL_FEATURE_CALLOUT_THRESHOLD = 48;
 
 
 function createSvgElement(name, attributes = {}) {
@@ -1517,7 +1518,7 @@ function allPreviewBounds(baseGeometry, featureData) {
     const maxY = Math.max(...boundsList.map((bounds) => bounds[3]));
     const width = Math.max(maxX - minX, 1);
     const height = Math.max(maxY - minY, 1);
-    const padding = Math.max(width, height) * 0.12;
+    const padding = Math.max(width, height) * 0.18;
 
     return [
         minX - padding,
@@ -1525,6 +1526,29 @@ function allPreviewBounds(baseGeometry, featureData) {
         maxX + padding,
         maxY + padding,
     ];
+}
+
+
+function formatDimension(value) {
+    if (!Number.isFinite(value)) {
+        return "";
+    }
+
+    if (Math.abs(value - Math.round(value)) < 0.001) {
+        return String(Math.round(value));
+    }
+
+    return value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+
+function dimensionOffset(bounds) {
+    return Math.max(boundsWidth(bounds), boundsHeight(bounds), 1) * 0.14;
+}
+
+
+function featureDimensionOffset(bounds) {
+    return Math.max(Math.max(boundsWidth(bounds), boundsHeight(bounds), 1) * 0.22, 2);
 }
 
 
@@ -1536,6 +1560,28 @@ function previewScaleForBounds(worldBounds) {
         (PREVIEW_WIDTH - 2 * PREVIEW_PADDING) / worldWidth,
         (PREVIEW_HEIGHT - 2 * PREVIEW_PADDING) / worldHeight,
     );
+}
+
+
+function drawPreviewDefs(svg) {
+    const defs = createSvgElement("defs");
+    const arrowMarker = createSvgElement("marker", {
+        id: "preview-dimension-arrow",
+        viewBox: "0 0 10 10",
+        refX: 5,
+        refY: 5,
+        markerWidth: 5,
+        markerHeight: 5,
+        orient: "auto-start-reverse",
+    });
+    arrowMarker.appendChild(
+        createSvgElement("path", {
+            d: "M 0 0 L 10 5 L 0 10 z",
+            class: "preview-dimension-arrow",
+        }),
+    );
+    defs.appendChild(arrowMarker);
+    svg.appendChild(defs);
 }
 
 
@@ -1559,6 +1605,19 @@ function createPreviewMapper(worldBounds, fixedScale = null) {
             return value * scale;
         },
     };
+}
+
+
+function drawPreviewText(svg, text, x, y, className, attributes = {}) {
+    const textElement = createSvgElement("text", {
+        x: x,
+        y: y,
+        class: className,
+        ...attributes,
+    });
+    textElement.textContent = text;
+    svg.appendChild(textElement);
+    return textElement;
 }
 
 
@@ -1595,6 +1654,215 @@ function drawPreviewGrid(svg, mapper, worldBounds) {
             class: "preview-origin",
         }),
     );
+}
+
+
+function drawCenterlines(svg, center, size, mapper) {
+    const halfLength = size / 2;
+    const horizontalStart = mapper.point(center[0] - halfLength, center[1]);
+    const horizontalEnd = mapper.point(center[0] + halfLength, center[1]);
+    const verticalStart = mapper.point(center[0], center[1] - halfLength);
+    const verticalEnd = mapper.point(center[0], center[1] + halfLength);
+
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: horizontalStart[0],
+            y1: horizontalStart[1],
+            x2: horizontalEnd[0],
+            y2: horizontalEnd[1],
+            class: "preview-centerline",
+        }),
+    );
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: verticalStart[0],
+            y1: verticalStart[1],
+            x2: verticalEnd[0],
+            y2: verticalEnd[1],
+            class: "preview-centerline",
+        }),
+    );
+}
+
+
+function drawHorizontalDimension(svg, bounds, mapper, label, offset) {
+    const y = bounds[1] - offset;
+    const left = mapper.point(bounds[0], y);
+    const right = mapper.point(bounds[2], y);
+    const leftExtensionStart = mapper.point(bounds[0], bounds[1]);
+    const rightExtensionStart = mapper.point(bounds[2], bounds[1]);
+    const textPoint = mapper.point((bounds[0] + bounds[2]) / 2, y);
+
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: leftExtensionStart[0],
+            y1: leftExtensionStart[1],
+            x2: left[0],
+            y2: left[1],
+            class: "preview-extension-line",
+        }),
+    );
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: rightExtensionStart[0],
+            y1: rightExtensionStart[1],
+            x2: right[0],
+            y2: right[1],
+            class: "preview-extension-line",
+        }),
+    );
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: left[0],
+            y1: left[1],
+            x2: right[0],
+            y2: right[1],
+            class: "preview-dimension-line",
+            "marker-start": "url(#preview-dimension-arrow)",
+            "marker-end": "url(#preview-dimension-arrow)",
+        }),
+    );
+    drawPreviewText(
+        svg,
+        label,
+        textPoint[0],
+        textPoint[1] - 5,
+        "preview-dimension-text",
+        {"text-anchor": "middle"},
+    );
+}
+
+
+function drawVerticalDimension(svg, bounds, mapper, label, offset) {
+    const x = bounds[0] - offset;
+    const bottom = mapper.point(x, bounds[1]);
+    const top = mapper.point(x, bounds[3]);
+    const bottomExtensionStart = mapper.point(bounds[0], bounds[1]);
+    const topExtensionStart = mapper.point(bounds[0], bounds[3]);
+    const textPoint = mapper.point(x, (bounds[1] + bounds[3]) / 2);
+
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: bottomExtensionStart[0],
+            y1: bottomExtensionStart[1],
+            x2: bottom[0],
+            y2: bottom[1],
+            class: "preview-extension-line",
+        }),
+    );
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: topExtensionStart[0],
+            y1: topExtensionStart[1],
+            x2: top[0],
+            y2: top[1],
+            class: "preview-extension-line",
+        }),
+    );
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: bottom[0],
+            y1: bottom[1],
+            x2: top[0],
+            y2: top[1],
+            class: "preview-dimension-line",
+            "marker-start": "url(#preview-dimension-arrow)",
+            "marker-end": "url(#preview-dimension-arrow)",
+        }),
+    );
+    drawPreviewText(
+        svg,
+        label,
+        textPoint[0] - 6,
+        textPoint[1],
+        "preview-dimension-text",
+        {
+            "text-anchor": "middle",
+            transform: `rotate(-90 ${textPoint[0] - 6} ${textPoint[1]})`,
+        },
+    );
+}
+
+
+function drawOverallDimensions(svg, baseGeometry, mapper) {
+    if (baseGeometry.profile === "circle") {
+        const center = mapper.point(0, 0);
+        const leaderEnd = mapper.point(baseGeometry.radius * 0.75, baseGeometry.radius * 0.75);
+        const textPoint = [
+            Math.min(leaderEnd[0] + 20, PREVIEW_WIDTH - 80),
+            Math.max(leaderEnd[1] - 16, 20),
+        ];
+
+        svg.appendChild(
+            createSvgElement("line", {
+                x1: center[0],
+                y1: center[1],
+                x2: textPoint[0],
+                y2: textPoint[1],
+                class: "preview-leader-line",
+            }),
+        );
+        drawPreviewText(
+            svg,
+            `Ø${formatDimension(baseGeometry.diameter)}`,
+            textPoint[0] + 4,
+            textPoint[1] - 4,
+            "preview-callout-text",
+        );
+        return;
+    }
+
+    const offset = dimensionOffset(baseGeometry.bounds);
+    drawHorizontalDimension(
+        svg,
+        baseGeometry.bounds,
+        mapper,
+        formatDimension(boundsWidth(baseGeometry.bounds)),
+        offset,
+    );
+    drawVerticalDimension(
+        svg,
+        baseGeometry.bounds,
+        mapper,
+        formatDimension(boundsHeight(baseGeometry.bounds)),
+        offset,
+    );
+}
+
+
+function featureNeedsLinearDimensions(feature) {
+    return feature.profile === "rectangle";
+}
+
+
+function drawFeatureDimensions(svg, feature, mapper) {
+    if (!featureNeedsLinearDimensions(feature)) {
+        return;
+    }
+
+    const offset = featureDimensionOffset(feature.bounds);
+    const widthLabel = formatDimension(boundsWidth(feature.bounds));
+    const heightLabel = formatDimension(boundsHeight(feature.bounds));
+
+    if (widthLabel !== "") {
+        drawHorizontalDimension(
+            svg,
+            feature.bounds,
+            mapper,
+            widthLabel,
+            offset,
+        );
+    }
+
+    if (heightLabel !== "") {
+        drawVerticalDimension(
+            svg,
+            feature.bounds,
+            mapper,
+            heightLabel,
+            offset,
+        );
+    }
 }
 
 
@@ -1643,6 +1911,7 @@ function drawBasePreview(svg, baseGeometry, mapper) {
                 class: "preview-base",
             }),
         );
+        drawCenterlines(svg, [0, 0], baseGeometry.diameter * 1.25, mapper);
         return;
     }
 
@@ -1697,6 +1966,9 @@ function drawFeaturePreview(svg, feature, mapper) {
                 class: className,
             }),
         );
+        if (feature.isPrimary) {
+            drawCenterlines(svg, feature.position, feature.radius * 2.6, mapper);
+        }
         return;
     }
 
@@ -1716,6 +1988,61 @@ function drawFeaturePreview(svg, feature, mapper) {
 }
 
 
+function drawFeatureCallout(svg, feature, mapper) {
+    if (!feature.isPrimary) {
+        return;
+    }
+
+    const center = mapper.point(...boundsCenter(feature.bounds));
+    const calloutPoint = mapper.point(feature.bounds[2], feature.bounds[3]);
+    const elbowPoint = [
+        Math.min(calloutPoint[0] + 20, PREVIEW_WIDTH - 70),
+        Math.max(calloutPoint[1] - 18, 20),
+    ];
+    let calloutText = "";
+
+    if (feature.profile === "circle") {
+        calloutText = `Ø${formatDimension(feature.radius * 2)}`;
+        if (feature.operation === "cut") {
+            calloutText += " THRU";
+        }
+    } else if (feature.profile === "rectangle") {
+        const renderedWidth = mapper.length(boundsWidth(feature.bounds));
+        const renderedHeight = mapper.length(boundsHeight(feature.bounds));
+        if (
+            renderedWidth >= SMALL_FEATURE_CALLOUT_THRESHOLD
+            && renderedHeight >= SMALL_FEATURE_CALLOUT_THRESHOLD
+        ) {
+            return;
+        }
+        calloutText = `${formatDimension(feature.width)} × ${formatDimension(feature.height)}`;
+    } else if (feature.profile === "polygon") {
+        calloutText = `${feature.sides}X ON Ø${formatDimension(feature.radius * 2)}`;
+    }
+
+    if (calloutText === "") {
+        return;
+    }
+
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: center[0],
+            y1: center[1],
+            x2: elbowPoint[0],
+            y2: elbowPoint[1],
+            class: "preview-leader-line",
+        }),
+    );
+    drawPreviewText(
+        svg,
+        calloutText,
+        elbowPoint[0] + 4,
+        elbowPoint[1] - 4,
+        "preview-callout-text",
+    );
+}
+
+
 function drawPreviewLabel(svg, feature, mapper) {
     const center = mapper.point(...boundsCenter(feature.bounds));
     svg.appendChild(
@@ -1731,6 +2058,7 @@ function drawPreviewLabel(svg, feature, mapper) {
 function drawPreviewView(svg, baseGeometry, featureData, sharedScale = null) {
     svg.innerHTML = "";
     svg.setAttribute("viewBox", `0 0 ${PREVIEW_WIDTH} ${PREVIEW_HEIGHT}`);
+    drawPreviewDefs(svg);
 
     if (baseGeometry === null) {
         drawPreviewEmptyMessage(svg, "No exact base dimensions");
@@ -1745,11 +2073,14 @@ function drawPreviewView(svg, baseGeometry, featureData, sharedScale = null) {
 
     drawPreviewGrid(svg, mapper, worldBounds);
     drawBasePreview(svg, baseGeometry, mapper);
+    drawOverallDimensions(svg, baseGeometry, mapper);
 
     for (const feature of visibleFeatures) {
         drawFeaturePreview(svg, feature, mapper);
+        drawFeatureDimensions(svg, feature, mapper);
         if (feature.isPrimary) {
             drawPreviewLabel(svg, feature, mapper);
+            drawFeatureCallout(svg, feature, mapper);
         }
     }
 
