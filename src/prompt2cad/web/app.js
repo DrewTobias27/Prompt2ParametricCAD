@@ -57,6 +57,8 @@ function setBuilderMode(mode) {
     manualBuilder.classList.toggle("hidden", isPromptMode);
     promptModeButton.classList.toggle("active", isPromptMode);
     manualModeButton.classList.toggle("active", !isPromptMode);
+    updateDesignReviewWarnings();
+    updateManualPreview();
 }
 
 
@@ -74,6 +76,8 @@ function updateManualBuilderFields() {
     polygonFields.classList.toggle("hidden", useReasonableDefaults || baseProfile !== "polygon");
     thicknessFields.classList.toggle("hidden", useReasonableDefaults);
     polylineFields.classList.toggle("hidden", baseProfile !== "polyline");
+    updateDesignReviewWarnings();
+    updateManualPreview();
 }
 
 
@@ -288,6 +292,8 @@ function renumberFeatureCards() {
     }
 
     featureCount = featureCards.length;
+    updateDesignReviewWarnings();
+    updateManualPreview();
 }
 
 
@@ -350,12 +356,12 @@ function addFeatureCard() {
                 <input class="feature-mirror-y" type="checkbox">
                 Mirror across Y axis
             </label>
-        </div>
 
-        <label class="checkbox-row">
-            <input class="feature-reasonable" type="checkbox" checked>
-            Use reasonable dimensions
-        </label>
+            <label class="checkbox-row">
+                <input class="feature-reasonable" type="checkbox" checked>
+                Use reasonable dimensions
+            </label>
+        </div>
 
         <div class="field-group feature-rectangle-fields">
             <label>
@@ -440,6 +446,8 @@ function addFeatureCard() {
     removeButton.addEventListener("click", () => {
         featureCard.remove();
         renumberFeatureCards();
+        updateDesignReviewWarnings();
+        updateManualPreview();
     });
 
     const featureOperationSelect = featureCard.querySelector(".feature-operation");
@@ -457,21 +465,1389 @@ function addFeatureCard() {
     const featurePatternSelect = featureCard.querySelector(".feature-pattern");
     featurePatternSelect.addEventListener("change", () => {
         updateFeatureCardFields(featureCard);
+        updateDesignReviewWarnings();
+        updateManualPreview();
     });
 
     const featureReasonableCheckbox = featureCard.querySelector(".feature-reasonable");
     featureReasonableCheckbox.addEventListener("change", () => {
         updateFeatureCardFields(featureCard);
+        updateDesignReviewWarnings();
+        updateManualPreview();
     });
 
     const featureDepthModeSelect = featureCard.querySelector(".feature-depth-mode");
     featureDepthModeSelect.addEventListener("change", () => {
         updateFeatureCardFields(featureCard);
+        updateDesignReviewWarnings();
+        updateManualPreview();
     });
+
+    featureCard.addEventListener("input", updateDesignReviewWarnings);
+    featureCard.addEventListener("change", updateDesignReviewWarnings);
+    featureCard.addEventListener("input", updateManualPreview);
+    featureCard.addEventListener("change", updateManualPreview);
 
     featureList.appendChild(featureCard);
     renumberFeatureCards();
     updateFeatureCardFields(featureCard);
+    updateDesignReviewWarnings();
+    updateManualPreview();
+}
+
+
+const REVIEW_EDGE_MARGIN = 3;
+const REVIEW_FEATURE_FRACTION_LIMIT = 0.75;
+const REVIEW_MIN_FEATURE_SPACING = 2;
+
+
+function reviewWarning(severity, title, message) {
+    return {
+        severity: severity,
+        title: title,
+        message: message,
+    };
+}
+
+
+function getManualBaseReviewGeometry() {
+    const baseProfile = document.getElementById("baseProfile").value;
+    const useReasonableDefaults = document.getElementById("useReasonableDefaults").checked;
+    const thickness = Number(document.getElementById("baseDistance").value);
+
+    if (useReasonableDefaults || baseProfile === "polyline") {
+        return null;
+    }
+
+    if (baseProfile === "rectangle") {
+        const width = Number(document.getElementById("baseWidth").value);
+        const height = Number(document.getElementById("baseHeight").value);
+        return {
+            profile: "rectangle",
+            width: width,
+            height: height,
+            thickness: thickness,
+            bounds: [-width / 2, -height / 2, width / 2, height / 2],
+        };
+    }
+
+    if (baseProfile === "circle") {
+        const diameter = Number(document.getElementById("baseDiameter").value);
+        return {
+            profile: "circle",
+            diameter: diameter,
+            radius: diameter / 2,
+            thickness: thickness,
+            bounds: [-diameter / 2, -diameter / 2, diameter / 2, diameter / 2],
+        };
+    }
+
+    if (baseProfile === "polygon") {
+        const diameter = Number(document.getElementById("polygonDiameter").value);
+        const sides = Number(document.getElementById("polygonSides").value);
+        return {
+            profile: "polygon",
+            diameter: diameter,
+            radius: diameter / 2,
+            sides: sides,
+            thickness: thickness,
+            bounds: [-diameter / 2, -diameter / 2, diameter / 2, diameter / 2],
+        };
+    }
+
+    return null;
+}
+
+
+function featureLocalBounds(featureCard) {
+    const profile = featureCard.querySelector(".feature-profile").value;
+    const useReasonableDimensions = featureCard.querySelector(".feature-reasonable").checked;
+
+    if (useReasonableDimensions || profile === "polyline") {
+        return null;
+    }
+
+    if (profile === "rectangle") {
+        const width = Number(featureCard.querySelector(".feature-width").value);
+        const height = Number(featureCard.querySelector(".feature-height").value);
+        return {
+            width: width,
+            height: height,
+            bounds: [-width / 2, -height / 2, width / 2, height / 2],
+        };
+    }
+
+    if (profile === "circle") {
+        const diameter = Number(featureCard.querySelector(".feature-diameter").value);
+        return {
+            width: diameter,
+            height: diameter,
+            radius: diameter / 2,
+            bounds: [-diameter / 2, -diameter / 2, diameter / 2, diameter / 2],
+        };
+    }
+
+    if (profile === "polygon") {
+        const diameter = Number(featureCard.querySelector(".feature-polygon-diameter").value);
+        const sides = Number(featureCard.querySelector(".feature-polygon-sides").value);
+        return {
+            width: diameter,
+            height: diameter,
+            radius: diameter / 2,
+            sides: sides,
+            bounds: [-diameter / 2, -diameter / 2, diameter / 2, diameter / 2],
+        };
+    }
+
+    return null;
+}
+
+
+function moveBounds(bounds, position) {
+    return [
+        bounds[0] + position[0],
+        bounds[1] + position[1],
+        bounds[2] + position[0],
+        bounds[3] + position[1],
+    ];
+}
+
+
+function boundsWidth(bounds) {
+    return bounds[2] - bounds[0];
+}
+
+
+function boundsHeight(bounds) {
+    return bounds[3] - bounds[1];
+}
+
+
+function boundsCenter(bounds) {
+    return [
+        (bounds[0] + bounds[2]) / 2,
+        (bounds[1] + bounds[3]) / 2,
+    ];
+}
+
+
+function rectangleContainsBounds(containerBounds, innerBounds, margin = 0) {
+    return (
+        innerBounds[0] >= containerBounds[0] + margin
+        && innerBounds[1] >= containerBounds[1] + margin
+        && innerBounds[2] <= containerBounds[2] - margin
+        && innerBounds[3] <= containerBounds[3] - margin
+    );
+}
+
+
+function circularBaseContainsBounds(baseGeometry, innerBounds, margin = 0) {
+    const radius = baseGeometry.radius - margin;
+    if (radius <= 0) {
+        return false;
+    }
+
+    const corners = [
+        [innerBounds[0], innerBounds[1]],
+        [innerBounds[0], innerBounds[3]],
+        [innerBounds[2], innerBounds[1]],
+        [innerBounds[2], innerBounds[3]],
+    ];
+
+    return corners.every(([x, y]) => Math.hypot(x, y) <= radius);
+}
+
+
+function baseContainsFeatureBounds(baseGeometry, featureBounds, margin = 0) {
+    if (baseGeometry.profile === "rectangle" || baseGeometry.profile === "projection") {
+        return rectangleContainsBounds(baseGeometry.bounds, featureBounds, margin);
+    }
+
+    if (baseGeometry.profile === "circle" || baseGeometry.profile === "polygon") {
+        return circularBaseContainsBounds(baseGeometry, featureBounds, margin);
+    }
+
+    return true;
+}
+
+
+function distanceBetweenPoints(a, b) {
+    return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+
+function baseViewGeometry(baseGeometry, viewName) {
+    if (viewName === "top") {
+        return {
+            ...baseGeometry,
+            viewName: "top",
+        };
+    }
+
+    const topWidth = boundsWidth(baseGeometry.bounds);
+    const topDepth = boundsHeight(baseGeometry.bounds);
+
+    if (viewName === "front") {
+        return {
+            profile: "projection",
+            viewName: "front",
+            width: topWidth,
+            height: baseGeometry.thickness,
+            bounds: [-topWidth / 2, -baseGeometry.thickness / 2, topWidth / 2, baseGeometry.thickness / 2],
+        };
+    }
+
+    if (viewName === "right") {
+        return {
+            profile: "projection",
+            viewName: "right",
+            width: topDepth,
+            height: baseGeometry.thickness,
+            bounds: [-topDepth / 2, -baseGeometry.thickness / 2, topDepth / 2, baseGeometry.thickness / 2],
+        };
+    }
+
+    return null;
+}
+
+
+function basePreviewVolume(baseGeometry) {
+    return {
+        id: "base",
+        x: [baseGeometry.bounds[0], baseGeometry.bounds[2]],
+        y: [baseGeometry.bounds[1], baseGeometry.bounds[3]],
+        z: [-baseGeometry.thickness / 2, baseGeometry.thickness / 2],
+    };
+}
+
+
+function volumeCenter(volume) {
+    return {
+        x: (volume.x[0] + volume.x[1]) / 2,
+        y: (volume.y[0] + volume.y[1]) / 2,
+        z: (volume.z[0] + volume.z[1]) / 2,
+    };
+}
+
+
+function targetParts(target) {
+    const parts = target.split(".");
+    if (parts.length !== 2) {
+        return null;
+    }
+
+    return {
+        id: parts[0],
+        face: parts[1],
+    };
+}
+
+
+function faceInfoFromVolume(volume, faceName) {
+    const center = volumeCenter(volume);
+    const faceMap = {
+        top: {
+            viewName: "top",
+            axes: ["x", "y"],
+            normalAxis: "z",
+            outwardDirection: 1,
+            planeCoordinate: volume.z[1],
+            center: [center.x, center.y],
+        },
+        bottom: {
+            viewName: "top",
+            axes: ["x", "y"],
+            normalAxis: "z",
+            outwardDirection: -1,
+            planeCoordinate: volume.z[0],
+            center: [center.x, center.y],
+        },
+        front: {
+            viewName: "front",
+            axes: ["x", "z"],
+            normalAxis: "y",
+            outwardDirection: -1,
+            planeCoordinate: volume.y[0],
+            center: [center.x, center.z],
+        },
+        back: {
+            viewName: "front",
+            axes: ["x", "z"],
+            normalAxis: "y",
+            outwardDirection: 1,
+            planeCoordinate: volume.y[1],
+            center: [center.x, center.z],
+        },
+        right: {
+            viewName: "right",
+            axes: ["y", "z"],
+            normalAxis: "x",
+            outwardDirection: 1,
+            planeCoordinate: volume.x[1],
+            center: [center.y, center.z],
+        },
+        left: {
+            viewName: "right",
+            axes: ["y", "z"],
+            normalAxis: "x",
+            outwardDirection: -1,
+            planeCoordinate: volume.x[0],
+            center: [center.y, center.z],
+        },
+    };
+
+    if (!(faceName in faceMap)) {
+        return null;
+    }
+
+    return {
+        ...faceMap[faceName],
+        targetId: volume.id,
+        faceName: faceName,
+        volume: volume,
+    };
+}
+
+
+function faceInfoForTarget(target, volumeById) {
+    const parts = targetParts(target);
+    if (parts === null || !volumeById.has(parts.id)) {
+        return null;
+    }
+
+    return faceInfoFromVolume(volumeById.get(parts.id), parts.face);
+}
+
+
+function facePlaneBounds(faceInfo) {
+    const [horizontalAxis, verticalAxis] = faceInfo.axes;
+    return [
+        faceInfo.volume[horizontalAxis][0],
+        faceInfo.volume[verticalAxis][0],
+        faceInfo.volume[horizontalAxis][1],
+        faceInfo.volume[verticalAxis][1],
+    ];
+}
+
+
+function faceReviewGeometry(faceInfo, baseGeometry) {
+    if (faceInfo.targetId === "base") {
+        return baseViewGeometry(baseGeometry, faceInfo.viewName);
+    }
+
+    return {
+        profile: "projection",
+        viewName: faceInfo.viewName,
+        bounds: facePlaneBounds(faceInfo),
+    };
+}
+
+
+function faceBoundsFromLocal(faceInfo, localBounds, position) {
+    return moveBounds(localBounds, [
+        faceInfo.center[0] + position[0],
+        faceInfo.center[1] + position[1],
+    ]);
+}
+
+
+function facePositionFromLocal(faceInfo, position) {
+    return [
+        faceInfo.center[0] + position[0],
+        faceInfo.center[1] + position[1],
+    ];
+}
+
+
+function faceDepth(faceInfo) {
+    const axisBounds = faceInfo.volume[faceInfo.normalAxis];
+    return axisBounds[1] - axisBounds[0];
+}
+
+
+function volumeFromFaceBounds(faceInfo, faceBounds, startCoordinate, endCoordinate, id = null) {
+    const volume = {
+        id: id,
+        x: [faceInfo.volume.x[0], faceInfo.volume.x[1]],
+        y: [faceInfo.volume.y[0], faceInfo.volume.y[1]],
+        z: [faceInfo.volume.z[0], faceInfo.volume.z[1]],
+    };
+    const [horizontalAxis, verticalAxis] = faceInfo.axes;
+
+    volume[horizontalAxis] = [faceBounds[0], faceBounds[2]];
+    volume[verticalAxis] = [faceBounds[1], faceBounds[3]];
+    volume[faceInfo.normalAxis] = [
+        Math.min(startCoordinate, endCoordinate),
+        Math.max(startCoordinate, endCoordinate),
+    ];
+
+    return volume;
+}
+
+
+function extrudeVolumeFromFace(faceInfo, faceBounds, distance, id) {
+    return volumeFromFaceBounds(
+        faceInfo,
+        faceBounds,
+        faceInfo.planeCoordinate,
+        faceInfo.planeCoordinate + faceInfo.outwardDirection * distance,
+        id,
+    );
+}
+
+
+function cutVolumeFromFace(faceInfo, faceBounds, depth) {
+    return volumeFromFaceBounds(
+        faceInfo,
+        faceBounds,
+        faceInfo.planeCoordinate,
+        faceInfo.planeCoordinate - faceInfo.outwardDirection * depth,
+    );
+}
+
+
+function modelAxisBounds(volumeById, axisName) {
+    const volumes = Array.from(volumeById.values());
+    return [
+        Math.min(...volumes.map((volume) => volume[axisName][0])),
+        Math.max(...volumes.map((volume) => volume[axisName][1])),
+    ];
+}
+
+
+function throughCutVolumeFromFace(faceInfo, faceBounds, volumeById) {
+    const modelBounds = modelAxisBounds(volumeById, faceInfo.normalAxis);
+    const farSideCoordinate = faceInfo.outwardDirection > 0
+        ? modelBounds[0]
+        : modelBounds[1];
+    return volumeFromFaceBounds(
+        faceInfo,
+        faceBounds,
+        faceInfo.planeCoordinate,
+        farSideCoordinate,
+    );
+}
+
+
+function projectionBoundsForVolume(volume, viewName) {
+    if (viewName === "top") {
+        return [volume.x[0], volume.y[0], volume.x[1], volume.y[1]];
+    }
+
+    if (viewName === "front") {
+        return [volume.x[0], volume.z[0], volume.x[1], volume.z[1]];
+    }
+
+    if (viewName === "right") {
+        return [volume.y[0], volume.z[0], volume.y[1], volume.z[1]];
+    }
+
+    return null;
+}
+
+
+function previewRecordFromFace({
+    operation,
+    target,
+    profile,
+    featureNumber,
+    featureCard,
+    localGeometry,
+    faceInfo,
+    baseGeometry,
+    position,
+    bounds,
+}) {
+    return {
+        featureNumber: featureNumber,
+        operation: operation,
+        target: target,
+        profile: profile,
+        card: featureCard,
+        position: facePositionFromLocal(faceInfo, position),
+        bounds: bounds,
+        width: localGeometry.width,
+        height: localGeometry.height,
+        radius: localGeometry.radius || 0,
+        sides: localGeometry.sides || 0,
+        baseGeometry: faceReviewGeometry(faceInfo, baseGeometry),
+        viewName: faceInfo.viewName,
+        isPrimary: true,
+    };
+}
+
+
+function projectionRecordFromVolume({
+    operation,
+    target,
+    featureNumber,
+    featureCard,
+    volume,
+    viewName,
+    baseGeometry,
+}) {
+    const bounds = projectionBoundsForVolume(volume, viewName);
+    if (bounds === null || !validBounds(bounds)) {
+        return null;
+    }
+
+    return {
+        featureNumber: featureNumber,
+        operation: operation,
+        target: target,
+        profile: "rectangle",
+        card: featureCard,
+        position: boundsCenter(bounds),
+        bounds: bounds,
+        width: boundsWidth(bounds),
+        height: boundsHeight(bounds),
+        radius: 0,
+        sides: 0,
+        baseGeometry: baseViewGeometry(baseGeometry, viewName),
+        viewName: viewName,
+        isPrimary: false,
+    };
+}
+
+
+function addProjectionRecords(records, recordOptions, volume, primaryViewName) {
+    for (const viewName of ["top", "front", "right"]) {
+        if (viewName === primaryViewName) {
+            continue;
+        }
+
+        const record = projectionRecordFromVolume({
+            ...recordOptions,
+            volume: volume,
+            viewName: viewName,
+        });
+
+        if (record !== null) {
+            records.push(record);
+        }
+    }
+}
+
+
+function collectExactFeaturePreviewData(baseGeometry) {
+    const featureCards = Array.from(document.querySelectorAll(".feature-card"));
+    const featureData = [];
+    const volumeById = new Map();
+    volumeById.set("base", basePreviewVolume(baseGeometry));
+
+    for (const featureCard of featureCards) {
+        const operation = featureCard.querySelector(".feature-operation").value;
+        const target = featureCard.querySelector(".feature-target").value;
+        const profile = featureCard.querySelector(".feature-profile").value;
+        const featureNumber = featureCard.dataset.featureNumber;
+        const localGeometry = featureLocalBounds(featureCard);
+        const faceInfo = faceInfoForTarget(target, volumeById);
+
+        if (localGeometry === null || faceInfo === null) {
+            continue;
+        }
+
+        const depthMode = featureCard.querySelector(".feature-depth-mode").value;
+        const amount = Number(featureCard.querySelector(".feature-amount").value);
+        const seedPosition = [
+            Number(featureCard.querySelector(".feature-position-x").value),
+            Number(featureCard.querySelector(".feature-position-y").value),
+        ];
+        const positions = transformFeaturePositions(featureCard, [seedPosition]);
+
+        for (const position of positions) {
+            const bounds = faceBoundsFromLocal(faceInfo, localGeometry.bounds, position);
+            featureData.push({
+                ...previewRecordFromFace({
+                    operation: operation,
+                    target: target,
+                    profile: profile,
+                    featureNumber: featureNumber,
+                    featureCard: featureCard,
+                    localGeometry: localGeometry,
+                    faceInfo: faceInfo,
+                    baseGeometry: baseGeometry,
+                    position: position,
+                    bounds: bounds,
+                }),
+            });
+
+            const recordOptions = {
+                operation: operation,
+                target: target,
+                featureNumber: featureNumber,
+                featureCard: featureCard,
+                baseGeometry: baseGeometry,
+            };
+
+            if (operation === "add_extrude") {
+                const featureId = `feature_${featureNumber}`;
+                const extrudeVolume = extrudeVolumeFromFace(faceInfo, bounds, amount, featureId);
+                if (!volumeById.has(featureId)) {
+                    volumeById.set(featureId, extrudeVolume);
+                }
+                addProjectionRecords(featureData, recordOptions, extrudeVolume, faceInfo.viewName);
+            } else if (operation === "cut") {
+                const cutVolume = depthMode === "through"
+                    ? throughCutVolumeFromFace(faceInfo, bounds, volumeById)
+                    : cutVolumeFromFace(faceInfo, bounds, amount);
+                addProjectionRecords(featureData, recordOptions, cutVolume, faceInfo.viewName);
+            }
+        }
+    }
+
+    return featureData;
+}
+
+
+function checkFeatureBoundaryWarnings(featureData) {
+    const warnings = [];
+
+    for (const feature of featureData) {
+        const severity = feature.operation === "add_extrude" ? "error" : "warning";
+        const action = feature.operation === "add_extrude" ? "extrusion" : "cut";
+
+        if (!baseContainsFeatureBounds(feature.baseGeometry, feature.bounds, 0)) {
+            warnings.push(
+                reviewWarning(
+                    severity,
+                    `Feature ${feature.featureNumber} may hang off the base`,
+                    `This ${action} extends outside the base boundary. Move it inward or reduce its size.`,
+                ),
+            );
+            continue;
+        }
+
+        if (!baseContainsFeatureBounds(feature.baseGeometry, feature.bounds, REVIEW_EDGE_MARGIN)) {
+            warnings.push(
+                reviewWarning(
+                    "warning",
+                    `Feature ${feature.featureNumber} is close to an edge`,
+                    `This ${action} is within about ${REVIEW_EDGE_MARGIN} mm of the base edge. That may leave weak material near the feature.`,
+                ),
+            );
+        }
+    }
+
+    return warnings;
+}
+
+
+function checkFeatureSizeWarnings(featureData) {
+    const warnings = [];
+
+    for (const feature of featureData) {
+        const baseWidth = boundsWidth(feature.baseGeometry.bounds);
+        const baseHeight = boundsHeight(feature.baseGeometry.bounds);
+
+        if (
+            feature.width > baseWidth * REVIEW_FEATURE_FRACTION_LIMIT
+            || feature.height > baseHeight * REVIEW_FEATURE_FRACTION_LIMIT
+        ) {
+            warnings.push(
+                reviewWarning(
+                    "warning",
+                    `Feature ${feature.featureNumber} is very large`,
+                    "This feature is large relative to the base. Check that it is intentional and leaves enough surrounding material.",
+                ),
+            );
+        }
+    }
+
+    return warnings;
+}
+
+
+function depthLimitForTarget(target, baseGeometry) {
+    if (target === "base.top" || target === "base.bottom") {
+        return baseGeometry.thickness;
+    }
+
+    if (target === "base.front" || target === "base.back") {
+        return boundsHeight(baseGeometry.bounds);
+    }
+
+    if (target === "base.right" || target === "base.left") {
+        return boundsWidth(baseGeometry.bounds);
+    }
+
+    return baseGeometry.thickness;
+}
+
+
+function checkCutDepthWarnings() {
+    const warnings = [];
+    const baseGeometry = getManualBaseReviewGeometry();
+    if (baseGeometry === null) {
+        return warnings;
+    }
+
+    for (const featureCard of document.querySelectorAll(".feature-card")) {
+        const operation = featureCard.querySelector(".feature-operation").value;
+        const target = featureCard.querySelector(".feature-target").value;
+        const useReasonableDimensions = featureCard.querySelector(".feature-reasonable").checked;
+        const depthMode = featureCard.querySelector(".feature-depth-mode").value;
+        const amount = Number(featureCard.querySelector(".feature-amount").value);
+        const featureNumber = featureCard.dataset.featureNumber;
+        const depthLimit = depthLimitForTarget(target, baseGeometry);
+
+        if (operation !== "cut" || useReasonableDimensions || depthMode === "through") {
+            continue;
+        }
+
+        if (amount > depthLimit) {
+            warnings.push(
+                reviewWarning(
+                    "warning",
+                    `Feature ${featureNumber} cut is deeper than its target`,
+                    "This blind cut is deeper than the material available normal to its target face. Use a through cut if that is intentional.",
+                ),
+            );
+        }
+    }
+
+    return warnings;
+}
+
+
+function checkHoleSpacingWarnings(featureData) {
+    const warnings = [];
+    const circularCuts = featureData.filter(
+        (feature) => feature.operation === "cut" && feature.profile === "circle",
+    );
+    const cutsByView = new Map();
+
+    for (const cut of circularCuts) {
+        const viewName = cut.viewName || "top";
+        if (!cutsByView.has(viewName)) {
+            cutsByView.set(viewName, []);
+        }
+        cutsByView.get(viewName).push(cut);
+    }
+
+    for (const viewCuts of cutsByView.values()) {
+        for (let i = 0; i < viewCuts.length; i += 1) {
+            for (let j = i + 1; j < viewCuts.length; j += 1) {
+                const first = viewCuts[i];
+                const second = viewCuts[j];
+                const centerDistance = distanceBetweenPoints(first.position, second.position);
+                const clearDistance = centerDistance - first.radius - second.radius;
+
+                if (clearDistance < 0) {
+                    warnings.push(
+                        reviewWarning(
+                            "error",
+                            `Circular cuts overlap`,
+                            `Features ${first.featureNumber} and ${second.featureNumber} overlap in the same drawing view. Move them apart or reduce their diameters.`,
+                        ),
+                    );
+                } else if (clearDistance < REVIEW_MIN_FEATURE_SPACING) {
+                    warnings.push(
+                        reviewWarning(
+                            "warning",
+                            `Circular cuts are very close`,
+                            `Features ${first.featureNumber} and ${second.featureNumber} leave only ${clearDistance.toFixed(1)} mm between holes in the same drawing view.`,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    return warnings;
+}
+
+
+function checkPatternSymmetryWarnings(featureData) {
+    const warnings = [];
+    const groupedByCard = new Map();
+
+    for (const feature of featureData) {
+        if (!groupedByCard.has(feature.card)) {
+            groupedByCard.set(feature.card, []);
+        }
+        groupedByCard.get(feature.card).push(feature);
+    }
+
+    for (const [featureCard, features] of groupedByCard.entries()) {
+        const pattern = featureCard.querySelector(".feature-pattern").value;
+        const mirrorX = featureCard.querySelector(".feature-mirror-x").checked;
+        const mirrorY = featureCard.querySelector(".feature-mirror-y").checked;
+        const featureNumber = featureCard.dataset.featureNumber;
+
+        if (pattern === "circular") {
+            const requestedCount = Number(featureCard.querySelector(".feature-circular-count").value);
+            if (requestedCount < 2) {
+                warnings.push(
+                    reviewWarning(
+                        "warning",
+                        `Feature ${featureNumber} circular pattern needs more copies`,
+                        "Use at least 2 copies for a circular pattern.",
+                    ),
+                );
+            } else if (features.length < requestedCount) {
+                warnings.push(
+                    reviewWarning(
+                        "warning",
+                        `Feature ${featureNumber} circular pattern collapses`,
+                        "The seed position is probably at the origin, so rotated copies land on top of each other. Move the feature away from [0, 0].",
+                    ),
+                );
+            }
+        }
+
+        if (pattern === "circular" && features.length > 1) {
+            const radii = features.map((feature) => distanceBetweenPoints([0, 0], feature.position));
+            const averageRadius = radii.reduce((total, value) => total + value, 0) / radii.length;
+            const radiusMismatch = radii.some((radius) => Math.abs(radius - averageRadius) > 0.001);
+            if (radiusMismatch) {
+                warnings.push(
+                    reviewWarning(
+                        "warning",
+                        `Feature ${featureNumber} circular pattern is inconsistent`,
+                        "The copied positions are not all on the same radius. Check the pattern origin and seed position.",
+                    ),
+                );
+            }
+        }
+
+        if ((mirrorX || mirrorY) && features.length > 1) {
+            const positionKeys = new Set(
+                features.map((feature) => feature.position.map((value) => value.toFixed(3)).join(",")),
+            );
+            for (const feature of features) {
+                const [x, y] = feature.position;
+                if (mirrorX && !positionKeys.has([x, -y].map((value) => value.toFixed(3)).join(","))) {
+                    warnings.push(
+                        reviewWarning(
+                            "warning",
+                            `Feature ${featureNumber} mirror pattern looks incomplete`,
+                            "A mirrored copy across the X axis is missing or collapsed onto another position.",
+                        ),
+                    );
+                    break;
+                }
+                if (mirrorY && !positionKeys.has([-x, y].map((value) => value.toFixed(3)).join(","))) {
+                    warnings.push(
+                        reviewWarning(
+                            "warning",
+                            `Feature ${featureNumber} mirror pattern looks incomplete`,
+                            "A mirrored copy across the Y axis is missing or collapsed onto another position.",
+                        ),
+                    );
+                    break;
+                }
+            }
+        } else if ((mirrorX || mirrorY) && features.length === 1) {
+            warnings.push(
+                reviewWarning(
+                    "warning",
+                    `Feature ${featureNumber} mirror pattern collapses`,
+                    "The feature may be centered on the mirror axis, so the mirrored copy lands on the original position.",
+                ),
+            );
+        }
+    }
+
+    return warnings;
+}
+
+
+function checkSharpInternalCornerWarnings() {
+    const warnings = [];
+
+    for (const featureCard of document.querySelectorAll(".feature-card")) {
+        const operation = featureCard.querySelector(".feature-operation").value;
+        const profile = featureCard.querySelector(".feature-profile").value;
+        const useReasonableDimensions = featureCard.querySelector(".feature-reasonable").checked;
+        const featureNumber = featureCard.dataset.featureNumber;
+
+        if (operation === "cut" && profile === "rectangle" && !useReasonableDimensions) {
+            warnings.push(
+                reviewWarning(
+                    "info",
+                    `Feature ${featureNumber} has sharp internal corners`,
+                    "Rectangular CNC pockets and slots usually need internal corner radii or relief cuts.",
+                ),
+            );
+        }
+    }
+
+    return warnings;
+}
+
+
+function designReviewWarnings() {
+    const warnings = [];
+    const baseGeometry = getManualBaseReviewGeometry();
+    const featureCards = Array.from(document.querySelectorAll(".feature-card"));
+
+    if (baseGeometry === null) {
+        return [
+            reviewWarning(
+                "info",
+                "Exact design review is waiting for dimensions",
+                "Turn off reasonable dimensions and use rectangle, circle, or polygon base dimensions to enable live boundary checks.",
+            ),
+        ];
+    }
+
+    if (featureCards.length === 0) {
+        return [
+            reviewWarning(
+                "info",
+                "No feature warnings yet",
+                "Add a cut or extrusion to see live spacing, boundary, and manufacturability warnings.",
+            ),
+        ];
+    }
+
+    const exactFeatureData = collectExactFeaturePreviewData(baseGeometry).filter(
+        (feature) => feature.isPrimary,
+    );
+    const exactFeatureCount = exactFeatureData.length;
+
+    warnings.push(...checkFeatureBoundaryWarnings(exactFeatureData));
+    warnings.push(...checkFeatureSizeWarnings(exactFeatureData));
+    warnings.push(...checkCutDepthWarnings());
+    warnings.push(...checkHoleSpacingWarnings(exactFeatureData));
+    warnings.push(...checkPatternSymmetryWarnings(exactFeatureData));
+    warnings.push(...checkSharpInternalCornerWarnings());
+
+    if (exactFeatureCount < featureCards.length) {
+        warnings.push(
+            reviewWarning(
+                "info",
+                "Some features use API-assisted dimensions",
+                "Live boundary checks only run on exact rectangle, circle, and polygon features on base top, front, and side faces.",
+            ),
+        );
+    }
+
+    if (warnings.length === 0) {
+        warnings.push(
+            reviewWarning(
+                "success",
+                "No obvious design-review warnings",
+                "The exact manual features look inside the base and reasonably spaced. This is not a full engineering or DFM approval.",
+            ),
+        );
+    }
+
+    return warnings;
+}
+
+
+function updateDesignReviewWarnings() {
+    const panel = document.getElementById("designReviewPanel");
+    const warningsContainer = document.getElementById("designReviewWarnings");
+    if (!panel || !warningsContainer) {
+        return;
+    }
+
+    const isManualMode = !document.getElementById("manualBuilder").classList.contains("hidden");
+    panel.classList.toggle("hidden", !isManualMode);
+
+    if (!isManualMode) {
+        return;
+    }
+
+    const warnings = designReviewWarnings();
+    warningsContainer.innerHTML = "";
+
+    for (const warning of warnings) {
+        const warningElement = document.createElement("div");
+        warningElement.className = `design-review-item ${warning.severity}`;
+
+        const titleElement = document.createElement("strong");
+        titleElement.textContent = warning.title;
+
+        const messageElement = document.createElement("p");
+        messageElement.textContent = warning.message;
+
+        warningElement.appendChild(titleElement);
+        warningElement.appendChild(messageElement);
+        warningsContainer.appendChild(warningElement);
+    }
+}
+
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const PREVIEW_WIDTH = 640;
+const PREVIEW_HEIGHT = 360;
+const PREVIEW_PADDING = 32;
+
+
+function createSvgElement(name, attributes = {}) {
+    const element = document.createElementNS(SVG_NS, name);
+    for (const [key, value] of Object.entries(attributes)) {
+        element.setAttribute(key, String(value));
+    }
+    return element;
+}
+
+
+function validNumber(value) {
+    return Number.isFinite(value) && value > 0;
+}
+
+
+function validBounds(bounds) {
+    return (
+        Array.isArray(bounds)
+        && bounds.length === 4
+        && bounds.every((value) => Number.isFinite(value))
+        && bounds[2] > bounds[0]
+        && bounds[3] > bounds[1]
+    );
+}
+
+
+function allPreviewBounds(baseGeometry, featureData) {
+    const boundsList = [baseGeometry.bounds];
+    for (const feature of featureData) {
+        if (validBounds(feature.bounds)) {
+            boundsList.push(feature.bounds);
+        }
+    }
+
+    const minX = Math.min(...boundsList.map((bounds) => bounds[0]));
+    const minY = Math.min(...boundsList.map((bounds) => bounds[1]));
+    const maxX = Math.max(...boundsList.map((bounds) => bounds[2]));
+    const maxY = Math.max(...boundsList.map((bounds) => bounds[3]));
+    const width = Math.max(maxX - minX, 1);
+    const height = Math.max(maxY - minY, 1);
+    const padding = Math.max(width, height) * 0.12;
+
+    return [
+        minX - padding,
+        minY - padding,
+        maxX + padding,
+        maxY + padding,
+    ];
+}
+
+
+function previewScaleForBounds(worldBounds) {
+    const worldWidth = worldBounds[2] - worldBounds[0];
+    const worldHeight = worldBounds[3] - worldBounds[1];
+
+    return Math.min(
+        (PREVIEW_WIDTH - 2 * PREVIEW_PADDING) / worldWidth,
+        (PREVIEW_HEIGHT - 2 * PREVIEW_PADDING) / worldHeight,
+    );
+}
+
+
+function createPreviewMapper(worldBounds, fixedScale = null) {
+    const worldWidth = worldBounds[2] - worldBounds[0];
+    const worldHeight = worldBounds[3] - worldBounds[1];
+    const scale = fixedScale || previewScaleForBounds(worldBounds);
+    const usedWidth = worldWidth * scale;
+    const usedHeight = worldHeight * scale;
+    const offsetX = (PREVIEW_WIDTH - usedWidth) / 2 - worldBounds[0] * scale;
+    const offsetY = (PREVIEW_HEIGHT + usedHeight) / 2 + worldBounds[1] * scale;
+
+    return {
+        point(x, y) {
+            return [
+                offsetX + x * scale,
+                offsetY - y * scale,
+            ];
+        },
+        length(value) {
+            return value * scale;
+        },
+    };
+}
+
+
+function drawPreviewGrid(svg, mapper, worldBounds) {
+    const origin = mapper.point(0, 0);
+    const left = mapper.point(worldBounds[0], 0);
+    const right = mapper.point(worldBounds[2], 0);
+    const bottom = mapper.point(0, worldBounds[1]);
+    const top = mapper.point(0, worldBounds[3]);
+
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: left[0],
+            y1: left[1],
+            x2: right[0],
+            y2: right[1],
+            class: "preview-axis",
+        }),
+    );
+    svg.appendChild(
+        createSvgElement("line", {
+            x1: bottom[0],
+            y1: bottom[1],
+            x2: top[0],
+            y2: top[1],
+            class: "preview-axis",
+        }),
+    );
+    svg.appendChild(
+        createSvgElement("circle", {
+            cx: origin[0],
+            cy: origin[1],
+            r: 2.5,
+            class: "preview-origin",
+        }),
+    );
+}
+
+
+function regularPolygonPoints(center, radius, sides, mapper) {
+    const points = [];
+    const startAngle = -Math.PI / 2;
+    for (let index = 0; index < sides; index += 1) {
+        const angle = startAngle + (2 * Math.PI * index) / sides;
+        const x = center[0] + radius * Math.cos(angle);
+        const y = center[1] + radius * Math.sin(angle);
+        points.push(mapper.point(x, y).join(","));
+    }
+
+    return points.join(" ");
+}
+
+
+function drawBoundsRectangle(svg, bounds, mapper, className) {
+    const topLeft = mapper.point(bounds[0], bounds[3]);
+    const bottomRight = mapper.point(bounds[2], bounds[1]);
+    svg.appendChild(
+        createSvgElement("rect", {
+            x: topLeft[0],
+            y: topLeft[1],
+            width: bottomRight[0] - topLeft[0],
+            height: bottomRight[1] - topLeft[1],
+            class: className,
+        }),
+    );
+}
+
+
+function drawBasePreview(svg, baseGeometry, mapper) {
+    if (baseGeometry.profile === "rectangle" || baseGeometry.profile === "projection") {
+        drawBoundsRectangle(svg, baseGeometry.bounds, mapper, "preview-base");
+        return;
+    }
+
+    if (baseGeometry.profile === "circle") {
+        const center = mapper.point(0, 0);
+        svg.appendChild(
+            createSvgElement("circle", {
+                cx: center[0],
+                cy: center[1],
+                r: mapper.length(baseGeometry.radius),
+                class: "preview-base",
+            }),
+        );
+        return;
+    }
+
+    if (baseGeometry.profile === "polygon") {
+        svg.appendChild(
+            createSvgElement("polygon", {
+                points: regularPolygonPoints(
+                    [0, 0],
+                    baseGeometry.radius,
+                    baseGeometry.sides,
+                    mapper,
+                ),
+                class: "preview-base",
+            }),
+        );
+    }
+}
+
+
+function drawPreviewEmptyMessage(svg, text) {
+    svg.innerHTML = "";
+    svg.setAttribute("viewBox", `0 0 ${PREVIEW_WIDTH} ${PREVIEW_HEIGHT}`);
+    svg.appendChild(
+        createSvgElement("text", {
+            x: PREVIEW_WIDTH / 2,
+            y: PREVIEW_HEIGHT / 2,
+            class: "preview-empty-text",
+            "text-anchor": "middle",
+        }),
+    ).textContent = text;
+}
+
+
+function drawFeaturePreview(svg, feature, mapper) {
+    let className = feature.operation === "cut" ? "preview-cut" : "preview-extrude";
+    if (feature.isPrimary && !baseContainsFeatureBounds(feature.baseGeometry, feature.bounds, 0)) {
+        className += " preview-outside";
+    }
+
+    if (feature.profile === "rectangle") {
+        drawBoundsRectangle(svg, feature.bounds, mapper, className);
+        return;
+    }
+
+    if (feature.profile === "circle") {
+        const center = mapper.point(feature.position[0], feature.position[1]);
+        svg.appendChild(
+            createSvgElement("circle", {
+                cx: center[0],
+                cy: center[1],
+                r: mapper.length(feature.radius),
+                class: className,
+            }),
+        );
+        return;
+    }
+
+    if (feature.profile === "polygon") {
+        svg.appendChild(
+            createSvgElement("polygon", {
+                points: regularPolygonPoints(
+                    feature.position,
+                    feature.radius,
+                    feature.sides,
+                    mapper,
+                ),
+                class: className,
+            }),
+        );
+    }
+}
+
+
+function drawPreviewLabel(svg, feature, mapper) {
+    const center = mapper.point(...boundsCenter(feature.bounds));
+    svg.appendChild(
+        createSvgElement("text", {
+            x: center[0],
+            y: center[1] + 4,
+            class: "preview-label",
+        }),
+    ).textContent = feature.featureNumber;
+}
+
+
+function drawPreviewView(svg, baseGeometry, featureData, sharedScale = null) {
+    svg.innerHTML = "";
+    svg.setAttribute("viewBox", `0 0 ${PREVIEW_WIDTH} ${PREVIEW_HEIGHT}`);
+
+    if (baseGeometry === null) {
+        drawPreviewEmptyMessage(svg, "No exact base dimensions");
+        return;
+    }
+
+    const visibleFeatures = featureData.filter(
+        (feature) => validBounds(feature.bounds),
+    );
+    const worldBounds = allPreviewBounds(baseGeometry, visibleFeatures);
+    const mapper = createPreviewMapper(worldBounds, sharedScale);
+
+    drawPreviewGrid(svg, mapper, worldBounds);
+    drawBasePreview(svg, baseGeometry, mapper);
+
+    for (const feature of visibleFeatures) {
+        drawFeaturePreview(svg, feature, mapper);
+        if (feature.isPrimary) {
+            drawPreviewLabel(svg, feature, mapper);
+        }
+    }
+
+    if (visibleFeatures.length === 0) {
+        svg.appendChild(
+            createSvgElement("text", {
+                x: PREVIEW_WIDTH / 2,
+                y: PREVIEW_HEIGHT - 16,
+                class: "preview-note-text",
+                "text-anchor": "middle",
+            }),
+        ).textContent = "No exact features in this view";
+    }
+}
+
+
+function updateManualPreview() {
+    const panel = document.getElementById("manualPreviewPanel");
+    const topSvg = document.getElementById("manualPreviewTopSvg");
+    const frontSvg = document.getElementById("manualPreviewFrontSvg");
+    const rightSvg = document.getElementById("manualPreviewRightSvg");
+    const message = document.getElementById("manualPreviewMessage");
+    if (!panel || !topSvg || !frontSvg || !rightSvg || !message) {
+        return;
+    }
+
+    const isManualMode = !document.getElementById("manualBuilder").classList.contains("hidden");
+    panel.classList.toggle("hidden", !isManualMode);
+    if (!isManualMode) {
+        return;
+    }
+
+    const baseGeometry = getManualBaseReviewGeometry();
+    if (baseGeometry === null) {
+        message.textContent = "Preview is available for exact rectangle, circle, and polygon bases. API-assisted dimensions can preview after they are generated.";
+        drawPreviewEmptyMessage(topSvg, "Enter exact base dimensions");
+        drawPreviewEmptyMessage(frontSvg, "Enter exact base dimensions");
+        drawPreviewEmptyMessage(rightSvg, "Enter exact base dimensions");
+        return;
+    }
+
+    if (
+        !validNumber(boundsWidth(baseGeometry.bounds))
+        || !validNumber(boundsHeight(baseGeometry.bounds))
+        || !validNumber(baseGeometry.thickness)
+        || (baseGeometry.profile === "polygon" && baseGeometry.sides < 3)
+    ) {
+        message.textContent = "Preview needs positive base dimensions and thickness.";
+        drawPreviewEmptyMessage(topSvg, "Check base dimensions");
+        drawPreviewEmptyMessage(frontSvg, "Check base dimensions");
+        drawPreviewEmptyMessage(rightSvg, "Check base dimensions");
+        return;
+    }
+
+    const featureData = collectExactFeaturePreviewData(baseGeometry).filter(
+        (feature) => validBounds(feature.bounds),
+    );
+    const featureCards = Array.from(document.querySelectorAll(".feature-card"));
+    const skippedCount = featureCards.length - new Set(featureData.map((feature) => feature.card)).size;
+    const topGeometry = baseViewGeometry(baseGeometry, "top");
+    const frontGeometry = baseViewGeometry(baseGeometry, "front");
+    const rightGeometry = baseViewGeometry(baseGeometry, "right");
+    const topFeatureData = featureData.filter((feature) => feature.viewName === "top");
+    const frontFeatureData = featureData.filter((feature) => feature.viewName === "front");
+    const rightFeatureData = featureData.filter((feature) => feature.viewName === "right");
+    const viewBounds = [
+        allPreviewBounds(topGeometry, topFeatureData),
+        allPreviewBounds(frontGeometry, frontFeatureData),
+        allPreviewBounds(rightGeometry, rightFeatureData),
+    ];
+    const sharedScale = Math.min(...viewBounds.map(previewScaleForBounds));
+
+    drawPreviewView(
+        topSvg,
+        topGeometry,
+        topFeatureData,
+        sharedScale,
+    );
+    drawPreviewView(
+        frontSvg,
+        frontGeometry,
+        frontFeatureData,
+        sharedScale,
+    );
+    drawPreviewView(
+        rightSvg,
+        rightGeometry,
+        rightFeatureData,
+        sharedScale,
+    );
+
+    const primaryFeatureCount = featureData.filter((feature) => feature.isPrimary).length;
+    const featureSummary = primaryFeatureCount === 1 ? "1 feature instance" : `${primaryFeatureCount} feature instances`;
+    if (skippedCount > 0) {
+        message.textContent = `Previewing ${featureSummary} across top/front/right views. ${skippedCount} API-assisted, feature-face, or polyline feature(s) are not shown yet.`;
+    } else {
+        message.textContent = `Previewing ${featureSummary} across top/front/right views from exact manual dimensions.`;
+    }
 }
 
 
@@ -493,8 +1869,8 @@ function uniquePositions(positions) {
 
 function transformFeaturePositions(featureCard, seedPositions) {
     const pattern = featureCard.querySelector(".feature-pattern").value;
-    const mirrorX = featureCard.querySelector(".feature-mirror-x").checked;
-    const mirrorY = featureCard.querySelector(".feature-mirror-y").checked;
+    const mirrorX = pattern !== "circular" && featureCard.querySelector(".feature-mirror-x").checked;
+    const mirrorY = pattern !== "circular" && featureCard.querySelector(".feature-mirror-y").checked;
 
     let positions = seedPositions;
 
@@ -784,7 +2160,15 @@ baseProfileSelect.addEventListener("change", updateManualBuilderFields);
 const useReasonableDefaultsCheckbox = document.getElementById("useReasonableDefaults");
 useReasonableDefaultsCheckbox.addEventListener("change", updateManualBuilderFields);
 
+const manualBuilder = document.getElementById("manualBuilder");
+manualBuilder.addEventListener("input", updateDesignReviewWarnings);
+manualBuilder.addEventListener("change", updateDesignReviewWarnings);
+manualBuilder.addEventListener("input", updateManualPreview);
+manualBuilder.addEventListener("change", updateManualPreview);
+
 updateManualBuilderFields();
+updateDesignReviewWarnings();
+updateManualPreview();
 
 const promptModeButton = document.getElementById("promptModeButton");
 promptModeButton.addEventListener("click", () => setBuilderMode("prompt"));

@@ -38,81 +38,145 @@
                         Build the same CAD JSON with guided controls instead of a freeform sentence.
                     </p>
 
-                    <h3>Main frame</h3>
-                    <label for="baseProfile">Shape</label>
-                    <select id="baseProfile">
-                        <option value="rectangle">Rectangle</option>
-                        <option value="circle">Circle</option>
-                        <option value="polygon">Polygon</option>
-                        <option value="polyline">Polyline</option>
-                    </select>
+                    <div class="manual-builder-grid">
+                        <div class="manual-controls-column">
+                            <h3>Main frame</h3>
+                            <label for="baseProfile">Shape</label>
+                            <select id="baseProfile">
+                                <option value="rectangle">Rectangle</option>
+                                <option value="circle">Circle</option>
+                                <option value="polygon">Polygon</option>
+                                <option value="polyline">Polyline</option>
+                            </select>
 
-                    <label class="checkbox-row">
-                        <input id="useReasonableDefaults" type="checkbox" checked>
-                        Use reasonable dimensions
-                    </label>
+                            <label class="checkbox-row">
+                                <input id="useReasonableDefaults" type="checkbox" checked>
+                                Use reasonable dimensions
+                            </label>
 
-                    <div id="rectangleFields" class="field-group">
-                        <label>
-                            Width
-                            <input id="baseWidth" type="number" value="80">
-                        </label>
+                            <div id="rectangleFields" class="field-group">
+                                <label>
+                                    Width
+                                    <input id="baseWidth" type="number" value="80">
+                                </label>
 
-                        <label>
-                            Height
-                            <input id="baseHeight" type="number" value="50">
-                        </label>
+                                <label>
+                                    Height
+                                    <input id="baseHeight" type="number" value="50">
+                                </label>
+                            </div>
+
+                            <div id="circleFields" class="field-group">
+                                <label>
+                                    Diameter
+                                    <input id="baseDiameter" type="number" value="60">
+                                </label>
+                            </div>
+
+                            <div id="thicknessFields" class="field-group">
+                                <label>
+                                    Thickness
+                                    <input id="baseDistance" type="number" value="6">
+                                </label>
+                            </div>
+
+                            <div id="polygonFields" class="field-group">
+                                <label>
+                                    Diameter
+                                    <input id="polygonDiameter" type="number" value="70">
+                                </label>
+
+                                <label>
+                                    Number of sides
+                                    <input id="polygonSides" type="number" value="6" min="3">
+                                </label>
+                            </div>
+
+                            <div id="polylineFields" class="field-group">
+                                <label for="polylineDescription">Polyline description</label>
+                                <textarea
+                                    id="polylineDescription"
+                                    rows="3"
+                                    placeholder="Example: an L-shaped plate with a 70 mm bottom leg and 40 mm vertical leg"
+                                ></textarea>
+                            </div>
+
+                            <div class="feature-section">
+                                <h3>Features</h3>
+                                <p class="section-description">
+                                    Add cuts or extrusions after the base shape.
+                                </p>
+
+                                <div id="featureList" class="feature-list"></div>
+
+                                <button id="addFeatureButton" class="secondary-button" type="button">
+                                    Add Feature
+                                </button>
+                            </div>
+
+                            <button id="buildManualButton">Build Manual Model</button>
+                        </div>
+
+                        <div class="manual-feedback-column">
+                            <div id="manualPreviewPanel" class="manual-preview-panel hidden">
+                                <div class="manual-preview-header">
+                                    <div>
+                                        <h3>Drawing preview</h3>
+                                        <p id="manualPreviewMessage" class="manual-preview-message">
+                                            Exact manual dimensions create live top, front, and right views.
+                                        </p>
+                                    </div>
+
+                                    <div class="manual-preview-legend">
+                                        <span><i class="legend-base"></i>Base</span>
+                                        <span><i class="legend-extrude"></i>Extrusion</span>
+                                        <span><i class="legend-cut"></i>Cut</span>
+                                    </div>
+                                </div>
+
+                                <div class="manual-preview-views">
+                                    <div class="manual-preview-view-card preview-top-view">
+                                        <h4>Top view</h4>
+                                        <svg
+                                            id="manualPreviewTopSvg"
+                                            class="manual-preview-svg"
+                                            role="img"
+                                            aria-label="Top manual CAD preview"
+                                        ></svg>
+                                    </div>
+
+                                    <div class="manual-preview-ansi-note">
+                                        ANSI third-angle layout: top above front, right-side view to the right.
+                                    </div>
+
+                                    <div class="manual-preview-view-card preview-front-view">
+                                        <h4>Front view</h4>
+                                        <svg
+                                            id="manualPreviewFrontSvg"
+                                            class="manual-preview-svg"
+                                            role="img"
+                                            aria-label="Front manual CAD preview"
+                                        ></svg>
+                                    </div>
+
+                                    <div class="manual-preview-view-card preview-right-view">
+                                        <h4>Right view</h4>
+                                        <svg
+                                            id="manualPreviewRightSvg"
+                                            class="manual-preview-svg"
+                                            role="img"
+                                            aria-label="Right side manual CAD preview"
+                                        ></svg>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="designReviewPanel" class="design-review-panel hidden">
+                                <h3>Design review</h3>
+                                <div id="designReviewWarnings" class="design-review-warnings"></div>
+                            </div>
+                        </div>
                     </div>
-
-                    <div id="circleFields" class="field-group">
-                        <label>
-                            Diameter
-                            <input id="baseDiameter" type="number" value="60">
-                        </label>
-                    </div>
-
-                    <div id="thicknessFields" class="field-group">
-                        <label>
-                            Thickness
-                            <input id="baseDistance" type="number" value="6">
-                        </label>
-                    </div>
-
-                    <div id="polygonFields" class="field-group">
-                        <label>
-                            Diameter
-                            <input id="polygonDiameter" type="number" value="70">
-                        </label>
-
-                        <label>
-                            Number of sides
-                            <input id="polygonSides" type="number" value="6" min="3">
-                        </label>
-                    </div>
-
-                    <div id="polylineFields" class="field-group">
-                        <label for="polylineDescription">Polyline description</label>
-                        <textarea
-                            id="polylineDescription"
-                            rows="3"
-                            placeholder="Example: an L-shaped plate with a 70 mm bottom leg and 40 mm vertical leg"
-                        ></textarea>
-                    </div>
-
-                    <div class="feature-section">
-                        <h3>Features</h3>
-                        <p class="section-description">
-                            Add cuts or extrusions after the base shape.
-                        </p>
-
-                        <div id="featureList" class="feature-list"></div>
-
-                        <button id="addFeatureButton" class="secondary-button" type="button">
-                            Add Feature
-                        </button>
-                    </div>
-
-                    <button id="buildManualButton">Build Manual Model</button>
                 </section>
 
                 <hr>

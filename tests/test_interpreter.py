@@ -965,6 +965,50 @@ def test_cut_extruded_front_face_with_default_tag():
     )
 
 
+def test_through_cut_from_feature_face_continues_into_base():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            },
+            {
+                "type": "add_extrude",
+                "id": "feature_1",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 6,
+                "width": 20,
+                "height": 12,
+            },
+            {
+                "type": "cut",
+                "target": "feature_1.top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "depth": "through",
+                "diameter": 5,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    original_volume = 80 * 50 * 6 + 20 * 12 * 6
+    expected_removed_volume = math.pi * 2.5**2 * 12
+
+    assert solid.Volume() == pytest.approx(
+        original_volume - expected_removed_volume
+    )
+
+
 def test_add_extrude_uses_virtual_side_target_for_polyline_base():
     model_data = {
         "operations": [
