@@ -1,0 +1,77 @@
+{
+  "name": "shaft_with_revolved_collar",
+  "description": "A cylindrical shaft made by revolve with a raised revolved collar around the same axis.",
+  "source_name": "Prompt2ParametricCAD internal eval",
+  "source_url": "https://github.com/DrewTobias27/Prompt2ParametricCAD",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "original_id": "generated/evals/shaft_with_revolved_collar.json",
+  "derived_by": "Hand-authored from validated Prompt2ParametricCAD eval JSON.",
+  "tags": [
+    "revolve",
+    "shaft",
+    "cylinder",
+    "collar",
+    "raised ring",
+    "add revolve",
+    "axisymmetric"
+  ],
+  "construction_plan": [
+    "Create the shaft as a base revolve around a vertical axis in the XY plane.",
+    "Represent the shaft radius with a rectangle offset from the axis.",
+    "Add the collar with add_revolve around the same axis.",
+    "Place the collar profile so it overlaps the shaft radius and protrudes outward."
+  ],
+  "model_data": {
+    "operations": [
+      {
+        "type": "revolve",
+        "id": "base",
+        "plane": "XY",
+        "profile": "rectangle",
+        "positions": [
+          [
+            5,
+            0
+          ]
+        ],
+        "axis_start": [
+          0,
+          -1
+        ],
+        "axis_end": [
+          0,
+          1
+        ],
+        "angle": 360,
+        "width": 10,
+        "height": 40
+      },
+      {
+        "type": "add_revolve",
+        "plane": "XY",
+        "profile": "rectangle",
+        "positions": [
+          [
+            11,
+            0
+          ]
+        ],
+        "axis_start": [
+          0,
+          -1
+        ],
+        "axis_end": [
+          0,
+          1
+        ],
+        "angle": 360,
+        "width": 2,
+        "height": 6
+      }
+    ]
+  },
+  "notes": [
+    "Revolved additions do not use target faces.",
+    "For a collar, reuse the shaft axis and make the new revolved solid overlap the existing shaft."
+  ]
+}

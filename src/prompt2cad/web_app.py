@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from prompt2cad.interpreter import build_model
-from prompt2cad.prompting import prompt_to_model_data
+from prompt2cad.prompting import prompt_to_model_data_with_repair
 from prompt2cad.prompting import suggest_base_model_data
 from prompt2cad.prompting import suggest_feature_model_data
 from prompt2cad.schema import validate_model_data
@@ -80,6 +80,14 @@ def export_model_data(model_data: dict, filename_hint: str) -> dict:
     }
 
 
+def with_repair_history(response_data: dict, repair_history: list[dict]) -> dict:
+    """Attach repair history to a web response when repair was attempted."""
+    if repair_history:
+        response_data["repair_history"] = repair_history
+
+    return response_data
+
+
 @app.get("/download/{filename}")
 def download_step_file(filename: str):
     """Download a generated STEP file."""
@@ -95,13 +103,20 @@ def download_step_file(filename: str):
 def generate_cad(request: CADRequest):
     """Generate CAD model data from a natural language prompt."""
     try:
-        model_data = prompt_to_model_data(request.prompt)
-        return export_model_data(model_data, request.prompt)
+        model_data, repair_history = prompt_to_model_data_with_repair(
+            request.prompt,
+            max_repairs=1,
+        )
+        return with_repair_history(
+            export_model_data(model_data, request.prompt),
+            repair_history,
+        )
     except Exception as error:
         return {
             "status": "error",
             "message": str(error),
             "model_data": model_data if "model_data" in locals() else None,
+            "repair_history": repair_history if "repair_history" in locals() else [],
         }
 
 

@@ -1,0 +1,79 @@
+{
+  "name": "l_shaped_plate_rectangular_cut",
+  "description": "An L-shaped plate made from a polyline base with a rectangular through cut.",
+  "source_name": "Prompt2ParametricCAD internal eval",
+  "source_url": "https://github.com/DrewTobias27/Prompt2ParametricCAD",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "original_id": "generated/evals/l_shaped_plate_rectangular_cut.json",
+  "derived_by": "Hand-authored from validated Prompt2ParametricCAD eval JSON.",
+  "tags": [
+    "polyline",
+    "l shape",
+    "l-shaped",
+    "stepped plate",
+    "rectangular cut",
+    "through cut",
+    "base.top"
+  ],
+  "construction_plan": [
+    "Use a polyline base when the main outline is a straight-edged non-rectangle.",
+    "List the outer boundary points in order and do not repeat the first point.",
+    "Extrude the polyline to make the plate thickness.",
+    "Cut a rectangle on base.top inside the solid region."
+  ],
+  "model_data": {
+    "operations": [
+      {
+        "type": "extrude",
+        "id": "base",
+        "plane": "XY",
+        "profile": "polyline",
+        "distance": 6,
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            80,
+            0
+          ],
+          [
+            80,
+            20
+          ],
+          [
+            40,
+            20
+          ],
+          [
+            40,
+            60
+          ],
+          [
+            0,
+            60
+          ]
+        ]
+      },
+      {
+        "type": "cut",
+        "target": "base.top",
+        "profile": "rectangle",
+        "positions": [
+          [
+            30,
+            30
+          ]
+        ],
+        "depth": "through",
+        "width": 12,
+        "height": 8
+      }
+    ]
+  },
+  "notes": [
+    "Use polyline for arbitrary straight-edged closed profiles.",
+    "Do not use a template name like bracket when the geometry can be represented directly as points."
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "fusion_360_rectangular_prism_sample",
+  "description": "A source-derived single rectangular prism converted from a Fusion 360 Gallery regraph face-extrusion sequence.",
+  "source_name": "Autodesk Fusion 360 Gallery Reconstruction Dataset",
+  "source_url": "https://github.com/AutodeskAILab/Fusion360GalleryDataset",
+  "source_license": "Non-commercial research license; see https://github.com/AutodeskAILab/Fusion360GalleryDataset/blob/master/LICENSE.md",
+  "original_id": "r1.0.1_regraph_05/regraph/102175_699d5e7c_0003_sequence.json",
+  "derived_by": "Derived from Fusion 360 Gallery Reconstruction Dataset construction sequence after conversion to Prompt2ParametricCAD JSON.",
+  "tags": [
+    "fusion 360",
+    "source-derived",
+    "rectangle",
+    "single extrude",
+    "new body",
+    "base extrusion"
+  ],
+  "construction_plan": [
+    "Read the Fusion 360 regraph sequence and find the single NewBody extrude.",
+    "Use the start and end face centroids to infer the extrusion axis.",
+    "Use the source bounding box for the rectangular sketch dimensions and extrusion distance.",
+    "Convert Fusion 360 Gallery centimeters to Prompt2ParametricCAD millimeters."
+  ],
+  "model_data": {
+    "operations": [
+      {
+        "type": "extrude",
+        "id": "base",
+        "plane": "XY",
+        "profile": "rectangle",
+        "width": 39.0,
+        "height": 68.0,
+        "distance": 10.0
+      }
+    ]
+  },
+  "notes": [
+    "This is a conservative bounding-box conversion from regraph data, not a full raw Fusion timeline conversion.",
+    "Converted dimensions: 39.0 mm by 68.0 mm by 10.0 mm."
+  ]
+}

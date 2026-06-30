@@ -1,0 +1,73 @@
+{
+  "name": "circular_flange_six_bolt_holes",
+  "description": "A circular flange plate with six evenly spaced circular bolt holes.",
+  "source_name": "Prompt2ParametricCAD internal eval",
+  "source_url": "https://github.com/DrewTobias27/Prompt2ParametricCAD",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "original_id": "generated/evals/circular_flange_six_bolt_holes.json",
+  "derived_by": "Hand-authored from validated Prompt2ParametricCAD eval JSON.",
+  "tags": [
+    "circle",
+    "flange",
+    "bolt holes",
+    "six holes",
+    "circular pattern",
+    "through holes",
+    "base.top"
+  ],
+  "construction_plan": [
+    "Create a circular base extrusion on the XY plane.",
+    "Use one circular cut operation with six positions arranged around the origin.",
+    "Keep the bolt-circle radius smaller than the base radius.",
+    "Use depth \"through\" because bolt holes pass through the flange."
+  ],
+  "model_data": {
+    "operations": [
+      {
+        "type": "extrude",
+        "id": "base",
+        "plane": "XY",
+        "profile": "circle",
+        "distance": 8,
+        "diameter": 80
+      },
+      {
+        "type": "cut",
+        "target": "base.top",
+        "profile": "circle",
+        "positions": [
+          [
+            30,
+            0
+          ],
+          [
+            15,
+            25.981
+          ],
+          [
+            -15,
+            25.981
+          ],
+          [
+            -30,
+            0
+          ],
+          [
+            -15,
+            -25.981
+          ],
+          [
+            15,
+            -25.981
+          ]
+        ],
+        "depth": "through",
+        "diameter": 6
+      }
+    ]
+  },
+  "notes": [
+    "Circular patterns can be represented directly by listing the repeated positions.",
+    "For a six-hole pattern, use points every 60 degrees around the center."
+  ]
+}

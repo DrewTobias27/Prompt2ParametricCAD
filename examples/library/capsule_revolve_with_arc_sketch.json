@@ -1,0 +1,97 @@
+{
+  "name": "capsule_revolve_with_arc_sketch",
+  "description": "A capsule-like revolved solid with rounded hemispherical ends represented by true sketch arc segments.",
+  "source_name": "Prompt2ParametricCAD internal example",
+  "source_url": "https://github.com/DrewTobias27/Prompt2ParametricCAD",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "original_id": "arc/revolve prompting example",
+  "derived_by": "Hand-authored from validated Prompt2ParametricCAD sketch-arc revolve behavior.",
+  "tags": [
+    "revolve",
+    "capsule",
+    "rounded ends",
+    "hemisphere",
+    "arc",
+    "sketch",
+    "cylinder",
+    "lathe"
+  ],
+  "construction_plan": [
+    "Use a sketch profile when the revolved outline needs true circular arcs.",
+    "Start on the revolve axis at one end of the part.",
+    "Use arc segments for the rounded end transitions and line segments for the straight side.",
+    "Close the sketch back to the axis, then revolve 360 degrees around the vertical axis."
+  ],
+  "model_data": {
+    "operations": [
+      {
+        "type": "revolve",
+        "id": "base",
+        "plane": "XY",
+        "profile": "sketch",
+        "positions": [
+          [
+            0,
+            0
+          ]
+        ],
+        "axis_start": [
+          0,
+          -1
+        ],
+        "axis_end": [
+          0,
+          1
+        ],
+        "angle": 360,
+        "start": [
+          0,
+          -30
+        ],
+        "segments": [
+          {
+            "type": "arc",
+            "through": [
+              5,
+              -28.660254
+            ],
+            "to": [
+              10,
+              -20
+            ]
+          },
+          {
+            "type": "line",
+            "to": [
+              10,
+              20
+            ]
+          },
+          {
+            "type": "arc",
+            "through": [
+              5,
+              28.660254
+            ],
+            "to": [
+              0,
+              30
+            ]
+          },
+          {
+            "type": "line",
+            "to": [
+              0,
+              -30
+            ]
+          }
+        ],
+        "close": true
+      }
+    ]
+  },
+  "notes": [
+    "Do not approximate smooth arcs with many polyline points when a sketch arc is supported.",
+    "For a full solid of revolution, the profile should be a closed area on one side of the revolve axis."
+  ]
+}

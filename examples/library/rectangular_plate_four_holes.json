@@ -1,0 +1,67 @@
+{
+  "name": "rectangular_plate_four_holes",
+  "description": "A rectangular mounting plate with four identical circular through holes near the corners.",
+  "source_name": "Prompt2ParametricCAD internal eval",
+  "source_url": "https://github.com/DrewTobias27/Prompt2ParametricCAD",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "original_id": "generated/evals/rectangular_plate_four_holes.json",
+  "derived_by": "Hand-authored from validated Prompt2ParametricCAD eval JSON.",
+  "tags": [
+    "rectangle",
+    "plate",
+    "mounting",
+    "four holes",
+    "corner holes",
+    "circular through holes",
+    "repeated cut",
+    "base.top"
+  ],
+  "construction_plan": [
+    "Create a rectangular base extrusion on the XY plane.",
+    "Use one circular cut operation with four positions instead of four separate cut operations.",
+    "Place the holes symmetrically inside the plate boundaries.",
+    "Use depth \"through\" for holes that pass completely through the plate."
+  ],
+  "model_data": {
+    "operations": [
+      {
+        "type": "extrude",
+        "id": "base",
+        "plane": "XY",
+        "profile": "rectangle",
+        "distance": 6,
+        "width": 100,
+        "height": 60
+      },
+      {
+        "type": "cut",
+        "target": "base.top",
+        "profile": "circle",
+        "positions": [
+          [
+            40,
+            20
+          ],
+          [
+            -40,
+            20
+          ],
+          [
+            -40,
+            -20
+          ],
+          [
+            40,
+            -20
+          ]
+        ],
+        "depth": "through",
+        "diameter": 8
+      }
+    ]
+  },
+  "notes": [
+    "Repeated identical holes should usually share one cut operation with multiple positions.",
+    "Keep hole centers far enough from the edges that the holes stay inside the solid."
+  ]
+}

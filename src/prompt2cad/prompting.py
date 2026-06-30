@@ -4,7 +4,11 @@ import json
 
 from openai import OpenAI
 
-from prompt2cad.schema import CAD_MODEL_SCHEMA
+from prompt2cad.diagnostics import check_model_data
+from prompt2cad.example_library import format_examples_for_prompt
+from prompt2cad.example_library import select_relevant_examples
+from prompt2cad.schema import OPENAI_CAD_MODEL_SCHEMA
+from prompt2cad.schema import OPENAI_RELATIONAL_CAD_MODEL_SCHEMA
 
 
 BASE_SUGGESTION_INSTRUCTIONS = """
@@ -82,7 +86,33 @@ You convert natural language CAD requests into JSON for a CadQuery-based
 CAD interpreter. Return only valid model data. Use millimeters for all
 dimensions.
 
-The output must be an object with one key: operations.
+The output must be an object with two keys:
+- operations
+- relationships
+
+relationships must be an array. Use [] only for very simple one-feature parts.
+For multi-feature parts, include relationship constraints that explain the
+important design intent between features.
+
+You may receive input as JSON with:
+- user_prompt: the CAD request to satisfy
+- retrieved_examples: similar solved examples from this project
+
+Use retrieved_examples as guidance for construction strategy, feature order,
+target names, profiles, and repeated-position patterns. Do not blindly copy an
+example if its dimensions or features do not match the user_prompt.
+
+Supported relationship constraints:
+- centered_on: feature is centered on a reference feature or face.
+  Example: {"type": "centered_on", "feature": "boss", "reference": "base", "tolerance": 0.001}
+- inside: feature stays inside a container's top-view bounds.
+  Example: {"type": "inside", "feature": "hole_pattern", "container": "base", "margin": 5}
+- smaller_than: feature is proportionally smaller than a reference.
+  Example: {"type": "smaller_than", "feature": "boss", "reference": "base", "max_width_fraction": 0.6, "max_height_fraction": 0.6}
+- must_connect: feature must connect to another feature or solid.
+  Example: {"type": "must_connect", "feature": "center_block", "to": "base"}
+
+Use stable feature ids when relationships need to refer to added features.
 
 The first operation should create the base solid:
 - Use id "base".
@@ -191,9 +221,52 @@ target face.
 """.strip()
 
 
+CAD_REPAIR_INSTRUCTIONS = """
+You repair JSON model data for a CadQuery-based CAD interpreter. Return only
+valid model data with two keys: operations and relationships.
+
+You will receive:
+- the original user prompt
+- failed CAD JSON
+- local CAD failure analysis
+
+Your job is to revise the JSON so it preserves the user's intent while fixing
+the identified CAD problem.
+
+Important repair rules:
+- Do not return the same geometry with tiny numeric changes.
+- Use the failure reason and suggested fixes directly.
+- The final model must build as one connected, valid solid.
+- If an inner object sits inside a through-cut frame opening, either add bridge
+  tabs/ribs connecting it to the frame or replace the through cut with a shallow
+  pocket/recess.
+- Keep added extrusions overlapping existing solid material.
+- Keep cuts inside the target face.
+- Preserve useful relationship constraints and update them when the repaired
+  geometry changes.
+- Prefer simple, robust geometry over clever fragile geometry.
+""".strip()
+
+
 def create_openai_client() -> OpenAI:
     """Create an OpenAI API client using the OPENAI_API_KEY environment variable."""
     return OpenAI()
+
+
+def build_generation_input(user_prompt: str, max_examples: int = 3) -> str:
+    """Build the API input with locally retrieved CAD examples."""
+    examples = select_relevant_examples(
+        user_prompt,
+        max_examples=max_examples,
+    )
+    if not examples:
+        return user_prompt
+
+    generation_input = {
+        "user_prompt": user_prompt,
+        "retrieved_examples": json.loads(format_examples_for_prompt(examples)),
+    }
+    return json.dumps(generation_input, indent=2)
 
 
 def prompt_to_model_data(user_prompt: str) -> dict:
@@ -203,18 +276,77 @@ def prompt_to_model_data(user_prompt: str) -> dict:
     response = client.responses.create(
         model="gpt-5-mini",
         instructions=CAD_PROMPT_INSTRUCTIONS,
-        input=user_prompt,
+        input=build_generation_input(user_prompt),
         text={
             "format": {
                 "type": "json_schema",
                 "name": "cad_model",
-                "schema": CAD_MODEL_SCHEMA,
+                "schema": OPENAI_RELATIONAL_CAD_MODEL_SCHEMA,
                 "strict": True,
             }
         },
     )
 
     return json.loads(response.output_text)
+
+
+def repair_model_data(
+    user_prompt: str,
+    failed_model_data: dict,
+    failure_analysis: dict,
+) -> dict:
+    """Ask the model to repair failed CAD JSON using local diagnostics."""
+    client = create_openai_client()
+    repair_request = {
+        "user_prompt": user_prompt,
+        "failed_model_data": failed_model_data,
+        "failure_analysis": failure_analysis,
+    }
+
+    response = client.responses.create(
+        model="gpt-5-mini",
+        instructions=CAD_REPAIR_INSTRUCTIONS,
+        input=json.dumps(repair_request),
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "cad_repaired_model",
+                "schema": OPENAI_RELATIONAL_CAD_MODEL_SCHEMA,
+                "strict": True,
+            }
+        },
+    )
+
+    return json.loads(response.output_text)
+
+
+def prompt_to_model_data_with_repair(
+    user_prompt: str,
+    max_repairs: int = 1,
+) -> tuple[dict, list[dict]]:
+    """Generate CAD JSON and use at most a small number of repair attempts."""
+    model_data = prompt_to_model_data(user_prompt)
+    repair_history = []
+
+    for _ in range(max_repairs):
+        diagnosis = check_model_data(model_data)
+        if diagnosis["passed"]:
+            return model_data, repair_history
+
+        repaired_model_data = repair_model_data(
+            user_prompt,
+            model_data,
+            diagnosis,
+        )
+        repair_history.append(
+            {
+                "failure_analysis": diagnosis,
+                "repaired_model_data": repaired_model_data,
+            }
+        )
+        model_data = repaired_model_data
+
+    return model_data, repair_history
 
 
 def suggest_base_model_data(
@@ -238,7 +370,7 @@ def suggest_base_model_data(
             "format": {
                 "type": "json_schema",
                 "name": "cad_base_model",
-                "schema": CAD_MODEL_SCHEMA,
+                "schema": OPENAI_CAD_MODEL_SCHEMA,
                 "strict": True,
             }
         },
@@ -270,7 +402,7 @@ def suggest_feature_model_data(
             "format": {
                 "type": "json_schema",
                 "name": "cad_feature_model",
-                "schema": CAD_MODEL_SCHEMA,
+                "schema": OPENAI_CAD_MODEL_SCHEMA,
                 "strict": True,
             }
         },

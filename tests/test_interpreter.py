@@ -1473,3 +1473,45 @@ def test_api_rectangular_plate_example():
     solid = part.solids().val()
 
     assert solid.Volume() == pytest.approx(80 * 50 * 6)
+
+
+def test_named_multi_position_add_extrude_builds_one_valid_model():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "add_extrude",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [
+                    [30, 19],
+                    [-30, 19],
+                    [30, -19],
+                    [-30, -19],
+                ],
+                "id": "feature_1",
+                "distance": 6,
+                "width": 20,
+                "height": 12,
+            },
+        ]
+    }
+
+    validate_model_data(model_data)
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    base_volume = 80 * 50 * 6
+    added_volume = 4 * 20 * 12 * 6
+
+    assert len(part.solids().vals()) == 1
+    assert solid.isValid()
+    assert solid.Volume() == pytest.approx(base_volume + added_volume)

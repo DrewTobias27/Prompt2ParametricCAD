@@ -1,7 +1,10 @@
 """Tests for CAD model schema validation."""
 
 import pytest
+from jsonschema import validate
 
+from prompt2cad.schema import OPENAI_CAD_MODEL_SCHEMA
+from prompt2cad.schema import OPENAI_RELATIONAL_CAD_MODEL_SCHEMA
 from prompt2cad.schema import validate_model_data
 
 
@@ -336,6 +339,165 @@ from prompt2cad.schema import validate_model_data
 )
 def test_validate_model_data_accepts_supported_operation_schema(operation):
     validate_model_data({"operations": [operation]})
+
+
+def test_validate_model_data_accepts_named_multi_position_add_extrude():
+    """Accept manual-builder additive patterns with one feature id."""
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "add_extrude",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [
+                    [30, 19],
+                    [-30, 19],
+                    [30, -19],
+                    [-30, -19],
+                ],
+                "id": "feature_1",
+                "distance": 6,
+                "width": 20,
+                "height": 12,
+            },
+        ]
+    }
+
+    validate_model_data(model_data)
+
+
+def test_validate_model_data_accepts_relationships():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "add_extrude",
+                "id": "boss",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 6,
+                "width": 20,
+                "height": 12,
+            },
+        ],
+        "relationships": [
+            {
+                "type": "centered_on",
+                "feature": "boss",
+                "reference": "base",
+                "tolerance": 0.001,
+            },
+            {
+                "type": "inside",
+                "feature": "boss",
+                "container": "base",
+                "margin": 2,
+            },
+            {
+                "type": "smaller_than",
+                "feature": "boss",
+                "reference": "base",
+                "max_width_fraction": 0.5,
+                "max_height_fraction": 0.5,
+            },
+            {
+                "type": "must_connect",
+                "feature": "boss",
+                "to": "base",
+            },
+        ],
+    }
+
+    validate_model_data(model_data)
+
+
+def test_openai_schema_excludes_optional_add_extrude_id():
+    """Keep Structured Outputs schema strict while local schema allows ids."""
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "add_extrude",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 6,
+                "width": 20,
+                "height": 12,
+            },
+        ]
+    }
+
+    validate(instance=model_data, schema=OPENAI_CAD_MODEL_SCHEMA)
+
+
+def test_openai_relational_schema_requires_relationships_array():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            }
+        ],
+        "relationships": [],
+    }
+
+    validate(instance=model_data, schema=OPENAI_RELATIONAL_CAD_MODEL_SCHEMA)
+
+
+def test_openai_schema_object_properties_are_all_required():
+    """Match OpenAI Structured Outputs strict schema requirements."""
+
+    def check_schema(schema: dict) -> None:
+        if schema.get("type") == "object":
+            properties = schema.get("properties", {})
+            required = set(schema.get("required", []))
+            assert set(properties) == required
+
+        for key in ("anyOf", "oneOf", "allOf"):
+            for child_schema in schema.get(key, []):
+                check_schema(child_schema)
+
+        for child_schema in schema.get("properties", {}).values():
+            check_schema(child_schema)
+
+        items = schema.get("items")
+        if isinstance(items, dict):
+            check_schema(items)
+
+    check_schema(OPENAI_CAD_MODEL_SCHEMA)
+    check_schema(OPENAI_RELATIONAL_CAD_MODEL_SCHEMA)
 
 
 def test_validate_model_data_rejects_missing_width():

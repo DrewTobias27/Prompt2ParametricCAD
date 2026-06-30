@@ -1,0 +1,70 @@
+{
+  "name": "rectangular_block_front_hole_top_boss",
+  "description": "A rectangular block with a circular through hole on the front face and a raised rectangular boss on the top face.",
+  "source_name": "Prompt2ParametricCAD internal eval",
+  "source_url": "https://github.com/DrewTobias27/Prompt2ParametricCAD",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "original_id": "generated/evals/rectangular_block_front_hole_top_boss.json",
+  "derived_by": "Hand-authored from validated Prompt2ParametricCAD eval JSON.",
+  "tags": [
+    "rectangle",
+    "block",
+    "front face",
+    "side face",
+    "circular side hole",
+    "top boss",
+    "add extrusion",
+    "base.front",
+    "base.top"
+  ],
+  "construction_plan": [
+    "Create a rectangular base block with enough thickness for side-face features.",
+    "Cut the circular hole from base.front using side-face coordinates.",
+    "Use a second-coordinate value near 0 on side faces so the feature stays centered vertically.",
+    "Add the rectangular boss on base.top using normal top-view XY coordinates."
+  ],
+  "model_data": {
+    "operations": [
+      {
+        "type": "extrude",
+        "id": "base",
+        "plane": "XY",
+        "profile": "rectangle",
+        "distance": 20,
+        "width": 80,
+        "height": 50
+      },
+      {
+        "type": "cut",
+        "target": "base.front",
+        "profile": "circle",
+        "positions": [
+          [
+            0,
+            0
+          ]
+        ],
+        "depth": "through",
+        "diameter": 10
+      },
+      {
+        "type": "add_extrude",
+        "target": "base.top",
+        "profile": "rectangle",
+        "positions": [
+          [
+            0,
+            0
+          ]
+        ],
+        "distance": 6,
+        "width": 20,
+        "height": 10
+      }
+    ]
+  },
+  "notes": [
+    "Side-face positions are not the same as top-view positions.",
+    "For side faces, the second coordinate is vertical height relative to the center of that face."
+  ]
+}
