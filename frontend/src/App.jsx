@@ -755,6 +755,9 @@ function BasePreview({ baseGeometry, mapper }) {
 
 function FeaturePreview({ feature, mapper, featureCount, projectedDimensionCount, featureGroups, annotation }) {
   let className = feature.operation === "cut" ? "preview-cut" : "preview-extrude";
+  if (feature.operation === "cut" && !feature.isPrimary) {
+    className = "preview-hidden-cut";
+  }
   if (feature.isPrimary && !previewFeatureInsideBase(feature)) {
     className += " preview-outside";
   }

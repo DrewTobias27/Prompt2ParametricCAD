@@ -487,6 +487,13 @@ textarea {
   stroke-width: 2;
 }
 
+.preview-hidden-cut {
+  fill: none;
+  stroke: #dc2626;
+  stroke-dasharray: 8 5;
+  stroke-width: 1.4;
+}
+
 .preview-outside {
   fill: #fecaca;
   stroke: #991b1b;
