@@ -1,0 +1,112 @@
+[
+  {
+    "name": "Mounting plate",
+    "purpose": "Simple rectangular base with repeated through holes.",
+    "base": {
+      "profile": "rectangle",
+      "width": 100,
+      "height": 70,
+      "thickness": 8
+    },
+    "features": [
+      {
+        "operation": "cut",
+        "target": "base.top",
+        "profile": "circle",
+        "pattern": "circular",
+        "x": 35,
+        "y": 22,
+        "copies": 4,
+        "diameter": 6,
+        "depthMode": "through"
+      }
+    ],
+    "checks_to_try": [
+      "Move the hole pattern closer to the edge and confirm a warning appears.",
+      "Increase hole diameter until holes overlap and confirm an error appears.",
+      "Confirm the drawing preview groups the holes as one repeated-hole callout."
+    ]
+  },
+  {
+    "name": "Circular flange",
+    "purpose": "Circular base with raised boss, center hole, and bolt circle.",
+    "base": {
+      "profile": "circle",
+      "diameter": 90,
+      "thickness": 10
+    },
+    "features": [
+      {
+        "operation": "add_extrude",
+        "target": "base.top",
+        "profile": "circle",
+        "diameter": 32,
+        "amount": 12
+      },
+      {
+        "operation": "cut",
+        "target": "base.top",
+        "profile": "circle",
+        "pattern": "circular",
+        "x": 30,
+        "y": 0,
+        "copies": 6,
+        "diameter": 6,
+        "depthMode": "through"
+      },
+      {
+        "operation": "cut",
+        "target": "feature_1.top",
+        "profile": "circle",
+        "diameter": 12,
+        "depthMode": "through"
+      }
+    ],
+    "checks_to_try": [
+      "Confirm the bolt circle centerline appears in the drawing preview.",
+      "Confirm the grouped hole callout includes equal spacing and bolt-circle diameter.",
+      "Confirm Feature 3 can target Feature 1 top."
+    ]
+  },
+  {
+    "name": "Boss block with side cut",
+    "purpose": "Tests feature-face targeting and side-face projected drawing views.",
+    "base": {
+      "profile": "rectangle",
+      "width": 90,
+      "height": 55,
+      "thickness": 10
+    },
+    "features": [
+      {
+        "operation": "add_extrude",
+        "target": "base.top",
+        "profile": "rectangle",
+        "width": 28,
+        "height": 20,
+        "amount": 12
+      },
+      {
+        "operation": "cut",
+        "target": "feature_1.top",
+        "profile": "circle",
+        "diameter": 8,
+        "depthMode": "through"
+      },
+      {
+        "operation": "cut",
+        "target": "base.right",
+        "profile": "rectangle",
+        "width": 24,
+        "height": 5,
+        "amount": 6,
+        "depthMode": "blind"
+      }
+    ],
+    "checks_to_try": [
+      "Confirm front and right drawing views show projected feature geometry.",
+      "Confirm through-cut depth does not cut both directions from the target face.",
+      "Confirm feature cards show warning badges if geometry is moved out of bounds."
+    ]
+  }
+]
