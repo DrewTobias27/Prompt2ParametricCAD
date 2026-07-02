@@ -201,8 +201,8 @@ function emptyViews() {
   };
 }
 
-function reviewWarning(severity, title, message) {
-  return { severity, title, message };
+function reviewWarning(severity, title, message, options = {}) {
+  return { severity, title, message, ...options };
 }
 
 function numberValue(value) {
@@ -740,6 +740,10 @@ function collectExactFeaturePreviewData(baseGeometry, features) {
           "warning",
           `Feature ${featureNumber} cut is deeper than its target`,
           "This blind cut is deeper than the material available normal to its target face. Use a through cut if that is intentional.",
+          {
+            featureNumbers: [featureNumber],
+            suggestion: "Switch to a through cut or reduce the blind depth below the target thickness.",
+          },
         ),
       );
     }
@@ -842,6 +846,10 @@ function checkFeatureBoundaryWarnings(featureData) {
           severity,
           `Feature ${feature.featureNumber} may hang off the base`,
           `This ${action} extends outside the base boundary. Move it inward or reduce its size.`,
+          {
+            featureNumbers: [feature.featureNumber],
+            suggestion: "Move the feature center inward or reduce its width, height, or diameter.",
+          },
         ),
       );
       continue;
@@ -853,6 +861,10 @@ function checkFeatureBoundaryWarnings(featureData) {
           "warning",
           `Feature ${feature.featureNumber} is close to an edge`,
           `This ${action} is within about ${REVIEW_EDGE_MARGIN} mm of the base edge. That may leave weak material near the feature.`,
+          {
+            featureNumbers: [feature.featureNumber],
+            suggestion: `Leave at least ${REVIEW_EDGE_MARGIN} mm from the feature edge to the outside boundary.`,
+          },
         ),
       );
     }
@@ -877,6 +889,10 @@ function checkFeatureSizeWarnings(featureData) {
           "warning",
           `Feature ${feature.featureNumber} is very large`,
           "This feature is large relative to the base. Check that it is intentional and leaves enough surrounding material.",
+          {
+            featureNumbers: [feature.featureNumber],
+            suggestion: "Reduce the feature size or increase the target face size if this is not intentional.",
+          },
         ),
       );
     }
@@ -914,6 +930,10 @@ function checkHoleSpacingWarnings(featureData) {
               "error",
               "Circular cuts overlap",
               `Features ${first.featureNumber} and ${second.featureNumber} overlap in the same drawing view. Move them apart or reduce their diameters.`,
+              {
+                featureNumbers: [first.featureNumber, second.featureNumber],
+                suggestion: "Increase the spacing between hole centers or reduce one of the hole diameters.",
+              },
             ),
           );
         } else if (clearDistance < REVIEW_MIN_FEATURE_SPACING) {
@@ -922,6 +942,10 @@ function checkHoleSpacingWarnings(featureData) {
               "warning",
               "Circular cuts are very close",
               `Features ${first.featureNumber} and ${second.featureNumber} leave only ${clearDistance.toFixed(1)} mm between holes in the same drawing view.`,
+              {
+                featureNumbers: [first.featureNumber, second.featureNumber],
+                suggestion: `Leave at least ${REVIEW_MIN_FEATURE_SPACING} mm of material between circular cuts.`,
+              },
             ),
           );
         }
@@ -947,6 +971,10 @@ function checkPatternSymmetryWarnings(featureData, features) {
             "warning",
             `Feature ${featureNumber} circular pattern needs more copies`,
             "Use at least 2 copies for a circular pattern.",
+            {
+              featureNumbers: [featureNumber],
+              suggestion: "Increase circular copies to 2 or more, or switch the pattern back to Single.",
+            },
           ),
         );
       } else if (records.length > 0 && records.length < requestedCount) {
@@ -955,6 +983,10 @@ function checkPatternSymmetryWarnings(featureData, features) {
             "warning",
             `Feature ${featureNumber} circular pattern collapses`,
             "The seed position is probably at the origin, so rotated copies land on top of each other. Move the feature away from [0, 0].",
+            {
+              featureNumbers: [featureNumber],
+              suggestion: "Set Position X or Position Y away from zero so the copies form a real circle.",
+            },
           ),
         );
       }
@@ -966,6 +998,10 @@ function checkPatternSymmetryWarnings(featureData, features) {
           "warning",
           `Feature ${featureNumber} mirror pattern collapses`,
           "The feature may be centered on the mirror axis, so the mirrored copy lands on the original position.",
+          {
+            featureNumbers: [featureNumber],
+            suggestion: "Move the feature off the selected mirror axis or turn off that mirror checkbox.",
+          },
         ),
       );
     }
@@ -984,6 +1020,10 @@ function checkSharpInternalCornerWarnings(features) {
           "info",
           `Feature ${index + 1} has sharp internal corners`,
           "Rectangular CNC pockets and slots usually need internal corner radii or relief cuts.",
+          {
+            featureNumbers: [index + 1],
+            suggestion: "If this will be CNC machined, consider a rounded slot, dogbone relief, or corner radius.",
+          },
         ),
       );
     }

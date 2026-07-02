@@ -230,6 +230,11 @@ function ManualBuilder({
   onSubmit,
   isLoading,
 }) {
+  const featureReviewMap = useMemo(
+    () => featureWarningsByNumber(preview.buildPreviewModel({ base, features }).warnings),
+    [base, features],
+  );
+
   function updateBase(field, value) {
     setBase((current) => ({ ...current, [field]: value }));
   }
@@ -389,6 +394,7 @@ function ManualBuilder({
             onMoveDown={() => moveFeature(index, 1)}
             canMoveUp={index > 0}
             canMoveDown={index < features.length - 1}
+            warnings={featureReviewMap.get(index + 1) ?? []}
           />
         ))}
 
@@ -428,6 +434,7 @@ function FeatureEditor({
   onMoveDown,
   canMoveUp,
   canMoveDown,
+  warnings,
 }) {
   const targetOptions = targetOptionsForFeature(allFeatures, index);
   const isCut = feature.operation === "cut";
@@ -440,6 +447,18 @@ function FeatureEditor({
         <div>
           <h4>Feature {index + 1}</h4>
           <p className="feature-summary">{featureSummaryText(feature)}</p>
+          {warnings.length > 0 && (
+            <div className="feature-badges">
+              {warnings.slice(0, 2).map((warning) => (
+                <span className={`feature-badge ${warning.severity}`} key={`${warning.title}-${warning.message}`}>
+                  {warning.severity}: {warning.title.replace(`Feature ${index + 1} `, "")}
+                </span>
+              ))}
+              {warnings.length > 2 && (
+                <span className="feature-badge info">+{warnings.length - 2} more</span>
+              )}
+            </div>
+          )}
         </div>
         <div className="feature-actions" aria-label={`Feature ${index + 1} actions`}>
           <button type="button" className="quiet-button" onClick={onMoveUp} disabled={!canMoveUp}>
@@ -1700,6 +1719,7 @@ function DesignReview({ base, features, usesApiAssistance }) {
               <div className={`review-item ${warning.severity}`} key={`${warning.title}-${warning.message}`}>
                 <strong>{warning.title}</strong>
                 <p>{warning.message}</p>
+                {warning.suggestion && <p className="review-suggestion">Suggested fix: {warning.suggestion}</p>}
               </div>
             ))}
           </div>
@@ -1776,6 +1796,40 @@ function cloneFeature(feature, featureNumber) {
     requestedName: `feature_${featureNumber}`,
     x: Number(feature.x) + 8,
   };
+}
+
+function featureWarningsByNumber(warnings) {
+  const map = new Map();
+
+  for (const warning of warnings) {
+    for (const featureNumber of warning.featureNumbers ?? []) {
+      if (!map.has(featureNumber)) {
+        map.set(featureNumber, []);
+      }
+      map.get(featureNumber).push(warning);
+    }
+  }
+
+  for (const [featureNumber, featureWarnings] of map.entries()) {
+    map.set(featureNumber, featureWarnings.sort((first, second) => (
+      severityRank(second.severity) - severityRank(first.severity)
+    )));
+  }
+
+  return map;
+}
+
+function severityRank(severity) {
+  if (severity === "error") {
+    return 3;
+  }
+  if (severity === "warning") {
+    return 2;
+  }
+  if (severity === "info") {
+    return 1;
+  }
+  return 0;
 }
 
 function featureSummaryText(feature) {

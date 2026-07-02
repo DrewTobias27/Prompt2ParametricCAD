@@ -299,6 +299,38 @@ textarea {
   line-height: 1.4;
 }
 
+.feature-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.feature-badge {
+  border-radius: 999px;
+  padding: 0.24rem 0.55rem;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.feature-badge.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.feature-badge.warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.feature-badge.info {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
 .feature-actions {
   display: flex;
   flex-wrap: wrap;
@@ -576,6 +608,10 @@ textarea {
 
 .review-item p {
   margin: 4px 0 0;
+}
+
+.review-suggestion {
+  font-weight: 650;
 }
 
 .review-item.success {
