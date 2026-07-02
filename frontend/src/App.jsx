@@ -28,6 +28,40 @@ const TARGET_OPTIONS = [
 const DIAMETER_SYMBOL = "\u00D8";
 const MULTIPLY_SYMBOL = "\u00D7";
 
+const MANUAL_PRESETS = [
+  {
+    id: "mounting_plate",
+    name: "Mounting plate",
+    description: "Rectangular plate with four through holes.",
+    base: { profile: "rectangle", width: 100, height: 70, thickness: 8 },
+    features: [
+      { operation: "cut", profile: "circle", pattern: "circular", x: 35, y: 22, copies: 4, diameter: 6, depthMode: "through" },
+    ],
+  },
+  {
+    id: "flange",
+    name: "Flange",
+    description: "Circular base, center boss, and bolt circle.",
+    base: { profile: "circle", diameter: 90, thickness: 10 },
+    features: [
+      { operation: "add_extrude", profile: "circle", target: "base.top", diameter: 32, amount: 12 },
+      { operation: "cut", profile: "circle", target: "base.top", pattern: "circular", x: 30, y: 0, copies: 6, diameter: 6, depthMode: "through" },
+      { operation: "cut", profile: "circle", target: "feature_1.top", diameter: 12, depthMode: "through" },
+    ],
+  },
+  {
+    id: "boss_block",
+    name: "Boss block",
+    description: "Rectangular block with raised boss and side cut.",
+    base: { profile: "rectangle", width: 90, height: 55, thickness: 10 },
+    features: [
+      { operation: "add_extrude", profile: "rectangle", target: "base.top", width: 28, height: 20, amount: 12 },
+      { operation: "cut", profile: "circle", target: "feature_1.top", diameter: 8, depthMode: "through" },
+      { operation: "cut", profile: "rectangle", target: "base.right", width: 24, height: 5, amount: 6, depthMode: "blind" },
+    ],
+  },
+];
+
 export default function App() {
   const [mode, setMode] = useState("manual");
   const [prompt, setPrompt] = useState("Create an 80 mm by 50 mm rectangular plate that is 6 mm thick.");
@@ -210,6 +244,47 @@ function ManualBuilder({
     setFeatures((current) => current.filter((_, featureIndex) => featureIndex !== indexToRemove));
   }
 
+  function duplicateFeature(indexToDuplicate) {
+    setFeatures((current) => {
+      const duplicate = cloneFeature(current[indexToDuplicate], current.length + 1);
+      return [
+        ...current.slice(0, indexToDuplicate + 1),
+        duplicate,
+        ...current.slice(indexToDuplicate + 1),
+      ];
+    });
+  }
+
+  function moveFeature(indexToMove, direction) {
+    setFeatures((current) => {
+      const nextIndex = indexToMove + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) {
+        return current;
+      }
+
+      const reordered = [...current];
+      const [feature] = reordered.splice(indexToMove, 1);
+      reordered.splice(nextIndex, 0, feature);
+      return reordered;
+    });
+  }
+
+  function applyPreset(preset) {
+    setBase({
+      ...defaultBase,
+      ...preset.base,
+      reasonable: false,
+      polylineDescription: "",
+    });
+    setFeatures(preset.features.map((featureData, featureIndex) => ({
+      ...createFeature(featureIndex + 1),
+      ...featureData,
+      localId: crypto.randomUUID(),
+      reasonable: false,
+      polylineDescription: "",
+    })));
+  }
+
   return (
     <form className="panel" onSubmit={onSubmit}>
       <div>
@@ -220,6 +295,26 @@ function ManualBuilder({
           ask the API to fill in the CAD JSON.
         </p>
       </div>
+
+      <section className="form-section compact-section">
+        <div>
+          <h3>Start from an example</h3>
+          <p className="muted">Optional: load a simple engineering-style part, then edit the dimensions and features.</p>
+        </div>
+        <div className="preset-grid">
+          {MANUAL_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              className="preset-button"
+              type="button"
+              onClick={() => applyPreset(preset)}
+            >
+              <strong>{preset.name}</strong>
+              <span>{preset.description}</span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section className="form-section">
         <h3>Main frame</h3>
@@ -289,6 +384,11 @@ function ManualBuilder({
             allFeatures={features}
             onChange={updateFeature}
             onRemove={() => removeFeature(index)}
+            onDuplicate={() => duplicateFeature(index)}
+            onMoveUp={() => moveFeature(index, -1)}
+            onMoveDown={() => moveFeature(index, 1)}
+            canMoveUp={index > 0}
+            canMoveDown={index < features.length - 1}
           />
         ))}
 
@@ -317,7 +417,18 @@ function ManualBuilder({
   );
 }
 
-function FeatureEditor({ feature, index, allFeatures, onChange, onRemove }) {
+function FeatureEditor({
+  feature,
+  index,
+  allFeatures,
+  onChange,
+  onRemove,
+  onDuplicate,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
+}) {
   const targetOptions = targetOptionsForFeature(allFeatures, index);
   const isCut = feature.operation === "cut";
   const needsDistance = !isCut || feature.depthMode === "blind";
@@ -326,10 +437,24 @@ function FeatureEditor({ feature, index, allFeatures, onChange, onRemove }) {
   return (
     <article className="feature-card">
       <div className="section-heading">
-        <h4>Feature {index + 1}</h4>
-        <button type="button" className="secondary" onClick={onRemove}>
-          Remove
-        </button>
+        <div>
+          <h4>Feature {index + 1}</h4>
+          <p className="feature-summary">{featureSummaryText(feature)}</p>
+        </div>
+        <div className="feature-actions" aria-label={`Feature ${index + 1} actions`}>
+          <button type="button" className="quiet-button" onClick={onMoveUp} disabled={!canMoveUp}>
+            Up
+          </button>
+          <button type="button" className="quiet-button" onClick={onMoveDown} disabled={!canMoveDown}>
+            Down
+          </button>
+          <button type="button" className="quiet-button" onClick={onDuplicate}>
+            Duplicate
+          </button>
+          <button type="button" className="quiet-button danger" onClick={onRemove}>
+            Remove
+          </button>
+        </div>
       </div>
 
       <div className="field-grid">
@@ -1642,6 +1767,52 @@ function CheckboxField({ label, checked, onChange }) {
       {label}
     </label>
   );
+}
+
+function cloneFeature(feature, featureNumber) {
+  return {
+    ...feature,
+    localId: crypto.randomUUID(),
+    requestedName: `feature_${featureNumber}`,
+    x: Number(feature.x) + 8,
+  };
+}
+
+function featureSummaryText(feature) {
+  const operation = feature.operation === "cut" ? "Cut" : "Extrusion";
+  const shape = feature.profile === "circle"
+    ? `${DIAMETER_SYMBOL}${preview.formatDimension(feature.diameter)} circle`
+    : feature.profile === "rectangle"
+      ? `${preview.formatDimension(feature.width)} ${MULTIPLY_SYMBOL} ${preview.formatDimension(feature.height)} rectangle`
+      : feature.profile === "polygon"
+        ? `${feature.sides}-sided polygon`
+        : "custom polyline";
+  const pattern = feature.pattern === "circular"
+    ? `${feature.copies} circular copies`
+    : [feature.mirrorX && "mirror X", feature.mirrorY && "mirror Y"].filter(Boolean).join(", ");
+  const depth = feature.operation === "cut"
+    ? feature.depthMode === "through" ? "through" : `${preview.formatDimension(feature.amount)} deep`
+    : `${preview.formatDimension(feature.amount)} tall`;
+
+  return [
+    `${operation}: ${shape}`,
+    `on ${humanizeTarget(feature.target)}`,
+    depth,
+    pattern ? `pattern: ${pattern}` : "",
+  ].filter(Boolean).join(" · ");
+}
+
+function humanizeTarget(target) {
+  const [id, face] = String(target).split(".");
+  if (!id || !face) {
+    return target;
+  }
+
+  if (id === "base") {
+    return `base ${face}`;
+  }
+
+  return `${id.replace("_", " ")} ${face}`;
 }
 
 function targetOptionsForFeature(features, featureIndex) {
