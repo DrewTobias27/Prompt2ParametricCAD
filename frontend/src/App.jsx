@@ -25,6 +25,9 @@ const TARGET_OPTIONS = [
   ["base.right", "Base right"],
 ];
 
+const DIAMETER_SYMBOL = "\u00D8";
+const MULTIPLY_SYMBOL = "\u00D7";
+
 export default function App() {
   const [mode, setMode] = useState("manual");
   const [prompt, setPrompt] = useState("Create an 80 mm by 50 mm rectangular plate that is 6 mm thick.");
@@ -647,14 +650,18 @@ function FeaturePreview({ feature, mapper, featureCount, projectedDimensionCount
   }
   const shouldAnnotateFeature = feature.isPrimary && isFirstFeatureInGroup(feature, featureGroups);
   const featureGroup = featureGroupFor(feature, featureGroups);
+  const circularPattern = circularPatternInfo(featureGroup);
   const shouldShowLinearDimensions = Boolean(annotation?.dimensions)
     && shouldDimensionFeature(feature, featureCount, projectedDimensionCount);
 
   return (
     <g>
+      {shouldAnnotateFeature && circularPattern !== null && (
+        <CirclePatternCenterline pattern={circularPattern} mapper={mapper} />
+      )}
       <FeatureShape feature={feature} mapper={mapper} className={className} />
       {feature.profile === "circle" && feature.isPrimary && (
-        <Centerlines center={feature.position} size={feature.radius * 2.6} mapper={mapper} />
+        <CenterMark center={feature.position} size={feature.radius * 2.6} mapper={mapper} />
       )}
       {shouldShowLinearDimensions && <FeatureDimensions feature={feature} mapper={mapper} annotation={annotation} />}
       {shouldAnnotateFeature && <PreviewLabel feature={feature} mapper={mapper} annotation={annotation} />}
@@ -726,6 +733,26 @@ function Centerlines({ center, size, mapper }) {
     <>
       <line className="preview-centerline" x1={horizontalStart[0]} y1={horizontalStart[1]} x2={horizontalEnd[0]} y2={horizontalEnd[1]} />
       <line className="preview-centerline" x1={verticalStart[0]} y1={verticalStart[1]} x2={verticalEnd[0]} y2={verticalEnd[1]} />
+    </>
+  );
+}
+
+function CenterMark({ center, size, mapper }) {
+  const markSize = Math.max(size, 5);
+  return <Centerlines center={center} size={markSize} mapper={mapper} />;
+}
+
+function CirclePatternCenterline({ pattern, mapper }) {
+  const center = mapper.point(pattern.center[0], pattern.center[1]);
+  return (
+    <>
+      <circle
+        className="preview-pattern-centerline"
+        cx={center[0]}
+        cy={center[1]}
+        r={mapper.length(pattern.radius)}
+      />
+      <Centerlines center={pattern.center} size={pattern.radius * 2.35} mapper={mapper} />
     </>
   );
 }
@@ -960,10 +987,13 @@ function buildFeatureGroups(features) {
       groups.set(key, {
         count: 0,
         firstAnnotationKey: annotationKey(feature),
+        members: [],
       });
     }
 
-    groups.get(key).count += 1;
+    const group = groups.get(key);
+    group.count += 1;
+    group.members.push(feature);
   }
 
   return groups;
@@ -978,6 +1008,65 @@ function featureGroupFor(feature, featureGroups) {
 
 function isFirstFeatureInGroup(feature, featureGroups) {
   return featureGroupFor(feature, featureGroups).firstAnnotationKey === annotationKey(feature);
+}
+
+function circularPatternInfo(featureGroup) {
+  const members = featureGroup.members ?? [];
+  if (members.length < 3 || !members.every((feature) => feature.profile === "circle")) {
+    return null;
+  }
+
+  const center = averagePoint(members.map((feature) => feature.position));
+  const radii = members.map((feature) => distanceBetweenPoints(feature.position, center));
+  const averageRadius = averageNumber(radii);
+  if (averageRadius <= 0) {
+    return null;
+  }
+
+  const maxRadiusError = Math.max(...radii.map((radius) => Math.abs(radius - averageRadius)));
+  if (maxRadiusError > Math.max(averageRadius * 0.08, 0.5)) {
+    return null;
+  }
+
+  return {
+    center,
+    radius: averageRadius,
+    isEquallySpaced: circularAnglesAreEven(members, center),
+  };
+}
+
+function averagePoint(points) {
+  return [
+    averageNumber(points.map((point) => point[0])),
+    averageNumber(points.map((point) => point[1])),
+  ];
+}
+
+function averageNumber(values) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function distanceBetweenPoints(first, second) {
+  return Math.hypot(first[0] - second[0], first[1] - second[1]);
+}
+
+function circularAnglesAreEven(members, center) {
+  const angles = members
+    .map((feature) => Math.atan2(feature.position[1] - center[1], feature.position[0] - center[0]))
+    .map((angle) => (angle < 0 ? angle + Math.PI * 2 : angle))
+    .sort((first, second) => first - second);
+  const gaps = angles.map((angle, index) => {
+    const nextAngle = angles[(index + 1) % angles.length];
+    return index === angles.length - 1
+      ? nextAngle + Math.PI * 2 - angle
+      : nextAngle - angle;
+  });
+  const expectedGap = (Math.PI * 2) / members.length;
+  return gaps.every((gap) => Math.abs(gap - expectedGap) < 0.08);
 }
 
 function buildAnnotationLayout({ baseGeometry, features, mapper, annotationBounds, dimensionPlan, featureGroups }) {
@@ -1134,7 +1223,7 @@ function overallDimensionTextBoxes(baseGeometry, mapper, annotationBounds, dimen
       Math.min(leaderEnd[0] + 20, preview.PREVIEW_WIDTH - 80) + 4,
       Math.max(leaderEnd[1] - 16, 20) - 4,
     ];
-    return [textBox(`Ø${preview.formatDimension(baseGeometry.diameter)}`, textPoint[0], textPoint[1], "left")];
+    return [textBox(`${DIAMETER_SYMBOL}${preview.formatDimension(baseGeometry.diameter)}`, textPoint[0], textPoint[1], "left")];
   }
 
   const dimensionLines = outsideDimensionLines(baseGeometry.bounds, annotationBounds);
@@ -1308,7 +1397,7 @@ function OverallDimensions({ baseGeometry, mapper, annotationBounds, dimensionSe
       <g>
         <line className="preview-leader-line" x1={center[0]} y1={center[1]} x2={textPoint[0]} y2={textPoint[1]} />
         <text className="preview-callout-text" x={textPoint[0] + 4} y={textPoint[1] - 4}>
-          Ø{preview.formatDimension(baseGeometry.diameter)}
+          {DIAMETER_SYMBOL}{preview.formatDimension(baseGeometry.diameter)}
         </text>
       </g>
     );
@@ -1422,14 +1511,20 @@ function FeatureCallout({ feature, mapper, annotation, featureGroup }) {
 
 function featureCalloutText(feature, mapper, featureGroup = { count: 1 }) {
   const countPrefix = featureGroup.count > 1 ? `${featureGroup.count}X ` : "";
+  const circularPattern = circularPatternInfo(featureGroup);
 
   if (feature.profile === "circle") {
-    let calloutText = `${countPrefix}Ø${preview.formatDimension(feature.radius * 2)}`;
+    let calloutText = `${countPrefix}${DIAMETER_SYMBOL}${preview.formatDimension(feature.radius * 2)}`;
     if (feature.operation === "cut") {
       calloutText += feature.feature?.depthMode === "blind" ? " CUT" : " THRU";
     } else {
       calloutText += " BOSS";
     }
+
+    if (circularPattern !== null) {
+      calloutText += ` ${circularPattern.isEquallySpaced ? "EQ SP " : ""}ON ${DIAMETER_SYMBOL}${preview.formatDimension(circularPattern.radius * 2)} B.C.`;
+    }
+
     return calloutText;
   }
 
@@ -1445,11 +1540,11 @@ function featureCalloutText(feature, mapper, featureGroup = { count: 1 }) {
       return "";
     }
     const operationText = feature.operation === "cut" ? "CUT" : "BOSS";
-    return `${countPrefix}${preview.formatDimension(feature.width)} × ${preview.formatDimension(feature.height)} ${operationText}`;
+    return `${countPrefix}${preview.formatDimension(feature.width)} ${MULTIPLY_SYMBOL} ${preview.formatDimension(feature.height)} ${operationText}`;
   }
 
   if (feature.profile === "polygon") {
-    return `${countPrefix}${feature.sides} SIDES ON Ø${preview.formatDimension(feature.radius * 2)}`;
+    return `${countPrefix}${feature.sides} SIDES ON ${DIAMETER_SYMBOL}${preview.formatDimension(feature.radius * 2)}`;
   }
 
   return "";

@@ -409,6 +409,13 @@ textarea {
   stroke-width: 1.2;
 }
 
+.preview-pattern-centerline {
+  fill: none;
+  stroke: #64748b;
+  stroke-dasharray: 10 6 2 6;
+  stroke-width: 1.2;
+}
+
 .preview-extension-line,
 .preview-dimension-line,
 .preview-leader-line {
