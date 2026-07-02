@@ -524,12 +524,14 @@ function DrawingView({ title, viewData, view, sharedScale, dimensionPlan }) {
   const mapper = preview.createPreviewMapper(worldBounds, sharedScale);
   const primaryFeatureCount = features.filter((record) => record.isPrimary).length;
   const projectedDimensionCount = features.filter((record) => shouldDimensionProjectedFeature(record)).length;
+  const featureGroups = buildFeatureGroups(features);
   const annotationLayout = buildAnnotationLayout({
     baseGeometry,
     features,
     mapper,
     annotationBounds: worldBounds,
     dimensionPlan,
+    featureGroups,
   });
 
   return (
@@ -562,6 +564,7 @@ function DrawingView({ title, viewData, view, sharedScale, dimensionPlan }) {
             mapper={mapper}
             featureCount={primaryFeatureCount}
             projectedDimensionCount={projectedDimensionCount}
+            featureGroups={featureGroups}
             annotation={annotationLayout.get(annotationKey(feature))}
           />
         ))}
@@ -637,11 +640,13 @@ function BasePreview({ baseGeometry, mapper }) {
   return null;
 }
 
-function FeaturePreview({ feature, mapper, featureCount, projectedDimensionCount, annotation }) {
+function FeaturePreview({ feature, mapper, featureCount, projectedDimensionCount, featureGroups, annotation }) {
   let className = feature.operation === "cut" ? "preview-cut" : "preview-extrude";
   if (feature.isPrimary && !previewFeatureInsideBase(feature)) {
     className += " preview-outside";
   }
+  const shouldAnnotateFeature = feature.isPrimary && isFirstFeatureInGroup(feature, featureGroups);
+  const featureGroup = featureGroupFor(feature, featureGroups);
   const shouldShowLinearDimensions = Boolean(annotation?.dimensions)
     && shouldDimensionFeature(feature, featureCount, projectedDimensionCount);
 
@@ -652,8 +657,8 @@ function FeaturePreview({ feature, mapper, featureCount, projectedDimensionCount
         <Centerlines center={feature.position} size={feature.radius * 2.6} mapper={mapper} />
       )}
       {shouldShowLinearDimensions && <FeatureDimensions feature={feature} mapper={mapper} annotation={annotation} />}
-      {feature.isPrimary && <PreviewLabel feature={feature} mapper={mapper} annotation={annotation} />}
-      {feature.isPrimary && <FeatureCallout feature={feature} mapper={mapper} annotation={annotation} />}
+      {shouldAnnotateFeature && <PreviewLabel feature={feature} mapper={mapper} annotation={annotation} />}
+      {shouldAnnotateFeature && <FeatureCallout feature={feature} mapper={mapper} annotation={annotation} featureGroup={featureGroup} />}
     </g>
   );
 }
@@ -936,7 +941,46 @@ function annotationKey(feature) {
   return `${feature.featureNumber}-${feature.viewName}-${feature.bounds.join(",")}-${feature.isPrimary}`;
 }
 
-function buildAnnotationLayout({ baseGeometry, features, mapper, annotationBounds, dimensionPlan }) {
+function featureGroupKey(feature) {
+  return [
+    feature.featureId,
+    feature.viewName,
+    feature.operation,
+    feature.profile,
+    feature.isPrimary ? "primary" : "projection",
+  ].join(":");
+}
+
+function buildFeatureGroups(features) {
+  const groups = new Map();
+
+  for (const feature of features) {
+    const key = featureGroupKey(feature);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        count: 0,
+        firstAnnotationKey: annotationKey(feature),
+      });
+    }
+
+    groups.get(key).count += 1;
+  }
+
+  return groups;
+}
+
+function featureGroupFor(feature, featureGroups) {
+  return featureGroups.get(featureGroupKey(feature)) ?? {
+    count: 1,
+    firstAnnotationKey: annotationKey(feature),
+  };
+}
+
+function isFirstFeatureInGroup(feature, featureGroups) {
+  return featureGroupFor(feature, featureGroups).firstAnnotationKey === annotationKey(feature);
+}
+
+function buildAnnotationLayout({ baseGeometry, features, mapper, annotationBounds, dimensionPlan, featureGroups }) {
   const layout = new Map();
   const occupied = [];
 
@@ -971,13 +1015,13 @@ function buildAnnotationLayout({ baseGeometry, features, mapper, annotationBound
     });
   }
 
-  for (const feature of features.filter((record) => record.isPrimary)) {
+  for (const feature of features.filter((record) => record.isPrimary && isFirstFeatureInGroup(record, featureGroups))) {
     const label = placeFeatureLabel(feature, mapper, occupied);
     if (label) {
       occupied.push(label.box);
     }
 
-    const calloutText = featureCalloutText(feature, mapper);
+    const calloutText = featureCalloutText(feature, mapper, featureGroupFor(feature, featureGroups));
     const callout = calloutText
       ? placeFeatureCallout(feature, mapper, calloutText, occupied)
       : null;
@@ -1351,9 +1395,9 @@ function PreviewLabel({ feature, mapper, annotation }) {
   );
 }
 
-function FeatureCallout({ feature, mapper, annotation }) {
+function FeatureCallout({ feature, mapper, annotation, featureGroup }) {
   const center = mapper.point(...preview.boundsCenter(feature.bounds));
-  const calloutText = featureCalloutText(feature, mapper);
+  const calloutText = featureCalloutText(feature, mapper, featureGroup);
 
   if (calloutText === "") {
     return null;
@@ -1376,11 +1420,15 @@ function FeatureCallout({ feature, mapper, annotation }) {
   );
 }
 
-function featureCalloutText(feature, mapper) {
+function featureCalloutText(feature, mapper, featureGroup = { count: 1 }) {
+  const countPrefix = featureGroup.count > 1 ? `${featureGroup.count}X ` : "";
+
   if (feature.profile === "circle") {
-    let calloutText = `Ø${preview.formatDimension(feature.radius * 2)}`;
+    let calloutText = `${countPrefix}Ø${preview.formatDimension(feature.radius * 2)}`;
     if (feature.operation === "cut") {
-      calloutText += " THRU";
+      calloutText += feature.feature?.depthMode === "blind" ? " CUT" : " THRU";
+    } else {
+      calloutText += " BOSS";
     }
     return calloutText;
   }
@@ -1389,16 +1437,19 @@ function featureCalloutText(feature, mapper) {
     const renderedWidth = mapper.length(preview.boundsWidth(feature.bounds));
     const renderedHeight = mapper.length(preview.boundsHeight(feature.bounds));
     if (
+      featureGroup.count === 1
+      &&
       renderedWidth >= preview.SMALL_FEATURE_CALLOUT_THRESHOLD
       && renderedHeight >= preview.SMALL_FEATURE_CALLOUT_THRESHOLD
     ) {
       return "";
     }
-    return `${preview.formatDimension(feature.width)} × ${preview.formatDimension(feature.height)}`;
+    const operationText = feature.operation === "cut" ? "CUT" : "BOSS";
+    return `${countPrefix}${preview.formatDimension(feature.width)} × ${preview.formatDimension(feature.height)} ${operationText}`;
   }
 
   if (feature.profile === "polygon") {
-    return `${feature.sides}X ON Ø${preview.formatDimension(feature.radius * 2)}`;
+    return `${countPrefix}${feature.sides} SIDES ON Ø${preview.formatDimension(feature.radius * 2)}`;
   }
 
   return "";
