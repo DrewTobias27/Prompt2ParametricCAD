@@ -117,8 +117,8 @@ Then, in a second terminal:
 
 ```powershell
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Open:

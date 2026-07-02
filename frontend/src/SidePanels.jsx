@@ -1,0 +1,56 @@
+import { useMemo } from "react";
+import * as preview from "./previewEngine.js";
+
+export function DesignReview({ base, features, usesApiAssistance }) {
+  const previewModel = useMemo(
+    () => preview.buildPreviewModel({ base, features }),
+    [base, features],
+  );
+  const warnings = previewModel.warnings;
+  const isClear = warnings.length === 1 && warnings[0].severity === "success";
+
+  return (
+    <section className="review-card">
+      <h2>Design review</h2>
+      {usesApiAssistance && (
+        <p className="soft-warning">
+          API-assisted fields cannot be fully checked until model data is generated.
+        </p>
+      )}
+      <div className={isClear ? "review-message ok" : "review-message warn"}>
+        <strong>{isClear ? warnings[0].title : `${warnings.length} review item${warnings.length > 1 ? "s" : ""}`}</strong>
+        {isClear && <p>{warnings[0].message}</p>}
+        {!isClear && (
+          <div className="review-list">
+            {warnings.map((warning) => (
+              <div className={`review-item ${warning.severity}`} key={`${warning.title}-${warning.message}`}>
+                <strong>{warning.title}</strong>
+                <p>{warning.message}</p>
+                {warning.suggestion && <p className="review-suggestion">Suggested fix: {warning.suggestion}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function OutputPanel({ status, result, downloadUrl }) {
+  return (
+    <section className="result-card">
+      <h2>Output</h2>
+      <p className={result?.status === "error" ? "status error" : "status"}>
+        {status || "Run a prompt or manual model to see output."}
+      </p>
+
+      {downloadUrl && (
+        <a className="download-link" href={downloadUrl}>
+          Download STEP file
+        </a>
+      )}
+
+      <pre>{result ? JSON.stringify(result, null, 2) : "No result yet."}</pre>
+    </section>
+  );
+}

@@ -25,8 +25,8 @@ Terminal 2: run the frontend:
 
 ```powershell
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Then open:
