@@ -256,6 +256,13 @@ label {
   font-weight: 550;
 }
 
+.field-help {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 450;
+  line-height: 1.35;
+}
+
 .checkbox-field {
   display: inline-flex;
   width: fit-content;

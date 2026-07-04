@@ -39,7 +39,7 @@ export function ManualBuilder({
 
   useEffect(() => {
     setFeatures((currentFeatures) => currentFeatures.map((feature, index) => {
-      const targetOptions = targetOptionsForFeature(currentFeatures, index);
+      const targetOptions = flattenOptionGroups(targetOptionGroupsForFeature(currentFeatures, index));
       if (targetOptions.some(([value]) => value === feature.target)) {
         return feature;
       }
@@ -248,7 +248,7 @@ function FeatureEditor({
   canMoveDown,
   warnings,
 }) {
-  const targetOptions = targetOptionsForFeature(allFeatures, index);
+  const targetOptionGroups = targetOptionGroupsForFeature(allFeatures, index);
   const isCut = feature.operation === "cut";
   const needsDistance = !isCut || feature.depthMode === "blind";
   const showExactDimensions = !feature.reasonable && feature.profile !== "polyline";
@@ -298,11 +298,12 @@ function FeatureEditor({
             ["cut", "Cut"],
           ]}
         />
-        <SelectField
+        <GroupedSelectField
           label="Target face"
           value={feature.target}
           onChange={(value) => onChange(index, "target", value)}
-          options={targetOptions}
+          groups={targetOptionGroups}
+          helpText="Choose the face where this feature starts. Later features can target faces made by earlier extrusions."
         />
         <SelectField
           label="Shape"
@@ -434,6 +435,24 @@ function SelectField({ label, value, onChange, options }) {
   );
 }
 
+function GroupedSelectField({ label, value, onChange, groups, helpText }) {
+  return (
+    <label>
+      {label}
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {groups.map((group) => (
+          <optgroup key={group.label} label={group.label}>
+            {group.options.map(([optionValue, optionLabel]) => (
+              <option key={optionValue} value={optionValue}>{optionLabel}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      {helpText && <span className="field-help">{helpText}</span>}
+    </label>
+  );
+}
+
 function CheckboxField({ label, checked, onChange }) {
   return (
     <label className="checkbox-field">
@@ -493,8 +512,13 @@ function humanizeTarget(target) {
   return `${id.replace("_", " ")} ${face}`;
 }
 
-function targetOptionsForFeature(features, featureIndex) {
-  const options = [...TARGET_OPTIONS];
+function targetOptionGroupsForFeature(features, featureIndex) {
+  const groups = [
+    {
+      label: "Base faces",
+      options: [...TARGET_OPTIONS],
+    },
+  ];
 
   for (let priorIndex = 0; priorIndex < featureIndex; priorIndex += 1) {
     const priorFeature = features[priorIndex];
@@ -517,13 +541,18 @@ function targetOptionsForFeature(features, featureIndex) {
       );
     }
 
-    for (const [faceValue, faceLabel] of faces) {
-      options.push([
+    groups.push({
+      label: `Feature ${featureNumber} faces`,
+      options: faces.map(([faceValue, faceLabel]) => [
         `feature_${featureNumber}.${faceValue}`,
         `Feature ${featureNumber} ${faceLabel}`,
-      ]);
-    }
+      ]),
+    });
   }
 
-  return options;
+  return groups;
+}
+
+function flattenOptionGroups(groups) {
+  return groups.flatMap((group) => group.options);
 }
