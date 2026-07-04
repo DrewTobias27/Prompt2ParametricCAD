@@ -81,6 +81,124 @@ function testCircularPatternCreatesRepeatedHoleRecords() {
   assert(topHoles.every((record) => record.profile === "circle"), "all repeated hole records should remain circular");
 }
 
+function testFrontFaceCutProjectsToOtherViews() {
+  const model = buildPreviewModel({
+    base: {
+      ...defaultBase,
+      profile: "rectangle",
+      width: 80,
+      height: 50,
+      thickness: 12,
+    },
+    features: [
+      feature({
+        localId: "front_hole",
+        operation: "cut",
+        target: "base.front",
+        profile: "circle",
+        diameter: 8,
+        depthMode: "through",
+      }),
+    ],
+  });
+
+  assert(recordsFor(model, "front", 1).some((record) => record.isPrimary), "front-face cut should have a primary front-view record");
+  assert(recordsFor(model, "top", 1).some((record) => !record.isPrimary), "front-face cut should project into top view");
+  assert(recordsFor(model, "right", 1).some((record) => !record.isPrimary), "front-face cut should project into right view");
+}
+
+function testRightFaceRectangularCutProjectsToOtherViews() {
+  const model = buildPreviewModel({
+    base: {
+      ...defaultBase,
+      profile: "rectangle",
+      width: 80,
+      height: 50,
+      thickness: 12,
+    },
+    features: [
+      feature({
+        localId: "right_slot",
+        operation: "cut",
+        target: "base.right",
+        profile: "rectangle",
+        width: 18,
+        height: 6,
+        amount: 4,
+        depthMode: "blind",
+      }),
+    ],
+  });
+
+  assert(recordsFor(model, "right", 1).some((record) => record.isPrimary), "right-face cut should have a primary right-view record");
+  assert(recordsFor(model, "top", 1).some((record) => !record.isPrimary), "right-face cut should project into top view");
+  assert(recordsFor(model, "front", 1).some((record) => !record.isPrimary), "right-face cut should project into front view");
+}
+
+function testCutCanTargetPriorFeatureTopFace() {
+  const model = buildPreviewModel({
+    base: {
+      ...defaultBase,
+      profile: "rectangle",
+      width: 80,
+      height: 50,
+      thickness: 8,
+    },
+    features: [
+      feature({
+        localId: "boss",
+        operation: "add_extrude",
+        target: "base.top",
+        profile: "rectangle",
+        width: 24,
+        height: 18,
+        amount: 6,
+      }),
+      feature({
+        localId: "boss_hole",
+        operation: "cut",
+        target: "feature_1.top",
+        profile: "circle",
+        diameter: 6,
+        depthMode: "through",
+      }),
+    ],
+  });
+
+  assert(recordsFor(model, "top", 2).some((record) => record.isPrimary), "cut on feature_1.top should have a primary top-view record");
+  assert(recordsFor(model, "front", 2).some((record) => !record.isPrimary), "cut on feature_1.top should project into front view");
+  assert(recordsFor(model, "right", 2).some((record) => !record.isPrimary), "cut on feature_1.top should project into right view");
+}
+
+function testMirroredFeatureCreatesFourPrimaryRecords() {
+  const model = buildPreviewModel({
+    base: {
+      ...defaultBase,
+      profile: "rectangle",
+      width: 90,
+      height: 60,
+      thickness: 8,
+    },
+    features: [
+      feature({
+        localId: "mirrored_posts",
+        operation: "add_extrude",
+        target: "base.top",
+        profile: "circle",
+        x: 25,
+        y: 15,
+        diameter: 8,
+        amount: 6,
+        mirrorX: true,
+        mirrorY: true,
+      }),
+    ],
+  });
+
+  const topPosts = recordsFor(model, "top", 1).filter((record) => record.isPrimary);
+  assert(topPosts.length === 4, `expected 4 mirrored primary records, found ${topPosts.length}`);
+}
+
 function testFeatureLinkedWarningsIncludeSuggestions() {
   const model = buildPreviewModel({
     base: {
@@ -112,6 +230,10 @@ function testFeatureLinkedWarningsIncludeSuggestions() {
 const tests = [
   testTopBossProjectsToFrontAndRight,
   testCircularPatternCreatesRepeatedHoleRecords,
+  testFrontFaceCutProjectsToOtherViews,
+  testRightFaceRectangularCutProjectsToOtherViews,
+  testCutCanTargetPriorFeatureTopFace,
+  testMirroredFeatureCreatesFourPrimaryRecords,
   testFeatureLinkedWarningsIncludeSuggestions,
 ];
 
