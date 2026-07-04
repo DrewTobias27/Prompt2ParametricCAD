@@ -219,14 +219,17 @@ export function ManualBuilder({
         </button>
       </section>
 
-      <section className="form-section">
-        <h3>{usesApiAssistance ? "API-assisted manual prompt" : "Generated CAD JSON"}</h3>
+      <details className="form-section advanced-output">
+        <summary>
+          <span>Advanced output</span>
+          <small>{usesApiAssistance ? "API-assisted manual prompt" : "Generated CAD JSON"}</small>
+        </summary>
         <pre className="model-preview">
           {usesApiAssistance
             ? manualPrompt
             : JSON.stringify(modelData, null, 2)}
         </pre>
-      </section>
+      </details>
 
       <button type="submit" disabled={isLoading}>
         {isLoading ? "Building..." : usesApiAssistance ? "Generate assisted model" : "Build manual model"}

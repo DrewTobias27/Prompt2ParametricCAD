@@ -712,6 +712,30 @@ pre {
   max-height: 300px;
 }
 
+.advanced-output {
+  gap: 12px;
+}
+
+.advanced-output summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+  color: #0f172a;
+  font-weight: 750;
+}
+
+.advanced-output summary::marker {
+  color: #64748b;
+}
+
+.advanced-output summary small {
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 550;
+}
+
 @media (max-width: 1350px) {
   .workspace {
     grid-template-columns: 1fr;
