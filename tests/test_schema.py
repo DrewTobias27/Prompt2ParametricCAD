@@ -3,6 +3,7 @@
 import pytest
 from jsonschema import validate
 
+from prompt2cad.design_intent import OPENAI_DESIGN_INTENT_SCHEMA
 from prompt2cad.schema import OPENAI_CAD_MODEL_SCHEMA
 from prompt2cad.schema import OPENAI_RELATIONAL_CAD_MODEL_SCHEMA
 from prompt2cad.schema import validate_model_data
@@ -498,6 +499,7 @@ def test_openai_schema_object_properties_are_all_required():
 
     check_schema(OPENAI_CAD_MODEL_SCHEMA)
     check_schema(OPENAI_RELATIONAL_CAD_MODEL_SCHEMA)
+    check_schema(OPENAI_DESIGN_INTENT_SCHEMA)
 
 
 def test_validate_model_data_rejects_missing_width():

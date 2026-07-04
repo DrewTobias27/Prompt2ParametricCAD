@@ -31,6 +31,29 @@ POINT_SCHEMA = {
     "maxItems": 2,
 }
 
+OPENAI_NULLABLE_NUMBER_SCHEMA = {
+    "type": ["number", "null"],
+}
+
+OPENAI_NULLABLE_INTEGER_SCHEMA = {
+    "type": ["integer", "null"],
+}
+
+OPENAI_ORIENTATION_SCHEMA = {
+    "anyOf": [
+        {"type": "string", "enum": ["horizontal", "vertical"]},
+        {"type": "null"},
+    ],
+}
+
+OPENAI_DEPTH_SCHEMA = {
+    "anyOf": [
+        {"type": "string", "enum": ["through"]},
+        {"type": "number"},
+        {"type": "null"},
+    ],
+}
+
 PLACEMENT_SCHEMA = {
     "type": "object",
     "additionalProperties": True,
@@ -115,6 +138,158 @@ DESIGN_INTENT_SCHEMA = {
     "required": ["base", "features"],
 }
 
+OPENAI_CENTERED_PLACEMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["centered"]},
+    },
+    "required": ["type"],
+}
+
+OPENAI_EXPLICIT_PLACEMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["explicit"]},
+        "positions": {
+            "type": "array",
+            "items": POINT_SCHEMA,
+            "minItems": 1,
+        },
+    },
+    "required": ["type", "positions"],
+}
+
+OPENAI_NEAR_CORNERS_PLACEMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["near_corners"]},
+        "count": {"type": "integer", "minimum": 1, "maximum": 4},
+        "margin": OPENAI_NULLABLE_NUMBER_SCHEMA,
+    },
+    "required": ["type", "count", "margin"],
+}
+
+OPENAI_CIRCULAR_PATTERN_PLACEMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["circular_pattern"]},
+        "count": {"type": "integer", "minimum": 1},
+        "radius": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "margin": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "start_angle_degrees": OPENAI_NULLABLE_NUMBER_SCHEMA,
+    },
+    "required": ["type", "count", "radius", "margin", "start_angle_degrees"],
+}
+
+OPENAI_MIRRORED_PLACEMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["mirrored"]},
+        "seed": POINT_SCHEMA,
+        "axes": {
+            "type": "array",
+            "items": {"type": "string", "enum": ["x", "y"]},
+            "minItems": 1,
+        },
+    },
+    "required": ["type", "seed", "axes"],
+}
+
+OPENAI_PLACEMENT_SCHEMA = {
+    "anyOf": [
+        OPENAI_CENTERED_PLACEMENT_SCHEMA,
+        OPENAI_EXPLICIT_PLACEMENT_SCHEMA,
+        OPENAI_NEAR_CORNERS_PLACEMENT_SCHEMA,
+        OPENAI_CIRCULAR_PATTERN_PLACEMENT_SCHEMA,
+        OPENAI_MIRRORED_PLACEMENT_SCHEMA,
+    ],
+}
+
+OPENAI_BASE_INTENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "id": {"type": "string"},
+        "profile": {
+            "type": "string",
+            "enum": ["rectangle", "circle", "polygon"],
+        },
+        "width": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "height": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "diameter": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "sides": OPENAI_NULLABLE_INTEGER_SCHEMA,
+        "thickness": {"type": "number"},
+    },
+    "required": [
+        "id",
+        "profile",
+        "width",
+        "height",
+        "diameter",
+        "sides",
+        "thickness",
+    ],
+}
+
+OPENAI_FEATURE_INTENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "id": {"type": "string"},
+        "operation": {
+            "type": "string",
+            "enum": ["extrusion", "cut"],
+        },
+        "target": {"type": "string"},
+        "shape": {
+            "type": "string",
+            "enum": ["rectangle", "circle", "polygon", "slot"],
+        },
+        "placement": OPENAI_PLACEMENT_SCHEMA,
+        "width": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "height": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "diameter": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "sides": OPENAI_NULLABLE_INTEGER_SCHEMA,
+        "length": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "orientation": OPENAI_ORIENTATION_SCHEMA,
+        "distance": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "depth": OPENAI_DEPTH_SCHEMA,
+    },
+    "required": [
+        "id",
+        "operation",
+        "target",
+        "shape",
+        "placement",
+        "width",
+        "height",
+        "diameter",
+        "sides",
+        "length",
+        "orientation",
+        "distance",
+        "depth",
+    ],
+}
+
+OPENAI_DESIGN_INTENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "base": OPENAI_BASE_INTENT_SCHEMA,
+        "features": {
+            "type": "array",
+            "items": OPENAI_FEATURE_INTENT_SCHEMA,
+        },
+    },
+    "required": ["base", "features"],
+}
+
 
 def validate_design_intent(intent: dict[str, Any]) -> None:
     """Validate high-level design intent before lowering it."""
@@ -132,6 +307,7 @@ def validate_design_intent(intent: dict[str, Any]) -> None:
 
 def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
     """Lower design intent into executable Prompt2ParametricCAD model data."""
+    intent = remove_null_values(intent)
     validate_design_intent(intent)
 
     base = intent["base"]
@@ -497,3 +673,17 @@ def number_value(value: Any) -> float:
         raise ValueError("Boolean values are not valid CAD numbers")
     return float(value)
 
+
+def remove_null_values(value: Any) -> Any:
+    """Remove null fields emitted by strict API schemas."""
+    if isinstance(value, dict):
+        return {
+            key: remove_null_values(child_value)
+            for key, child_value in value.items()
+            if child_value is not None
+        }
+
+    if isinstance(value, list):
+        return [remove_null_values(item) for item in value]
+
+    return value

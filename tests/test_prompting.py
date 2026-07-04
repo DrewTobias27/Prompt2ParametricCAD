@@ -190,3 +190,48 @@ def test_build_generation_input_includes_retrieved_examples(monkeypatch):
     assert generation_input["user_prompt"] == "make a plate"
     assert generation_input["retrieved_examples"][0]["name"] == "simple_plate"
     assert "source_file" not in generation_input["retrieved_examples"][0]
+
+
+def test_prompt_to_model_data_via_intent_lowers_generated_intent(monkeypatch):
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 70,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "corner_holes",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": 6,
+                "depth": "through",
+                "placement": {
+                    "type": "near_corners",
+                    "count": 4,
+                    "margin": 7,
+                },
+            }
+        ],
+    }
+
+    monkeypatch.setattr(
+        prompting,
+        "prompt_to_design_intent",
+        lambda user_prompt: intent,
+    )
+
+    model_data = prompting.prompt_to_model_data_via_intent(
+        "make a plate with four corner holes"
+    )
+
+    assert model_data["operations"][1]["id"] == "corner_holes"
+    assert model_data["operations"][1]["positions"] == [
+        [-40, 25],
+        [40, 25],
+        [-40, -25],
+        [40, -25],
+    ]

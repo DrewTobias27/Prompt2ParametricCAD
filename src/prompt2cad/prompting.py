@@ -4,6 +4,8 @@ import json
 
 from openai import OpenAI
 
+from prompt2cad.design_intent import OPENAI_DESIGN_INTENT_SCHEMA
+from prompt2cad.design_intent import intent_to_model_data
 from prompt2cad.diagnostics import check_model_data
 from prompt2cad.example_library import format_examples_for_prompt
 from prompt2cad.example_library import select_relevant_examples
@@ -220,6 +222,58 @@ geometry. Keep added extrusions connected to the base and keep cuts inside the
 target face.
 """.strip()
 
+CAD_INTENT_INSTRUCTIONS = """
+You convert natural language CAD requests into high-level design intent for a
+deterministic CAD lowering system. Return only valid design-intent JSON.
+
+The output must contain:
+- base: the main solid
+- features: cuts and extrusions added after the base
+
+This is not the final CadQuery operation JSON. Use intent concepts such as
+placement and shape so the backend can compute exact coordinates.
+
+Supported base profiles:
+- rectangle
+- circle
+- polygon
+
+Supported feature operations:
+- extrusion
+- cut
+
+Supported feature shapes:
+- rectangle
+- circle
+- polygon
+- slot
+
+Supported placements:
+- centered: for centered bosses, holes, and slots
+- explicit: when exact positions are given
+- near_corners: for holes/features near 1 to 4 corners
+- circular_pattern: for bolt circles or evenly spaced radial features
+- mirrored: for features mirrored across x and/or y axes
+
+Use stable ids such as "corner_holes", "center_boss", "bolt_holes", or
+"side_slot". Use target "base.top" unless a side or feature face is clearly
+requested.
+
+For strict schema compatibility, fill unrelated numeric/string fields with
+null. Examples:
+- A circle feature needs diameter, but width, height, length, sides,
+  orientation, and unrelated distance/depth fields may be null.
+- A cut uses depth. An extrusion uses distance.
+- A near_corners placement should include count and may use margin null when
+  the backend should choose a default.
+- A circular_pattern placement should include count and may use radius null
+  when the backend should choose a reasonable radius.
+
+Prefer clear relationships over exact coordinates. For example, for "four
+holes near the corners", use one circle cut feature with near_corners
+placement instead of manually calculating four positions.
+""".strip()
+
 
 CAD_REPAIR_INSTRUCTIONS = """
 You repair JSON model data for a CadQuery-based CAD interpreter. Return only
@@ -288,6 +342,33 @@ def prompt_to_model_data(user_prompt: str) -> dict:
     )
 
     return json.loads(response.output_text)
+
+
+def prompt_to_design_intent(user_prompt: str) -> dict:
+    """Convert a natural language CAD request into high-level design intent."""
+    client = create_openai_client()
+
+    response = client.responses.create(
+        model="gpt-5-mini",
+        instructions=CAD_INTENT_INSTRUCTIONS,
+        input=build_generation_input(user_prompt),
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "cad_design_intent",
+                "schema": OPENAI_DESIGN_INTENT_SCHEMA,
+                "strict": True,
+            }
+        },
+    )
+
+    return json.loads(response.output_text)
+
+
+def prompt_to_model_data_via_intent(user_prompt: str) -> dict:
+    """Generate design intent first, then lower it into CAD model data."""
+    design_intent = prompt_to_design_intent(user_prompt)
+    return intent_to_model_data(design_intent)
 
 
 def repair_model_data(

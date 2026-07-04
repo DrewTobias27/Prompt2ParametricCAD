@@ -213,3 +213,43 @@ def test_validate_design_intent_reports_missing_shape_dimensions():
 
     with pytest.raises(ValueError, match="diameter"):
         validate_design_intent(intent)
+
+
+def test_intent_to_model_data_accepts_nulls_from_strict_api_schema():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "diameter": None,
+            "sides": None,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "corner_holes",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "circle",
+                "placement": {
+                    "type": "near_corners",
+                    "count": 4,
+                    "margin": None,
+                },
+                "width": None,
+                "height": None,
+                "diameter": 6,
+                "sides": None,
+                "length": None,
+                "orientation": None,
+                "distance": None,
+                "depth": "through",
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["profile"] == "circle"
+    assert len(model_data["operations"][1]["positions"]) == 4
