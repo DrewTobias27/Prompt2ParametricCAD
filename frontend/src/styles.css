@@ -107,6 +107,7 @@ h4 {
 .hero-card,
 .builder-card,
 .preview-card,
+.feature-tree-card,
 .review-card,
 .result-card,
 .feature-card {
@@ -139,6 +140,7 @@ h4 {
 
 .builder-card,
 .preview-card,
+.feature-tree-card,
 .review-card,
 .result-card {
   padding: 24px;
@@ -343,6 +345,44 @@ textarea {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.feature-tree {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding-left: 1.35rem;
+}
+
+.feature-tree li::marker {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.feature-tree-node {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #f8fafc;
+}
+
+.tree-node-title {
+  color: #0f172a;
+  font-weight: 750;
+}
+
+.tree-node-summary {
+  color: #334155;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.tree-node-meta {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 550;
 }
 
 .quiet-button {
@@ -699,6 +739,7 @@ pre {
 
   .builder-card,
   .preview-card,
+  .feature-tree-card,
   .review-card,
   .result-card {
     padding: 16px;

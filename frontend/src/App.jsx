@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { buildFromModelData, generateFromPrompt, getDownloadUrl } from "./api.js";
 import { DrawingPreview } from "./DrawingPreview.jsx";
+import { FeatureTreePanel } from "./FeatureTreePanel.jsx";
 import { ManualBuilder } from "./ManualBuilder.jsx";
 import {
   buildManualModelData,
@@ -123,6 +124,7 @@ export default function App() {
 
         <aside className="side-stack">
           <DrawingPreview base={base} features={features} usesApiAssistance={usesApiAssistance} />
+          <FeatureTreePanel base={base} features={features} />
           <DesignReview base={base} features={features} usesApiAssistance={usesApiAssistance} />
           <OutputPanel status={status} result={result} downloadUrl={downloadUrl} />
         </aside>
