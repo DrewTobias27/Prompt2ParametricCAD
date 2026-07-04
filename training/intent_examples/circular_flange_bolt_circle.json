@@ -1,0 +1,36 @@
+{
+  "name": "circular_flange_bolt_circle",
+  "prompt": "Create an 80 mm diameter circular flange that is 8 mm thick with six 6 mm through holes evenly spaced around the center.",
+  "source_name": "Prompt2ParametricCAD internal training example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "circle",
+    "flange",
+    "bolt circle",
+    "circular_pattern",
+    "through holes"
+  ],
+  "design_intent": {
+    "base": {
+      "id": "base",
+      "profile": "circle",
+      "diameter": 80,
+      "thickness": 8
+    },
+    "features": [
+      {
+        "id": "bolt_holes",
+        "operation": "cut",
+        "target": "base.top",
+        "shape": "circle",
+        "diameter": 6,
+        "depth": "through",
+        "placement": {
+          "type": "circular_pattern",
+          "count": 6,
+          "radius": 28
+        }
+      }
+    ]
+  }
+}

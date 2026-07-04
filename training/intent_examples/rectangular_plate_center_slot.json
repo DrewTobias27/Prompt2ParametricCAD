@@ -1,0 +1,38 @@
+{
+  "name": "rectangular_plate_center_slot",
+  "prompt": "Create a 90 mm by 50 mm rectangular plate that is 8 mm thick with a centered horizontal rounded slot cut through the plate. The slot is 36 mm long and 10 mm wide.",
+  "source_name": "Prompt2ParametricCAD internal training example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "rectangle",
+    "plate",
+    "slot",
+    "centered",
+    "arc sketch",
+    "through cut"
+  ],
+  "design_intent": {
+    "base": {
+      "id": "base",
+      "profile": "rectangle",
+      "width": 90,
+      "height": 50,
+      "thickness": 8
+    },
+    "features": [
+      {
+        "id": "center_slot",
+        "operation": "cut",
+        "target": "base.top",
+        "shape": "slot",
+        "length": 36,
+        "width": 10,
+        "orientation": "horizontal",
+        "depth": "through",
+        "placement": {
+          "type": "centered"
+        }
+      }
+    ]
+  }
+}

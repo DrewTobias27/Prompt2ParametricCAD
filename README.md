@@ -179,6 +179,25 @@ python -m prompt2cad.eval_runner --models-dir generated\evals --cases-dir evals\
 Some eval cases can use tracked fixture models from `evals/fixtures/`, so they
 can run deterministically without making API calls.
 
+Export prompt-to-design-intent training data:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m prompt2cad.training_data --format generic --output generated\training\intent_training.jsonl
+```
+
+Export chat-style supervised fine-tuning records:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m prompt2cad.training_data --format openai_messages --output generated\training\intent_openai_messages.jsonl
+```
+
+Training examples live in `training/intent_examples/`. Each example stores a
+natural-language prompt and the expected design-intent JSON. The exporter lowers
+each intent example into CAD model data and checks that it validates and builds
+before writing it to JSONL.
+
 ## Testing
 
 Run the automated test suite:

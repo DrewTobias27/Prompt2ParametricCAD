@@ -1,0 +1,36 @@
+{
+  "name": "rectangular_plate_center_boss",
+  "prompt": "Create an 80 mm by 50 mm rectangular plate that is 6 mm thick with a centered 24 mm by 16 mm rectangular boss on top that is 8 mm tall.",
+  "source_name": "Prompt2ParametricCAD internal training example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "rectangle",
+    "plate",
+    "boss",
+    "centered",
+    "extrusion"
+  ],
+  "design_intent": {
+    "base": {
+      "id": "base",
+      "profile": "rectangle",
+      "width": 80,
+      "height": 50,
+      "thickness": 6
+    },
+    "features": [
+      {
+        "id": "center_boss",
+        "operation": "extrusion",
+        "target": "base.top",
+        "shape": "rectangle",
+        "width": 24,
+        "height": 16,
+        "distance": 8,
+        "placement": {
+          "type": "centered"
+        }
+      }
+    ]
+  }
+}
