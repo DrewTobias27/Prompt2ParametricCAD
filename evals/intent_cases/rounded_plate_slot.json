@@ -1,0 +1,21 @@
+{
+  "name": "rounded_plate_slot",
+  "prompt": "Create a rectangular plate with a centered rounded slot cut through it.",
+  "expected_intent": {
+    "base": {
+      "profile": "rectangle"
+    },
+    "features": [
+      {
+        "operation": "cut",
+        "shape": "slot",
+        "target": "base.top",
+        "depth": "through",
+        "placement": {
+          "type": "centered"
+        }
+      }
+    ],
+    "lowers_to_buildable_model": true
+  }
+}

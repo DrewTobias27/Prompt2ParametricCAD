@@ -1,0 +1,83 @@
+"""Tests for design-intent eval cases."""
+
+from pathlib import Path
+
+from prompt2cad.intent_evaluator import evaluate_design_intent
+from prompt2cad.intent_evaluator import load_json
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+INTENT_CASES_DIR = PROJECT_ROOT / "evals" / "intent_cases"
+
+
+def test_intent_eval_accepts_matching_corner_hole_intent():
+    eval_case = load_json(INTENT_CASES_DIR / "rectangular_plate_corner_holes.json")
+    design_intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 70,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "corner_holes",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": 6,
+                "depth": "through",
+                "placement": {
+                    "type": "near_corners",
+                    "count": 4,
+                    "margin": 7,
+                },
+            }
+        ],
+    }
+
+    result = evaluate_design_intent(design_intent, eval_case)
+
+    assert result.passed is True
+
+
+def test_intent_eval_reports_wrong_relationship_choice():
+    eval_case = load_json(INTENT_CASES_DIR / "rectangular_plate_corner_holes.json")
+    design_intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 70,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "corner_holes",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": 6,
+                "depth": "through",
+                "placement": {
+                    "type": "circular_pattern",
+                    "count": 4,
+                    "radius": 25,
+                },
+            }
+        ],
+    }
+
+    result = evaluate_design_intent(design_intent, eval_case)
+
+    assert result.passed is False
+    assert "near_corners" in result.failures[0]
+
+
+def test_intent_eval_case_files_have_expected_intent():
+    for case_path in INTENT_CASES_DIR.glob("*.json"):
+        eval_case = load_json(case_path)
+        assert eval_case["name"]
+        assert eval_case["prompt"]
+        assert eval_case["expected_intent"]

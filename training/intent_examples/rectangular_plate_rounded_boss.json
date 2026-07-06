@@ -1,0 +1,38 @@
+{
+  "name": "rectangular_plate_rounded_boss",
+  "prompt": "Create a 90 mm by 60 mm rectangular plate that is 8 mm thick with a centered rounded rectangular boss on top. The boss is 30 mm by 18 mm with 4 mm corner radii and is 6 mm tall.",
+  "source_name": "Prompt2ParametricCAD internal training example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "rectangle",
+    "plate",
+    "rounded rectangle",
+    "rounded_rectangle",
+    "boss",
+    "extrusion"
+  ],
+  "design_intent": {
+    "base": {
+      "id": "base",
+      "profile": "rectangle",
+      "width": 90,
+      "height": 60,
+      "thickness": 8
+    },
+    "features": [
+      {
+        "id": "rounded_boss",
+        "operation": "extrusion",
+        "target": "base.top",
+        "shape": "rounded_rectangle",
+        "width": 30,
+        "height": 18,
+        "radius": 4,
+        "distance": 6,
+        "placement": {
+          "type": "centered"
+        }
+      }
+    ]
+  }
+}

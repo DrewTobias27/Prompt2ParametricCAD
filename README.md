@@ -179,6 +179,11 @@ python -m prompt2cad.eval_runner --models-dir generated\evals --cases-dir evals\
 Some eval cases can use tracked fixture models from `evals/fixtures/`, so they
 can run deterministically without making API calls.
 
+Intent eval cases live in `evals/intent_cases/`. They check whether generated
+design intent chose the right CAD concepts, such as `near_corners`,
+`circular_pattern`, `rectangular_pattern`, `offset_from_edge`, and `slot`,
+before the intent is lowered into operation JSON.
+
 Export prompt-to-design-intent training data:
 
 ```powershell

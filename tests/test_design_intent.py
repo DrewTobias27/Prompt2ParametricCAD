@@ -190,6 +190,119 @@ def test_mirrored_intent_removes_duplicate_centered_instances():
     assert model_data["operations"][1]["positions"] == [[30, 0], [-30, 0]]
 
 
+def test_rectangular_pattern_intent_computes_grid_positions():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 70,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "grid_holes",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": 5,
+                "depth": "through",
+                "placement": {
+                    "type": "rectangular_pattern",
+                    "rows": 2,
+                    "columns": 3,
+                    "row_spacing": 20,
+                    "column_spacing": 30,
+                    "center": [0, 0],
+                },
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["positions"] == [
+        [-30, -10],
+        [0, -10],
+        [30, -10],
+        [-30, 10],
+        [0, 10],
+        [30, 10],
+    ]
+
+
+def test_offset_from_edge_intent_places_feature_inward_from_named_edge():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 70,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "front_slot",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "slot",
+                "length": 30,
+                "width": 8,
+                "orientation": "horizontal",
+                "depth": "through",
+                "placement": {
+                    "type": "offset_from_edge",
+                    "edge": "front",
+                    "offset": 6,
+                    "along": 0,
+                },
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["positions"] == [[0, 25]]
+
+
+def test_rounded_rectangle_intent_lowers_to_arc_sketch_and_builds():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 90,
+            "height": 60,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "rounded_boss",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "rounded_rectangle",
+                "width": 30,
+                "height": 18,
+                "radius": 4,
+                "distance": 6,
+                "placement": {
+                    "type": "centered",
+                },
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+    rounded_operation = model_data["operations"][1]
+
+    assert rounded_operation["profile"] == "sketch"
+    arc_segments = [
+        segment for segment in rounded_operation["segments"]
+        if segment["type"] == "arc"
+    ]
+    assert len(arc_segments) == 4
+    assert check_model_data(model_data)["passed"] is True
+
+
 def test_validate_design_intent_reports_missing_shape_dimensions():
     intent = {
         "base": {

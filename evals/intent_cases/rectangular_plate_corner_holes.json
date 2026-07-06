@@ -1,0 +1,22 @@
+{
+  "name": "rectangular_plate_corner_holes",
+  "prompt": "Create a rectangular mounting plate with four circular through holes near the corners.",
+  "expected_intent": {
+    "base": {
+      "profile": "rectangle"
+    },
+    "features": [
+      {
+        "operation": "cut",
+        "shape": "circle",
+        "target": "base.top",
+        "depth": "through",
+        "placement": {
+          "type": "near_corners",
+          "count": 4
+        }
+      }
+    ],
+    "lowers_to_buildable_model": true
+  }
+}

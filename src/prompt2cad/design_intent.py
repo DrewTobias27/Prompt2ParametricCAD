@@ -65,7 +65,9 @@ PLACEMENT_SCHEMA = {
                 "explicit",
                 "near_corners",
                 "circular_pattern",
+                "rectangular_pattern",
                 "mirrored",
+                "offset_from_edge",
             ],
         },
     },
@@ -102,7 +104,7 @@ FEATURE_INTENT_SCHEMA = {
         "target": {"type": "string"},
         "shape": {
             "type": "string",
-            "enum": ["rectangle", "circle", "polygon", "slot"],
+            "enum": ["rectangle", "circle", "polygon", "slot", "rounded_rectangle"],
         },
         "placement": PLACEMENT_SCHEMA,
         "width": POSITIVE_NUMBER_SCHEMA,
@@ -110,6 +112,7 @@ FEATURE_INTENT_SCHEMA = {
         "diameter": POSITIVE_NUMBER_SCHEMA,
         "sides": {"type": "integer", "minimum": 3},
         "length": POSITIVE_NUMBER_SCHEMA,
+        "radius": POSITIVE_NUMBER_SCHEMA,
         "orientation": {
             "type": "string",
             "enum": ["horizontal", "vertical"],
@@ -185,6 +188,27 @@ OPENAI_CIRCULAR_PATTERN_PLACEMENT_SCHEMA = {
     "required": ["type", "count", "radius", "margin", "start_angle_degrees"],
 }
 
+OPENAI_RECTANGULAR_PATTERN_PLACEMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["rectangular_pattern"]},
+        "rows": {"type": "integer", "minimum": 1},
+        "columns": {"type": "integer", "minimum": 1},
+        "row_spacing": {"type": "number"},
+        "column_spacing": {"type": "number"},
+        "center": POINT_SCHEMA,
+    },
+    "required": [
+        "type",
+        "rows",
+        "columns",
+        "row_spacing",
+        "column_spacing",
+        "center",
+    ],
+}
+
 OPENAI_MIRRORED_PLACEMENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -200,13 +224,30 @@ OPENAI_MIRRORED_PLACEMENT_SCHEMA = {
     "required": ["type", "seed", "axes"],
 }
 
+OPENAI_OFFSET_FROM_EDGE_PLACEMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["offset_from_edge"]},
+        "edge": {
+            "type": "string",
+            "enum": ["front", "back", "left", "right"],
+        },
+        "offset": {"type": "number"},
+        "along": {"type": "number"},
+    },
+    "required": ["type", "edge", "offset", "along"],
+}
+
 OPENAI_PLACEMENT_SCHEMA = {
     "anyOf": [
         OPENAI_CENTERED_PLACEMENT_SCHEMA,
         OPENAI_EXPLICIT_PLACEMENT_SCHEMA,
         OPENAI_NEAR_CORNERS_PLACEMENT_SCHEMA,
         OPENAI_CIRCULAR_PATTERN_PLACEMENT_SCHEMA,
+        OPENAI_RECTANGULAR_PATTERN_PLACEMENT_SCHEMA,
         OPENAI_MIRRORED_PLACEMENT_SCHEMA,
+        OPENAI_OFFSET_FROM_EDGE_PLACEMENT_SCHEMA,
     ],
 }
 
@@ -248,7 +289,7 @@ OPENAI_FEATURE_INTENT_SCHEMA = {
         "target": {"type": "string"},
         "shape": {
             "type": "string",
-            "enum": ["rectangle", "circle", "polygon", "slot"],
+            "enum": ["rectangle", "circle", "polygon", "slot", "rounded_rectangle"],
         },
         "placement": OPENAI_PLACEMENT_SCHEMA,
         "width": OPENAI_NULLABLE_NUMBER_SCHEMA,
@@ -256,6 +297,7 @@ OPENAI_FEATURE_INTENT_SCHEMA = {
         "diameter": OPENAI_NULLABLE_NUMBER_SCHEMA,
         "sides": OPENAI_NULLABLE_INTEGER_SCHEMA,
         "length": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "radius": OPENAI_NULLABLE_NUMBER_SCHEMA,
         "orientation": OPENAI_ORIENTATION_SCHEMA,
         "distance": OPENAI_NULLABLE_NUMBER_SCHEMA,
         "depth": OPENAI_DEPTH_SCHEMA,
@@ -271,6 +313,7 @@ OPENAI_FEATURE_INTENT_SCHEMA = {
         "diameter",
         "sides",
         "length",
+        "radius",
         "orientation",
         "distance",
         "depth",
@@ -397,7 +440,78 @@ def profile_fields(feature: dict[str, Any]) -> dict[str, Any]:
             orientation=feature.get("orientation", "horizontal"),
         )
 
+    if shape == "rounded_rectangle":
+        return rounded_rectangle_profile_fields(
+            width=number_value(feature["width"]),
+            height=number_value(feature["height"]),
+            radius=number_value(feature["radius"]),
+        )
+
     raise ValueError(f"Unsupported intent shape: {shape}")
+
+
+def rounded_rectangle_profile_fields(
+    width: float,
+    height: float,
+    radius: float,
+) -> dict[str, Any]:
+    """Return an arc sketch for a rounded rectangle."""
+    if radius <= 0:
+        raise ValueError("Rounded rectangle radius must be positive")
+    if radius * 2 >= min(width, height):
+        raise ValueError(
+            "Rounded rectangle radius must be less than half the smaller side"
+        )
+
+    half_width = width / 2
+    half_height = height / 2
+    diagonal_offset = radius / math.sqrt(2)
+    start = [-half_width + radius, -half_height]
+    segments = [
+        {"type": "line", "to": [half_width - radius, -half_height]},
+        {
+            "type": "arc",
+            "through": [
+                half_width - radius + diagonal_offset,
+                -half_height + radius - diagonal_offset,
+            ],
+            "to": [half_width, -half_height + radius],
+        },
+        {"type": "line", "to": [half_width, half_height - radius]},
+        {
+            "type": "arc",
+            "through": [
+                half_width - radius + diagonal_offset,
+                half_height - radius + diagonal_offset,
+            ],
+            "to": [half_width - radius, half_height],
+        },
+        {"type": "line", "to": [-half_width + radius, half_height]},
+        {
+            "type": "arc",
+            "through": [
+                -half_width + radius - diagonal_offset,
+                half_height - radius + diagonal_offset,
+            ],
+            "to": [-half_width, half_height - radius],
+        },
+        {"type": "line", "to": [-half_width, -half_height + radius]},
+        {
+            "type": "arc",
+            "through": [
+                -half_width + radius - diagonal_offset,
+                -half_height + radius - diagonal_offset,
+            ],
+            "to": start,
+        },
+    ]
+
+    return {
+        "profile": "sketch",
+        "start": start,
+        "segments": segments,
+        "close": True,
+    }
 
 
 def slot_profile_fields(length: float, width: float, orientation: str) -> dict[str, Any]:
@@ -466,8 +580,14 @@ def resolve_positions(base: dict[str, Any], feature: dict[str, Any]) -> list[lis
     if placement_type == "circular_pattern":
         return circular_pattern_positions(base, feature, placement)
 
+    if placement_type == "rectangular_pattern":
+        return rectangular_pattern_positions(placement)
+
     if placement_type == "mirrored":
         return mirrored_positions(placement)
+
+    if placement_type == "offset_from_edge":
+        return offset_from_edge_position(base, feature, placement)
 
     raise ValueError(f"Unsupported placement type: {placement_type}")
 
@@ -532,6 +652,29 @@ def circular_pattern_positions(
     return rounded_points(positions)
 
 
+def rectangular_pattern_positions(placement: dict[str, Any]) -> list[list[float]]:
+    """Place feature instances in a centered row/column grid."""
+    rows = int(placement["rows"])
+    columns = int(placement["columns"])
+    if rows < 1 or columns < 1:
+        raise ValueError("rectangular_pattern requires at least one row and column")
+
+    row_spacing = number_value(placement["row_spacing"])
+    column_spacing = number_value(placement["column_spacing"])
+    center = placement.get("center", [0, 0])
+    center_x = number_value(center[0])
+    center_y = number_value(center[1])
+    positions = []
+
+    for row in range(rows):
+        y = center_y + (row - (rows - 1) / 2) * row_spacing
+        for column in range(columns):
+            x = center_x + (column - (columns - 1) / 2) * column_spacing
+            positions.append([x, y])
+
+    return rounded_points(positions)
+
+
 def mirrored_positions(placement: dict[str, Any]) -> list[list[float]]:
     """Mirror a seed position across the requested axes."""
     seed = placement.get("seed", [0, 0])
@@ -552,6 +695,38 @@ def mirrored_positions(placement: dict[str, Any]) -> list[list[float]]:
                 positions.append(point)
 
     return rounded_points(positions)
+
+
+def offset_from_edge_position(
+    base: dict[str, Any],
+    feature: dict[str, Any],
+    placement: dict[str, Any],
+) -> list[list[float]]:
+    """Place one feature by offsetting inward from a named base edge."""
+    base_width, base_height = base_plan_size(base)
+    feature_width, feature_height = feature_plan_size(feature)
+    edge = placement["edge"]
+    offset = number_value(placement["offset"])
+    along = number_value(placement["along"])
+
+    if edge == "front":
+        return rounded_points(
+            [[along, base_height / 2 - offset - feature_height / 2]]
+        )
+    if edge == "back":
+        return rounded_points(
+            [[along, -base_height / 2 + offset + feature_height / 2]]
+        )
+    if edge == "right":
+        return rounded_points(
+            [[base_width / 2 - offset - feature_width / 2, along]]
+        )
+    if edge == "left":
+        return rounded_points(
+            [[-base_width / 2 + offset + feature_width / 2, along]]
+        )
+
+    raise ValueError(f"Unsupported edge: {edge}")
 
 
 def feature_relationships(feature: dict[str, Any]) -> list[dict[str, Any]]:
@@ -617,6 +792,9 @@ def feature_plan_size(feature: dict[str, Any]) -> tuple[float, float]:
             return width, length
         return length, width
 
+    if shape == "rounded_rectangle":
+        return number_value(feature["width"]), number_value(feature["height"])
+
     raise ValueError(f"Unsupported feature shape: {shape}")
 
 
@@ -640,6 +818,8 @@ def validate_feature_dimensions(feature: dict[str, Any]) -> None:
         require_keys(feature, ["diameter", "sides"])
     elif feature["shape"] == "slot":
         require_keys(feature, ["length", "width"])
+    elif feature["shape"] == "rounded_rectangle":
+        require_keys(feature, ["width", "height", "radius"])
 
     if feature["operation"] == "extrusion":
         require_keys(feature, ["distance"])

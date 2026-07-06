@@ -247,13 +247,16 @@ Supported feature shapes:
 - circle
 - polygon
 - slot
+- rounded_rectangle
 
 Supported placements:
 - centered: for centered bosses, holes, and slots
 - explicit: when exact positions are given
 - near_corners: for holes/features near 1 to 4 corners
 - circular_pattern: for bolt circles or evenly spaced radial features
+- rectangular_pattern: for row/column hole patterns
 - mirrored: for features mirrored across x and/or y axes
+- offset_from_edge: for features placed a set distance from a named edge
 
 Use stable ids such as "corner_holes", "center_boss", "bolt_holes", or
 "side_slot". Use target "base.top" unless a side or feature face is clearly
@@ -262,8 +265,9 @@ requested.
 For strict schema compatibility, fill unrelated numeric/string fields with
 null. Examples:
 - A circle feature needs diameter, but width, height, length, sides,
-  orientation, and unrelated distance/depth fields may be null.
+  radius, orientation, and unrelated distance/depth fields may be null.
 - A cut uses depth. An extrusion uses distance.
+- A rounded_rectangle feature needs width, height, and radius.
 - A near_corners placement should include count and may use margin null when
   the backend should choose a default.
 - A circular_pattern placement should include count and may use radius null

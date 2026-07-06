@@ -1,0 +1,22 @@
+{
+  "name": "circular_flange_bolt_circle",
+  "prompt": "Create a circular flange with six evenly spaced bolt holes around the center.",
+  "expected_intent": {
+    "base": {
+      "profile": "circle"
+    },
+    "features": [
+      {
+        "operation": "cut",
+        "shape": "circle",
+        "target": "base.top",
+        "depth": "through",
+        "placement": {
+          "type": "circular_pattern",
+          "count": 6
+        }
+      }
+    ],
+    "lowers_to_buildable_model": true
+  }
+}
