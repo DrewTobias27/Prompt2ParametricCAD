@@ -540,3 +540,58 @@ def test_validate_model_data_rejects_revolve_angle_over_360():
 
     with pytest.raises(ValueError):
         validate_model_data(model_data)
+
+
+def test_validate_model_data_accepts_edge_treatments():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "chamfer",
+                "id": "top_chamfer",
+                "target": "base.top_outer_edges",
+                "distance": 1,
+            },
+            {
+                "type": "fillet",
+                "id": "bottom_fillet",
+                "target": "base.bottom_outer_edges",
+                "radius": 1,
+            },
+        ]
+    }
+
+    validate_model_data(model_data)
+
+
+def test_openai_relational_schema_accepts_edge_treatments():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "chamfer",
+                "id": "top_chamfer",
+                "target": "base.top_outer_edges",
+                "distance": 1,
+            },
+        ],
+        "relationships": [],
+    }
+
+    validate(instance=model_data, schema=OPENAI_RELATIONAL_CAD_MODEL_SCHEMA)

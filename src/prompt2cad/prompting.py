@@ -229,6 +229,8 @@ deterministic CAD lowering system. Return only valid design-intent JSON.
 The output must contain:
 - base: the main solid
 - features: cuts and extrusions added after the base
+- edge_treatments: chamfers and fillets applied to existing feature edges.
+  Use [] when the part does not need chamfers or fillets.
 
 This is not the final CadQuery operation JSON. Use intent concepts such as
 placement and shape so the backend can compute exact coordinates.
@@ -257,6 +259,20 @@ Supported placements:
 - rectangular_pattern: for row/column hole patterns
 - mirrored: for features mirrored across x and/or y axes
 - offset_from_edge: for features placed a set distance from a named edge
+
+Supported edge treatments:
+- chamfer: needs distance
+- fillet: needs radius
+
+Supported edge selectors:
+- top_outer_edges
+- bottom_outer_edges
+- vertical_edges
+- all_edges
+
+Use edge_treatments for real chamfers/fillets. Do not fake chamfers by
+drawing diagonal sketch geometry unless the user asks for an unusual custom
+profile that is not a normal edge treatment.
 
 Use stable ids such as "corner_holes", "center_boss", "bolt_holes", or
 "side_slot". Use target "base.top" unless a side or feature face is clearly

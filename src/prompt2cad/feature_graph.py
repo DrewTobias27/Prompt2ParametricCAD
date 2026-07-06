@@ -159,7 +159,10 @@ class FeatureGraph:
                 f"'{parent_feature_id}' has not been built"
             )
 
-        if not self.registry.has_reference(target):
+        if (
+            not self.registry.has_reference(target)
+            and not self.registry.has_reference_group(target)
+        ):
             self.validation_warnings.append(
                 GraphValidationWarning(
                     operation_number=operation_number,

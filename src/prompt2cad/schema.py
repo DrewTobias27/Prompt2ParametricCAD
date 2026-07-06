@@ -472,6 +472,44 @@ def build_revolve_schema(profile: str) -> dict:
     }
 
 
+def build_edge_treatment_schema(
+    operation_type: str,
+    dimension_key: str,
+    include_id: bool = True,
+    require_id: bool = False,
+) -> dict:
+    """Build a schema for edge-based finishing operations."""
+    properties = {
+        "type": {
+            "type": "string",
+            "enum": [operation_type],
+        },
+        "target": {
+            "type": "string",
+        },
+        dimension_key: POSITIVE_NUMBER_SCHEMA,
+    }
+    if include_id:
+        properties["id"] = {
+            "type": "string",
+        }
+
+    required = [
+        "type",
+        "target",
+        dimension_key,
+    ]
+    if require_id:
+        required.append("id")
+
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+        "required": required,
+    }
+
+
 RECTANGLE_EXTRUDE_SCHEMA = build_base_extrude_schema("rectangle")
 CIRCLE_EXTRUDE_SCHEMA = build_base_extrude_schema("circle")
 POLYGON_EXTRUDE_SCHEMA = build_base_extrude_schema("polygon")
@@ -706,6 +744,31 @@ OPENAI_SKETCH_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema(
     include_id=False,
 )
 
+CHAMFER_SCHEMA = build_edge_treatment_schema("chamfer", "distance")
+FILLET_SCHEMA = build_edge_treatment_schema("fillet", "radius")
+
+OPENAI_CHAMFER_SCHEMA = build_edge_treatment_schema(
+    "chamfer",
+    "distance",
+    include_id=False,
+)
+OPENAI_FILLET_SCHEMA = build_edge_treatment_schema(
+    "fillet",
+    "radius",
+    include_id=False,
+)
+
+RELATIONAL_OPENAI_CHAMFER_SCHEMA = build_edge_treatment_schema(
+    "chamfer",
+    "distance",
+    require_id=True,
+)
+RELATIONAL_OPENAI_FILLET_SCHEMA = build_edge_treatment_schema(
+    "fillet",
+    "radius",
+    require_id=True,
+)
+
 OPERATION_SCHEMAS = [
     RECTANGLE_EXTRUDE_SCHEMA,
     CIRCLE_EXTRUDE_SCHEMA,
@@ -737,6 +800,8 @@ OPERATION_SCHEMAS = [
     POLYGON_CUT_REVOLVE_SCHEMA,
     POLYLINE_CUT_REVOLVE_SCHEMA,
     SKETCH_CUT_REVOLVE_SCHEMA,
+    CHAMFER_SCHEMA,
+    FILLET_SCHEMA,
 ]
 
 OPENAI_OPERATION_SCHEMAS = [
@@ -770,6 +835,8 @@ OPENAI_OPERATION_SCHEMAS = [
     OPENAI_POLYGON_CUT_REVOLVE_SCHEMA,
     OPENAI_POLYLINE_CUT_REVOLVE_SCHEMA,
     OPENAI_SKETCH_CUT_REVOLVE_SCHEMA,
+    OPENAI_CHAMFER_SCHEMA,
+    OPENAI_FILLET_SCHEMA,
 ]
 
 RELATIONAL_OPENAI_OPERATION_SCHEMAS = [
@@ -803,6 +870,8 @@ RELATIONAL_OPENAI_OPERATION_SCHEMAS = [
     RELATIONAL_OPENAI_POLYGON_CUT_REVOLVE_SCHEMA,
     RELATIONAL_OPENAI_POLYLINE_CUT_REVOLVE_SCHEMA,
     RELATIONAL_OPENAI_SKETCH_CUT_REVOLVE_SCHEMA,
+    RELATIONAL_OPENAI_CHAMFER_SCHEMA,
+    RELATIONAL_OPENAI_FILLET_SCHEMA,
 ]
 
 CAD_MODEL_SCHEMA = {

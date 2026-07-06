@@ -46,6 +46,20 @@ def find_matching_feature(
     return None
 
 
+def find_matching_edge_treatment(
+    design_intent: dict[str, Any],
+    expected_edge_treatment: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Return the first edge treatment matching an expected pattern."""
+    for edge_treatment in design_intent.get("edge_treatments", []):
+        if edge_treatment_matches_expected(
+            edge_treatment,
+            expected_edge_treatment,
+        ):
+            return edge_treatment
+    return None
+
+
 def feature_matches_expected(
     feature: dict[str, Any],
     expected_feature: dict[str, Any],
@@ -61,6 +75,18 @@ def feature_matches_expected(
                 ):
                     return False
         elif not values_match(feature.get(key), expected_value):
+            return False
+
+    return True
+
+
+def edge_treatment_matches_expected(
+    edge_treatment: dict[str, Any],
+    expected_edge_treatment: dict[str, Any],
+) -> bool:
+    """Return whether one edge treatment satisfies an expected pattern."""
+    for key, expected_value in expected_edge_treatment.items():
+        if not values_match(edge_treatment.get(key), expected_value):
             return False
 
     return True
@@ -99,6 +125,28 @@ def expected_feature_failures(
     return failures
 
 
+def expected_edge_treatment_failures(
+    design_intent: dict[str, Any],
+    expected_edge_treatments: list[dict[str, Any]],
+) -> list[str]:
+    """Return failures for edge-treatment intent expectations."""
+    failures = []
+    for expected_edge_treatment in expected_edge_treatments:
+        if (
+            find_matching_edge_treatment(
+                design_intent,
+                expected_edge_treatment,
+            )
+            is None
+        ):
+            failures.append(
+                "Missing edge treatment intent matching "
+                + json.dumps(expected_edge_treatment, sort_keys=True)
+            )
+
+    return failures
+
+
 def evaluate_design_intent(
     design_intent: dict[str, Any],
     eval_case: dict[str, Any],
@@ -119,6 +167,12 @@ def evaluate_design_intent(
         expected_feature_failures(
             design_intent,
             expected.get("features", []),
+        )
+    )
+    failures.extend(
+        expected_edge_treatment_failures(
+            design_intent,
+            expected.get("edge_treatments", []),
         )
     )
 

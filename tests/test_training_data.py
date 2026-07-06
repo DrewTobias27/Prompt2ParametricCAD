@@ -20,8 +20,14 @@ def test_intent_training_examples_validate_and_lower_to_buildable_models():
     assert examples
     for example in examples:
         model_data = validate_intent_example(example)
+        design_intent = example["design_intent"]
         assert model_data["operations"][0]["id"] == "base"
-        assert model_data["operations"][1]["id"] == example["design_intent"]["features"][0]["id"]
+        if design_intent["features"]:
+            expected_first_feature_id = design_intent["features"][0]["id"]
+        else:
+            expected_first_feature_id = design_intent["edge_treatments"][0]["id"]
+
+        assert model_data["operations"][1]["id"] == expected_first_feature_id
 
 
 def test_build_generic_training_records_include_lowered_model_data():

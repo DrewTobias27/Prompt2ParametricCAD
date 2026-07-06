@@ -75,6 +75,33 @@ def test_intent_eval_reports_wrong_relationship_choice():
     assert "near_corners" in result.failures[0]
 
 
+def test_intent_eval_accepts_matching_edge_treatment_intent():
+    eval_case = load_json(INTENT_CASES_DIR / "chamfered_rectangular_plate.json")
+    design_intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "thickness": 6,
+        },
+        "features": [],
+        "edge_treatments": [
+            {
+                "id": "top_chamfer",
+                "treatment": "chamfer",
+                "target_feature": "base",
+                "edge_selector": "top_outer_edges",
+                "distance": 1,
+            }
+        ],
+    }
+
+    result = evaluate_design_intent(design_intent, eval_case)
+
+    assert result.passed is True
+
+
 def test_intent_eval_case_files_have_expected_intent():
     for case_path in INTENT_CASES_DIR.glob("*.json"):
         eval_case = load_json(case_path)

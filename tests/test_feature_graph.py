@@ -150,22 +150,19 @@ def test_feature_graph_records_multi_instance_references():
 
     _, graph = build_model_with_graph(model_data)
 
-    assert graph.get_feature("feature_1").created_references == [
-        "feature_1.inst001.face.f001",
-        "feature_1.inst001.face.f002",
-        "feature_1.inst001.face.f003",
-        "feature_1.inst001.face.f004",
-        "feature_1.inst001.face.f005",
-        "feature_1.inst001.face.f006",
-        "feature_1.inst002.face.f001",
-        "feature_1.inst002.face.f002",
-        "feature_1.inst002.face.f003",
-        "feature_1.inst002.face.f004",
-        "feature_1.inst002.face.f005",
-        "feature_1.inst002.face.f006",
-    ]
+    created_references = graph.get_feature("feature_1").created_references
+    assert "feature_1.inst001.face.f001" in created_references
+    assert "feature_1.inst001.edge.e001" in created_references
+    assert "feature_1.inst001.vertex.v001" in created_references
+    assert "feature_1.inst002.face.f001" in created_references
+    assert "feature_1.inst002.edge.e001" in created_references
+    assert "feature_1.inst002.vertex.v001" in created_references
+    assert len(created_references) == 52
     assert graph.registry.get_plane("feature_1.inst001.top") is not None
     assert graph.registry.get_plane("feature_1.inst002.top") is not None
+    assert graph.registry.get_reference_group(
+        "feature_1.inst001.top_outer_edges"
+    ) is not None
     assert graph.validation_warnings == []
 
 
@@ -208,16 +205,17 @@ def test_build_model_with_graph_records_created_references():
     cut = graph.get_feature("cut_3")
 
     assert len(part.solids().vals()) == 1
-    assert base.created_references == [
-        "base.face.f001",
-        "base.face.f002",
-        "base.face.f003",
-        "base.face.f004",
-        "base.face.f005",
-        "base.face.f006",
-    ]
+    assert "base.face.f001" in base.created_references
+    assert "base.edge.e001" in base.created_references
+    assert "base.vertex.v001" in base.created_references
+    assert len(base.created_references) == 26
     assert "feature_1.face.f005" in boss.created_references
+    assert "feature_1.edge.e001" in boss.created_references
+    assert "feature_1.vertex.v001" in boss.created_references
     assert graph.registry.resolve_reference_name("base.top") == "base.face.f001"
+    assert graph.registry.resolve_reference_group_name("base.top_outer_edges") == (
+        "base.edge_group.top_outer_edges"
+    )
     assert (
         graph.registry.resolve_reference_name("feature_1.right")
         == "feature_1.face.f005"

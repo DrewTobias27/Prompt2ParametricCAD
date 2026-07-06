@@ -3,6 +3,7 @@
 import cadquery as cq
 
 from prompt2cad.feature_graph import FeatureGraph
+from prompt2cad.feature_registry import FeatureReference
 
 
 BASE_OPERATION_TYPES = {"extrude", "revolve"}
@@ -10,6 +11,7 @@ SIDE_FACE_NAMES = {"front", "back", "left", "right"}
 VIRTUAL_TARGET_POSITION_FACTORS = (1, 0.75, 0.5, 0.25, 0)
 ADD_REVOLVE_POSITION_FACTORS = (1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.25)
 GEOMETRY_TOLERANCE = 1e-9
+EDGE_MATCH_TOLERANCE = 1e-6
 
 
 def apply_face_tags(
@@ -575,6 +577,193 @@ def keep_largest_connected_solid(part: cq.Workplane) -> cq.Workplane:
     return part.newObject([largest_solid])
 
 
+def edge_touches_outer_box(edge, bounding_box) -> bool:
+    """Return whether an edge lies on the outside boundary of the model box."""
+    edge_box = edge.BoundingBox()
+    return (
+        abs(edge_box.xmin - bounding_box.xmin) <= GEOMETRY_TOLERANCE
+        or abs(edge_box.xmax - bounding_box.xmax) <= GEOMETRY_TOLERANCE
+        or abs(edge_box.ymin - bounding_box.ymin) <= GEOMETRY_TOLERANCE
+        or abs(edge_box.ymax - bounding_box.ymax) <= GEOMETRY_TOLERANCE
+    )
+
+
+def values_are_close(first_value: float, second_value: float, tolerance: float) -> bool:
+    """Return whether two float values are within tolerance."""
+    return abs(first_value - second_value) <= tolerance
+
+
+def edge_matches_reference(edge, reference: FeatureReference) -> bool:
+    """Return whether a live CadQuery edge matches a saved edge reference."""
+    metadata = reference.metadata
+    expected_center = metadata.get("center")
+    expected_box = metadata.get("bounding_box")
+    if expected_center is None or expected_box is None:
+        return False
+
+    center = edge.Center()
+    edge_box = edge.BoundingBox()
+    return (
+        values_are_close(center.x, expected_center[0], EDGE_MATCH_TOLERANCE)
+        and values_are_close(center.y, expected_center[1], EDGE_MATCH_TOLERANCE)
+        and values_are_close(center.z, expected_center[2], EDGE_MATCH_TOLERANCE)
+        and values_are_close(edge_box.xmin, expected_box["xmin"], EDGE_MATCH_TOLERANCE)
+        and values_are_close(edge_box.xmax, expected_box["xmax"], EDGE_MATCH_TOLERANCE)
+        and values_are_close(edge_box.ymin, expected_box["ymin"], EDGE_MATCH_TOLERANCE)
+        and values_are_close(edge_box.ymax, expected_box["ymax"], EDGE_MATCH_TOLERANCE)
+        and values_are_close(edge_box.zmin, expected_box["zmin"], EDGE_MATCH_TOLERANCE)
+        and values_are_close(edge_box.zmax, expected_box["zmax"], EDGE_MATCH_TOLERANCE)
+    )
+
+
+def select_registered_edges(
+    part: cq.Workplane,
+    references: list[FeatureReference],
+    target: str,
+    operation_number: int,
+) -> list:
+    """Select live model edges matching saved feature edge references."""
+    live_edges = part.val().Edges()
+    selected_edges = []
+    selected_edge_ids = set()
+    missing_references = []
+
+    for reference in references:
+        matching_edge = None
+        for edge in live_edges:
+            if id(edge) in selected_edge_ids:
+                continue
+            if edge_matches_reference(edge, reference):
+                matching_edge = edge
+                break
+
+        if matching_edge is None:
+            missing_references.append(reference.name)
+        else:
+            selected_edge_ids.add(id(matching_edge))
+            selected_edges.append(matching_edge)
+
+    if missing_references:
+        raise ValueError(
+            f"Operation {operation_number}: target '{target}' references "
+            "saved feature edges that are no longer present in the current "
+            "solid: "
+            + ", ".join(missing_references)
+        )
+
+    return selected_edges
+
+
+def select_edges_for_target(
+    part: cq.Workplane,
+    target: str,
+    operation_number: int,
+    feature_graph: FeatureGraph | None = None,
+) -> list:
+    """Resolve a feature edge target into concrete CadQuery edge objects."""
+    if feature_graph is not None:
+        reference_group = feature_graph.registry.get_reference_group(target)
+        if reference_group is not None:
+            return select_registered_edges(
+                part,
+                reference_group,
+                target,
+                operation_number,
+            )
+
+    if "." not in target:
+        raise ValueError(
+            f"Operation {operation_number}: edge target '{target}' must use "
+            "the format 'feature.edge_selector', such as "
+            "'base.top_outer_edges'"
+        )
+
+    _, edge_selector = target.split(".", 1)
+    solid = part.val()
+    bounding_box = solid.BoundingBox()
+    edges = solid.Edges()
+
+    if edge_selector == "all_edges":
+        return list(edges)
+
+    selected_edges = []
+    for edge in edges:
+        edge_box = edge.BoundingBox()
+        center = edge.Center()
+        edge_z_length = edge_box.zmax - edge_box.zmin
+
+        if edge_selector == "top_outer_edges":
+            if (
+                abs(center.z - bounding_box.zmax) <= GEOMETRY_TOLERANCE
+                and edge_touches_outer_box(edge, bounding_box)
+            ):
+                selected_edges.append(edge)
+        elif edge_selector == "bottom_outer_edges":
+            if (
+                abs(center.z - bounding_box.zmin) <= GEOMETRY_TOLERANCE
+                and edge_touches_outer_box(edge, bounding_box)
+            ):
+                selected_edges.append(edge)
+        elif edge_selector == "vertical_edges":
+            if (
+                edge_z_length > GEOMETRY_TOLERANCE
+                and edge_touches_outer_box(edge, bounding_box)
+            ):
+                selected_edges.append(edge)
+        else:
+            supported_targets = (
+                "top_outer_edges, bottom_outer_edges, "
+                "vertical_edges, all_edges"
+            )
+            raise ValueError(
+                f"Operation {operation_number}: unsupported edge selector "
+                f"'{edge_selector}'. Supported selectors: {supported_targets}."
+            )
+
+    if not selected_edges:
+        raise ValueError(
+            f"Operation {operation_number}: edge target '{target}' did not "
+            "match any model edges"
+        )
+
+    return selected_edges
+
+
+def apply_edge_treatment(
+    part: cq.Workplane,
+    operation: dict,
+    operation_number: int,
+    feature_graph: FeatureGraph | None = None,
+) -> cq.Workplane:
+    """Apply a real chamfer or fillet feature to selected model edges."""
+    if part is None:
+        raise ValueError("Cannot apply an edge treatment before a solid exists")
+
+    operation_type = operation["type"]
+    edges = select_edges_for_target(
+        part,
+        operation["target"],
+        operation_number,
+        feature_graph=feature_graph,
+    )
+    edge_workplane = part.newObject(edges)
+
+    if operation_type == "chamfer":
+        distance = operation["distance"]
+        validate_positive_number(distance, "Chamfer distance")
+        return edge_workplane.chamfer(distance)
+
+    if operation_type == "fillet":
+        radius = operation["radius"]
+        validate_positive_number(radius, "Fillet radius")
+        return edge_workplane.fillet(radius)
+
+    raise ValueError(
+        f"Operation {operation_number}: unsupported edge treatment "
+        f"'{operation_type}'"
+    )
+
+
 def apply_add_extrusion_face_tags(
     part: cq.Workplane,
     operation: dict,
@@ -1023,6 +1212,13 @@ def build_model_with_graph(model_data: dict) -> tuple[cq.Workplane, FeatureGraph
             part = apply_add_revolve(part, operation, operation_number)
         elif operation_type == "cut_revolve":
             part = apply_cut_revolve(part, operation, operation_number)
+        elif operation_type in {"chamfer", "fillet"}:
+            part = apply_edge_treatment(
+                part,
+                operation,
+                operation_number,
+                feature_graph=feature_graph,
+            )
         else:
             raise ValueError(
                 f"Operation {operation_number}: "

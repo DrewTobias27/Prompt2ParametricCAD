@@ -366,3 +366,69 @@ def test_intent_to_model_data_accepts_nulls_from_strict_api_schema():
 
     assert model_data["operations"][1]["profile"] == "circle"
     assert len(model_data["operations"][1]["positions"]) == 4
+
+
+def test_edge_treatment_intent_lowers_to_real_chamfer_operation_and_builds():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "thickness": 6,
+        },
+        "features": [],
+        "edge_treatments": [
+            {
+                "id": "top_chamfer",
+                "treatment": "chamfer",
+                "target_feature": "base",
+                "edge_selector": "top_outer_edges",
+                "distance": 1,
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1] == {
+        "type": "chamfer",
+        "id": "top_chamfer",
+        "target": "base.top_outer_edges",
+        "distance": 1.0,
+    }
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_edge_treatment_intent_accepts_nulls_from_strict_api_schema():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "diameter": None,
+            "sides": None,
+            "thickness": 6,
+        },
+        "features": [],
+        "edge_treatments": [
+            {
+                "id": "corner_rounds",
+                "treatment": "fillet",
+                "target_feature": "base",
+                "edge_selector": "vertical_edges",
+                "distance": None,
+                "radius": 1,
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1] == {
+        "type": "fillet",
+        "id": "corner_rounds",
+        "target": "base.vertical_edges",
+        "radius": 1.0,
+    }

@@ -128,6 +128,36 @@ FEATURE_INTENT_SCHEMA = {
     "required": ["id", "operation", "target", "shape", "placement"],
 }
 
+EDGE_TREATMENT_INTENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "id": {"type": "string"},
+        "treatment": {
+            "type": "string",
+            "enum": ["chamfer", "fillet"],
+        },
+        "target_feature": {"type": "string"},
+        "edge_selector": {
+            "type": "string",
+            "enum": [
+                "top_outer_edges",
+                "bottom_outer_edges",
+                "vertical_edges",
+                "all_edges",
+            ],
+        },
+        "distance": POSITIVE_NUMBER_SCHEMA,
+        "radius": POSITIVE_NUMBER_SCHEMA,
+    },
+    "required": [
+        "id",
+        "treatment",
+        "target_feature",
+        "edge_selector",
+    ],
+}
+
 DESIGN_INTENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -136,6 +166,10 @@ DESIGN_INTENT_SCHEMA = {
         "features": {
             "type": "array",
             "items": FEATURE_INTENT_SCHEMA,
+        },
+        "edge_treatments": {
+            "type": "array",
+            "items": EDGE_TREATMENT_INTENT_SCHEMA,
         },
     },
     "required": ["base", "features"],
@@ -320,6 +354,38 @@ OPENAI_FEATURE_INTENT_SCHEMA = {
     ],
 }
 
+OPENAI_EDGE_TREATMENT_INTENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "id": {"type": "string"},
+        "treatment": {
+            "type": "string",
+            "enum": ["chamfer", "fillet"],
+        },
+        "target_feature": {"type": "string"},
+        "edge_selector": {
+            "type": "string",
+            "enum": [
+                "top_outer_edges",
+                "bottom_outer_edges",
+                "vertical_edges",
+                "all_edges",
+            ],
+        },
+        "distance": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "radius": OPENAI_NULLABLE_NUMBER_SCHEMA,
+    },
+    "required": [
+        "id",
+        "treatment",
+        "target_feature",
+        "edge_selector",
+        "distance",
+        "radius",
+    ],
+}
+
 OPENAI_DESIGN_INTENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -329,8 +395,12 @@ OPENAI_DESIGN_INTENT_SCHEMA = {
             "type": "array",
             "items": OPENAI_FEATURE_INTENT_SCHEMA,
         },
+        "edge_treatments": {
+            "type": "array",
+            "items": OPENAI_EDGE_TREATMENT_INTENT_SCHEMA,
+        },
     },
-    "required": ["base", "features"],
+    "required": ["base", "features", "edge_treatments"],
 }
 
 
@@ -346,6 +416,8 @@ def validate_design_intent(intent: dict[str, Any]) -> None:
     validate_base_dimensions(intent["base"])
     for feature in intent["features"]:
         validate_feature_dimensions(feature)
+    for edge_treatment in intent.get("edge_treatments", []):
+        validate_edge_treatment_dimensions(edge_treatment)
 
 
 def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
@@ -361,6 +433,9 @@ def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
         operation = feature_operation(base, feature)
         operations.append(operation)
         relationships.extend(feature_relationships(feature))
+
+    for edge_treatment in intent.get("edge_treatments", []):
+        operations.append(edge_treatment_operation(edge_treatment))
 
     return {
         "operations": operations,
@@ -406,6 +481,28 @@ def feature_operation(base: dict[str, Any], feature: dict[str, Any]) -> dict[str
         operation["distance"] = number_value(feature.get("distance", 5))
     else:
         operation["depth"] = feature.get("depth", "through")
+
+    return operation
+
+
+def edge_treatment_operation(edge_treatment: dict[str, Any]) -> dict[str, Any]:
+    """Return one concrete chamfer or fillet operation."""
+    treatment = edge_treatment["treatment"]
+    operation = {
+        "type": treatment,
+        "id": edge_treatment["id"],
+        "target": (
+            f"{edge_treatment['target_feature']}."
+            f"{edge_treatment['edge_selector']}"
+        ),
+    }
+
+    if treatment == "chamfer":
+        operation["distance"] = number_value(edge_treatment["distance"])
+    elif treatment == "fillet":
+        operation["radius"] = number_value(edge_treatment["radius"])
+    else:
+        raise ValueError(f"Unsupported edge treatment: {treatment}")
 
     return operation
 
@@ -825,6 +922,14 @@ def validate_feature_dimensions(feature: dict[str, Any]) -> None:
         require_keys(feature, ["distance"])
     else:
         require_keys(feature, ["depth"])
+
+
+def validate_edge_treatment_dimensions(edge_treatment: dict[str, Any]) -> None:
+    """Check treatment-specific edge treatment dimensions."""
+    if edge_treatment["treatment"] == "chamfer":
+        require_keys(edge_treatment, ["distance"])
+    elif edge_treatment["treatment"] == "fillet":
+        require_keys(edge_treatment, ["radius"])
 
 
 def require_keys(data: dict[str, Any], keys: list[str]) -> None:

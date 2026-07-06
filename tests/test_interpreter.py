@@ -1559,3 +1559,129 @@ def test_named_multi_position_add_extrude_builds_one_valid_model():
     assert len(part.solids().vals()) == 1
     assert solid.isValid()
     assert solid.Volume() == pytest.approx(base_volume + added_volume)
+
+
+def test_chamfer_top_outer_edges_builds_valid_modified_solid():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "chamfer",
+                "id": "top_chamfer",
+                "target": "base.top_outer_edges",
+                "distance": 1,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    assert len(part.solids().vals()) == 1
+    assert solid.isValid()
+    assert solid.Volume() < 80 * 50 * 6
+
+
+def test_chamfer_added_feature_top_outer_edges_uses_registered_edge_group():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "add_extrude",
+                "id": "feature_1",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 8,
+                "width": 20,
+                "height": 12,
+            },
+            {
+                "type": "chamfer",
+                "id": "boss_top_chamfer",
+                "target": "feature_1.top_outer_edges",
+                "distance": 1,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    base_volume = 80 * 50 * 6
+    boss_volume = 20 * 12 * 8
+
+    assert len(part.solids().vals()) == 1
+    assert solid.isValid()
+    assert solid.Volume() < base_volume + boss_volume
+    assert solid.Volume() > base_volume
+
+
+def test_fillet_vertical_edges_builds_valid_modified_solid():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 8,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "fillet",
+                "id": "vertical_fillet",
+                "target": "base.vertical_edges",
+                "radius": 1,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    assert len(part.solids().vals()) == 1
+    assert solid.isValid()
+    assert solid.Volume() < 80 * 50 * 8
+
+
+def test_edge_treatment_rejects_unknown_edge_selector():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "chamfer",
+                "id": "bad_chamfer",
+                "target": "base.random_edges",
+                "distance": 1,
+            },
+        ]
+    }
+
+    with pytest.raises(ValueError, match="unsupported edge selector"):
+        build_model(model_data)

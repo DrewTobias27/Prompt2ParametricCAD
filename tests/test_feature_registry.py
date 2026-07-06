@@ -32,6 +32,20 @@ def test_register_rectangular_prism_right_face_frame():
         0.0,
         5.0,
     )
+    assert registry.resolve_reference_name("feature_1.top_front_edge") == (
+        "feature_1.edge.e001"
+    )
+    assert registry.resolve_reference_group_name("feature_1.top_outer_edges") == (
+        "feature_1.edge_group.top_outer_edges"
+    )
+    top_edges = registry.get_reference_group("feature_1.top_outer_edges")
+    assert [reference.name for reference in top_edges] == [
+        "feature_1.edge.e001",
+        "feature_1.edge.e002",
+        "feature_1.edge.e003",
+        "feature_1.edge.e004",
+    ]
+    assert registry.get_reference("feature_1.top_front_left").kind == "vertex"
 
 
 def test_register_rectangular_prism_instance_references():
@@ -52,6 +66,9 @@ def test_register_rectangular_prism_instance_references():
     assert registry.resolve_reference_name("feature_1.inst001.right") == (
         "feature_1.inst001.face.f005"
     )
+    assert registry.resolve_reference_group_name(
+        "feature_1.inst001.top_outer_edges"
+    ) == "feature_1.inst001.edge_group.top_outer_edges"
     assert registry.resolve_reference_name("feature_1.right") is None
 
 

@@ -1,0 +1,18 @@
+{
+  "name": "chamfered_rectangular_plate",
+  "prompt": "Create a rectangular plate with a small chamfer around the top outside edges.",
+  "expected_intent": {
+    "base": {
+      "profile": "rectangle"
+    },
+    "features": [],
+    "edge_treatments": [
+      {
+        "treatment": "chamfer",
+        "target_feature": "base",
+        "edge_selector": "top_outer_edges"
+      }
+    ],
+    "lowers_to_buildable_model": true
+  }
+}
