@@ -5,7 +5,7 @@ export const MANUAL_PRESETS = [
     description: "Rectangular plate with four through holes.",
     base: { profile: "rectangle", width: 100, height: 70, thickness: 8 },
     features: [
-      { operation: "cut", profile: "circle", pattern: "circular", x: 35, y: 22, copies: 4, diameter: 6, depthMode: "through" },
+      { operation: "cut", profile: "circle", pattern: "single", x: 35, y: 22, mirrorX: true, mirrorY: true, diameter: 6, depthMode: "through" },
     ],
   },
   {

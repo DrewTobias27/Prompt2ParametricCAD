@@ -13,10 +13,11 @@
         "operation": "cut",
         "target": "base.top",
         "profile": "circle",
-        "pattern": "circular",
+        "pattern": "single",
         "x": 35,
         "y": 22,
-        "copies": 4,
+        "mirrorX": true,
+        "mirrorY": true,
         "diameter": 6,
         "depthMode": "through"
       }

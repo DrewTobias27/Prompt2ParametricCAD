@@ -123,9 +123,13 @@ export default function App() {
         </section>
 
         <aside className="side-stack">
-          <DrawingPreview base={base} features={features} usesApiAssistance={usesApiAssistance} />
-          <FeatureTreePanel base={base} features={features} />
-          <DesignReview base={base} features={features} usesApiAssistance={usesApiAssistance} />
+          {mode === "manual" && (
+            <>
+              <DrawingPreview base={base} features={features} usesApiAssistance={usesApiAssistance} />
+              <FeatureTreePanel base={base} features={features} />
+              <DesignReview base={base} features={features} usesApiAssistance={usesApiAssistance} />
+            </>
+          )}
           <OutputPanel status={status} result={result} downloadUrl={downloadUrl} />
         </aside>
       </section>

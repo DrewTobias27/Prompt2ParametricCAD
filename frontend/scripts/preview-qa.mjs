@@ -1,4 +1,5 @@
 import { createFeature, defaultBase } from "../src/modelBuilders.js";
+import { MANUAL_PRESETS } from "../src/manualPresets.js";
 import { buildPreviewModel } from "../src/previewEngine.js";
 
 function feature(overrides) {
@@ -199,6 +200,32 @@ function testMirroredFeatureCreatesFourPrimaryRecords() {
   assert(topPosts.length === 4, `expected 4 mirrored primary records, found ${topPosts.length}`);
 }
 
+function testMountingPlatePresetKeepsCornerHolesInsideBase() {
+  const preset = MANUAL_PRESETS.find((manualPreset) => manualPreset.id === "mounting_plate");
+  assert(preset, "mounting plate preset should exist");
+
+  const model = buildPreviewModel({
+    base: {
+      ...defaultBase,
+      ...preset.base,
+      reasonable: false,
+      polylineDescription: "",
+    },
+    features: preset.features.map((featureData, index) => ({
+      ...createFeature(index + 1),
+      ...featureData,
+      localId: featureData.localId ?? `preset_feature_${index + 1}`,
+      reasonable: false,
+      polylineDescription: "",
+    })),
+  });
+
+  const topHoles = recordsFor(model, "top", 1).filter((record) => record.isPrimary);
+  const linkedWarnings = model.warnings.filter((warning) => warning.featureNumbers?.includes(1));
+  assert(topHoles.length === 4, `expected 4 mirrored corner holes, found ${topHoles.length}`);
+  assert(linkedWarnings.length === 0, `mounting plate preset should not warn, found ${linkedWarnings.length} warnings`);
+}
+
 function testFeatureLinkedWarningsIncludeSuggestions() {
   const model = buildPreviewModel({
     base: {
@@ -234,6 +261,7 @@ const tests = [
   testRightFaceRectangularCutProjectsToOtherViews,
   testCutCanTargetPriorFeatureTopFace,
   testMirroredFeatureCreatesFourPrimaryRecords,
+  testMountingPlatePresetKeepsCornerHolesInsideBase,
   testFeatureLinkedWarningsIncludeSuggestions,
 ];
 
