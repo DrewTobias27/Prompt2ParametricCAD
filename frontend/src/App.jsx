@@ -1,5 +1,10 @@
 import { useMemo, useState } from "react";
-import { buildFromModelData, generateFromPrompt, getDownloadUrl } from "./api.js";
+import {
+  buildFromModelData,
+  generateFromPrompt,
+  generateFromPromptIntent,
+  getDownloadUrl,
+} from "./api.js";
 import { DrawingPreview } from "./DrawingPreview.jsx";
 import { FeatureTreePanel } from "./FeatureTreePanel.jsx";
 import { ManualBuilder } from "./ManualBuilder.jsx";
@@ -13,6 +18,7 @@ import { DesignReview, OutputPanel } from "./SidePanels.jsx";
 
 export default function App() {
   const [mode, setMode] = useState("manual");
+  const [promptGenerationMode, setPromptGenerationMode] = useState("direct");
   const [prompt, setPrompt] = useState("Create an 80 mm by 50 mm rectangular plate that is 6 mm thick.");
   const [base, setBase] = useState(defaultBase);
   const [features, setFeatures] = useState([]);
@@ -49,6 +55,11 @@ export default function App() {
 
   function handlePromptSubmit(event) {
     event.preventDefault();
+    if (promptGenerationMode === "intent") {
+      runRequest(() => generateFromPromptIntent(prompt));
+      return;
+    }
+
     runRequest(() => generateFromPrompt(prompt));
   }
 
@@ -116,6 +127,8 @@ export default function App() {
             <PromptBuilder
               prompt={prompt}
               setPrompt={setPrompt}
+              generationMode={promptGenerationMode}
+              setGenerationMode={setPromptGenerationMode}
               onSubmit={handlePromptSubmit}
               isLoading={isLoading}
             />
@@ -137,7 +150,14 @@ export default function App() {
   );
 }
 
-function PromptBuilder({ prompt, setPrompt, onSubmit, isLoading }) {
+function PromptBuilder({
+  prompt,
+  setPrompt,
+  generationMode,
+  setGenerationMode,
+  onSubmit,
+  isLoading,
+}) {
   return (
     <form className="panel" onSubmit={onSubmit}>
       <div>
@@ -147,6 +167,33 @@ function PromptBuilder({ prompt, setPrompt, onSubmit, isLoading }) {
           validated CAD JSON and exports a STEP file.
         </p>
       </div>
+      <fieldset className="mode-choice">
+        <legend>Generation mode</legend>
+        <label>
+          <input
+            type="radio"
+            name="prompt-generation-mode"
+            checked={generationMode === "direct"}
+            onChange={() => setGenerationMode("direct")}
+          />
+          <span>
+            Direct CAD JSON
+            <small>Current production path. Best for general compatibility.</small>
+          </span>
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="prompt-generation-mode"
+            checked={generationMode === "intent"}
+            onChange={() => setGenerationMode("intent")}
+          />
+          <span>
+            Design intent beta
+            <small>Experimental path for relationships like centered, near corners, and bolt circles.</small>
+          </span>
+        </label>
+      </fieldset>
       <label>
         CAD prompt
         <textarea
@@ -157,7 +204,7 @@ function PromptBuilder({ prompt, setPrompt, onSubmit, isLoading }) {
         />
       </label>
       <button type="submit" disabled={isLoading}>
-        {isLoading ? "Generating..." : "Generate CAD"}
+        {isLoading ? "Generating..." : generationMode === "intent" ? "Generate with intent beta" : "Generate CAD"}
       </button>
     </form>
   );

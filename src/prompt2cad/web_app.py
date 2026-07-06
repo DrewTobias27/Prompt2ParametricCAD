@@ -10,6 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from prompt2cad.interpreter import build_model
+from prompt2cad.design_intent import intent_to_model_data
+from prompt2cad.prompting import prompt_to_design_intent
 from prompt2cad.prompting import prompt_to_model_data_with_repair
 from prompt2cad.prompting import suggest_base_model_data
 from prompt2cad.prompting import suggest_feature_model_data
@@ -117,6 +119,29 @@ def generate_cad(request: CADRequest):
             "message": str(error),
             "model_data": model_data if "model_data" in locals() else None,
             "repair_history": repair_history if "repair_history" in locals() else [],
+        }
+
+
+@app.post("/generate-intent")
+def generate_cad_from_design_intent(request: CADRequest):
+    """Generate CAD through the experimental design-intent pipeline."""
+    try:
+        design_intent = prompt_to_design_intent(request.prompt)
+        model_data = intent_to_model_data(design_intent)
+        response_data = export_model_data(
+            model_data,
+            f"intent {request.prompt}",
+        )
+        response_data["design_intent"] = design_intent
+        response_data["generation_mode"] = "design_intent"
+        return response_data
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error),
+            "design_intent": design_intent if "design_intent" in locals() else None,
+            "model_data": model_data if "model_data" in locals() else None,
+            "generation_mode": "design_intent",
         }
 
 

@@ -172,6 +172,51 @@ h4 {
   box-shadow: 0 5px 16px rgba(15, 23, 42, 0.12);
 }
 
+.mode-choice {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  border: 1px solid #dbe3ef;
+  border-radius: 18px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.mode-choice legend {
+  padding: 0 6px;
+  color: #0f172a;
+  font-weight: 750;
+}
+
+.mode-choice label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px;
+  background: white;
+  cursor: pointer;
+}
+
+.mode-choice input {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  margin-top: 3px;
+}
+
+.mode-choice span {
+  display: grid;
+  gap: 3px;
+}
+
+.mode-choice small {
+  color: #64748b;
+  font-weight: 450;
+  line-height: 1.35;
+}
+
 .panel,
 .form-section {
   display: grid;
@@ -348,15 +393,8 @@ textarea {
 }
 
 .feature-tree {
-  display: grid;
-  gap: 10px;
   margin: 16px 0 0;
-  padding-left: 1.35rem;
-}
-
-.feature-tree li::marker {
-  color: #64748b;
-  font-weight: 700;
+  color: #334155;
 }
 
 .feature-tree-node {
@@ -366,6 +404,72 @@ textarea {
   border-radius: 14px;
   padding: 12px 14px;
   background: #f8fafc;
+  min-width: 0;
+  flex: 1;
+}
+
+.feature-tree-item {
+  position: relative;
+}
+
+.feature-tree-branch {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.tree-connector {
+  position: relative;
+  width: 22px;
+  flex: 0 0 22px;
+}
+
+.feature-tree-item:not(.root) > .feature-tree-branch > .tree-connector::before {
+  position: absolute;
+  top: -10px;
+  bottom: 50%;
+  left: 10px;
+  width: 1px;
+  background: #cbd5e1;
+  content: "";
+}
+
+.feature-tree-item:not(.root) > .feature-tree-branch > .tree-connector::after {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  width: 14px;
+  height: 1px;
+  background: #cbd5e1;
+  content: "";
+}
+
+.feature-tree-children {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  margin-left: 22px;
+  padding-top: 10px;
+  padding-left: 22px;
+}
+
+.feature-tree-children::before {
+  position: absolute;
+  top: 0;
+  bottom: 18px;
+  left: 10px;
+  width: 1px;
+  background: #cbd5e1;
+  content: "";
+}
+
+.feature-tree-item.root > .feature-tree-branch > .tree-connector {
+  display: none;
+}
+
+.feature-tree-item.root > .feature-tree-children {
+  margin-left: 0;
 }
 
 .tree-node-title {

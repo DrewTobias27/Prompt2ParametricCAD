@@ -1,6 +1,8 @@
 import { DIAMETER_SYMBOL, MULTIPLY_SYMBOL } from "./symbols.js";
 
 export function FeatureTreePanel({ base, features }) {
+  const tree = buildFeatureTree(features);
+
   return (
     <section className="feature-tree-card">
       <div className="section-heading">
@@ -10,26 +12,45 @@ export function FeatureTreePanel({ base, features }) {
         </div>
       </div>
 
-      <ol className="feature-tree">
-        <li>
-          <div className="feature-tree-node">
-            <span className="tree-node-title">Base</span>
-            <span className="tree-node-summary">{baseSummary(base)}</span>
-          </div>
-        </li>
-        {features.map((feature, index) => (
-          <li key={feature.localId}>
-            <div className="feature-tree-node">
-              <span className="tree-node-title">Feature {index + 1}</span>
-              <span className="tree-node-summary">{featureSummary(feature)}</span>
-              <span className="tree-node-meta">
-                Parent: {humanizeTarget(feature.target)}
-              </span>
-            </div>
-          </li>
-        ))}
-      </ol>
+      <div className="feature-tree" role="tree" aria-label="Manual model feature tree">
+        <TreeNode
+          title="Base"
+          summary={baseSummary(base)}
+          meta="Root solid"
+          childrenNodes={tree}
+          isRoot
+        />
+      </div>
     </section>
+  );
+}
+
+function TreeNode({ title, summary, meta, childrenNodes = [], isRoot = false }) {
+  return (
+    <div className={`feature-tree-item ${isRoot ? "root" : ""}`} role="treeitem">
+      <div className="feature-tree-branch">
+        <div className="tree-connector" aria-hidden="true" />
+        <div className="feature-tree-node">
+          <span className="tree-node-title">{title}</span>
+          <span className="tree-node-summary">{summary}</span>
+          {meta && <span className="tree-node-meta">{meta}</span>}
+        </div>
+      </div>
+
+      {childrenNodes.length > 0 && (
+        <div className="feature-tree-children" role="group">
+          {childrenNodes.map((node) => (
+            <TreeNode
+              key={node.id}
+              title={node.title}
+              summary={node.summary}
+              meta={node.meta}
+              childrenNodes={node.children}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -106,4 +127,34 @@ function humanizeTarget(target) {
   }
 
   return `${id.replace("_", " ")} ${face}`;
+}
+
+function buildFeatureTree(features) {
+  const nodes = features.map((feature, index) => ({
+    id: `feature_${index + 1}`,
+    title: `Feature ${index + 1}`,
+    summary: featureSummary(feature),
+    meta: `Target: ${humanizeTarget(feature.target)}`,
+    children: [],
+  }));
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const rootChildren = [];
+
+  for (const node of nodes) {
+    const featureIndex = Number(node.id.replace("feature_", "")) - 1;
+    const parentNode = nodesById.get(parentFeatureId(features[featureIndex].target));
+
+    if (parentNode) {
+      parentNode.children.push(node);
+    } else {
+      rootChildren.push(node);
+    }
+  }
+
+  return rootChildren;
+}
+
+function parentFeatureId(target) {
+  const [id] = String(target).split(".");
+  return id?.startsWith("feature_") ? id : "base";
 }
