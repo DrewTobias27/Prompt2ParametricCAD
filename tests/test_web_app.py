@@ -58,3 +58,30 @@ def test_generate_cad_from_design_intent_returns_intent_and_model(monkeypatch):
     assert response["generation_mode"] == "design_intent"
     assert response["design_intent"] == design_intent
     assert response["model_data"] == model_data
+
+
+def test_export_model_data_returns_quality_report(monkeypatch, tmp_path):
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            }
+        ]
+    }
+
+    monkeypatch.setattr(web_app, "GENERATED_DIR", tmp_path)
+    monkeypatch.setattr(web_app, "build_model", lambda data: object())
+    monkeypatch.setattr(web_app.cq.exporters, "export", lambda part, path: None)
+
+    response = web_app.export_model_data(model_data, "simple plate")
+
+    assert response["status"] == "success"
+    assert response["model_data"] == model_data
+    assert response["quality_report"]["status"] == "pass"
+    assert response["quality_report"]["issues"] == []

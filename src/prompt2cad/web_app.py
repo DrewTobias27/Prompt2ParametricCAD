@@ -15,6 +15,7 @@ from prompt2cad.prompting import prompt_to_design_intent
 from prompt2cad.prompting import prompt_to_model_data_with_repair
 from prompt2cad.prompting import suggest_base_model_data
 from prompt2cad.prompting import suggest_feature_model_data
+from prompt2cad.quality import check_model_quality
 from prompt2cad.schema import validate_model_data
 
 
@@ -68,6 +69,7 @@ def make_safe_filename(prompt: str) -> str:
 
 def export_model_data(model_data: dict, filename_hint: str) -> dict:
     """Validate, build, export, and return web response data for a CAD model."""
+    quality_report = check_model_quality(model_data)
     validate_model_data(model_data)
     part = build_model(model_data)
     step_filename = make_safe_filename(filename_hint)
@@ -77,6 +79,7 @@ def export_model_data(model_data: dict, filename_hint: str) -> dict:
     return {
         "status": "success",
         "model_data": model_data,
+        "quality_report": quality_report,
         "step_file": str(step_path),
         "download_url": f"/download/{step_filename}",
     }
@@ -118,6 +121,11 @@ def generate_cad(request: CADRequest):
             "status": "error",
             "message": str(error),
             "model_data": model_data if "model_data" in locals() else None,
+            "quality_report": (
+                check_model_quality(model_data)
+                if "model_data" in locals()
+                else check_model_quality(None)
+            ),
             "repair_history": repair_history if "repair_history" in locals() else [],
         }
 
@@ -141,6 +149,11 @@ def generate_cad_from_design_intent(request: CADRequest):
             "message": str(error),
             "design_intent": design_intent if "design_intent" in locals() else None,
             "model_data": model_data if "model_data" in locals() else None,
+            "quality_report": (
+                check_model_quality(model_data)
+                if "model_data" in locals()
+                else check_model_quality(None)
+            ),
             "generation_mode": "design_intent",
         }
 
@@ -157,6 +170,11 @@ def build_cad(request: CADBuildRequest):
             "status": "error",
             "message": str(error),
             "model_data": model_data if "model_data" in locals() else None,
+            "quality_report": (
+                check_model_quality(model_data)
+                if "model_data" in locals()
+                else check_model_quality(None)
+            ),
         }
 
 

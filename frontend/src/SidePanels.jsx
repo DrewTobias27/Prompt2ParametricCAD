@@ -56,13 +56,24 @@ export function OutputPanel({ status, result, downloadUrl }) {
   );
 }
 
-export function GeneratedModelReview({ modelData }) {
-  const warnings = useMemo(() => reviewGeneratedModel(modelData), [modelData]);
+export function GeneratedModelReview({ modelData, qualityReport }) {
+  const warnings = useMemo(
+    () => qualityReport?.issues ?? reviewGeneratedModel(modelData),
+    [modelData, qualityReport],
+  );
   if (!modelData) {
     return null;
   }
 
-  const isClear = warnings.length === 1 && warnings[0].severity === "success";
+  const isBackendClear = qualityReport?.status === "pass" && warnings.length === 0;
+  const isFallbackClear = warnings.length === 1 && warnings[0].severity === "success";
+  const isClear = isBackendClear || isFallbackClear;
+  const clearTitle = isBackendClear
+    ? "Generated model quality gate passed"
+    : warnings[0]?.title;
+  const clearMessage = isBackendClear
+    ? "The backend quality report found no schema or structural issues."
+    : warnings[0]?.message;
 
   return (
     <section className="review-card">
@@ -71,8 +82,8 @@ export function GeneratedModelReview({ modelData }) {
         Deterministic checks on the API-generated CAD JSON before deeper geometry validation.
       </p>
       <div className={isClear ? "review-message ok" : "review-message warn"}>
-        <strong>{isClear ? warnings[0].title : `${warnings.length} generated review item${warnings.length > 1 ? "s" : ""}`}</strong>
-        {isClear && <p>{warnings[0].message}</p>}
+        <strong>{isClear ? clearTitle : `${warnings.length} generated review item${warnings.length > 1 ? "s" : ""}`}</strong>
+        {isClear && <p>{clearMessage}</p>}
         {!isClear && (
           <div className="review-list">
             {warnings.map((warning) => (

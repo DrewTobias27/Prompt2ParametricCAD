@@ -208,7 +208,10 @@ export default function App() {
                 description="How the API-generated CAD JSON is structured before CadQuery builds the part."
                 hint="Read-only for now. Use this to inspect feature order, parent targets, and available references."
               />
-              <GeneratedModelReview modelData={result?.model_data} />
+              <GeneratedModelReview
+                modelData={result?.model_data}
+                qualityReport={result?.quality_report}
+              />
             </>
           )}
           <OutputPanel status={status} result={result} downloadUrl={downloadUrl} />
