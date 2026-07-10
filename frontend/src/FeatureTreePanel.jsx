@@ -1,7 +1,7 @@
 import { DIAMETER_SYMBOL, MULTIPLY_SYMBOL } from "./symbols.js";
 import { isEdgeTreatment } from "./modelBuilders.js";
 
-export function FeatureTreePanel({ base, features }) {
+export function FeatureTreePanel({ base, features, onTargetReferenceClick }) {
   const tree = buildFeatureTree(features);
 
   return (
@@ -10,6 +10,7 @@ export function FeatureTreePanel({ base, features }) {
         <div>
           <h2>Feature tree</h2>
           <p>Build order, parent faces, edge groups, and major dimensions.</p>
+          <p className="tree-hint">Click a face or edge chip to add a new feature on that target.</p>
         </div>
       </div>
 
@@ -20,6 +21,7 @@ export function FeatureTreePanel({ base, features }) {
           meta="Root solid"
           references={baseReferences(base)}
           childrenNodes={tree}
+          onTargetReferenceClick={onTargetReferenceClick}
           isRoot
         />
       </div>
@@ -33,6 +35,7 @@ function TreeNode({
   meta,
   references = [],
   childrenNodes = [],
+  onTargetReferenceClick,
   isRoot = false,
 }) {
   return (
@@ -46,9 +49,15 @@ function TreeNode({
           {references.length > 0 && (
             <div className="tree-reference-list" aria-label={`${title} available targets`}>
               {references.map((reference) => (
-                <span className={`tree-reference-chip ${reference.kind}`} key={reference.name}>
+                <button
+                  className={`tree-reference-chip ${reference.kind}`}
+                  key={reference.name}
+                  type="button"
+                  title={targetActionTitle(reference)}
+                  onClick={() => onTargetReferenceClick?.(reference)}
+                >
                   {reference.label}
-                </span>
+                </button>
               ))}
             </div>
           )}
@@ -65,6 +74,7 @@ function TreeNode({
               meta={node.meta}
               references={node.references}
               childrenNodes={node.children}
+              onTargetReferenceClick={onTargetReferenceClick}
             />
           ))}
         </div>
@@ -246,4 +256,12 @@ function featureReferences(feature, featureNumber) {
 
 function targetReference(name, label, kind) {
   return { name, label, kind };
+}
+
+function targetActionTitle(reference) {
+  if (reference.kind === "edge") {
+    return `Add a chamfer targeting ${reference.name}`;
+  }
+
+  return `Add an extrusion targeting ${reference.name}`;
 }

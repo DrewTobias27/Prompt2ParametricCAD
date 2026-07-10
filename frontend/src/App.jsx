@@ -11,6 +11,7 @@ import { ManualBuilder } from "./ManualBuilder.jsx";
 import {
   buildManualModelData,
   buildManualPrompt,
+  createFeature,
   defaultBase,
   hasApiAssistedFields,
 } from "./modelBuilders.js";
@@ -71,6 +72,39 @@ export default function App() {
     }
 
     runRequest(() => buildFromModelData(manualModelData, `manual ${base.profile} base`));
+  }
+
+  function handleTargetReferenceClick(reference) {
+    setMode("manual");
+    setFeatures((currentFeatures) => {
+      const feature = createFeature(currentFeatures.length + 1);
+
+      if (reference.kind === "edge") {
+        return [
+          ...currentFeatures,
+          {
+            ...feature,
+            operation: "chamfer",
+            target: reference.name,
+            amount: 1,
+          },
+        ];
+      }
+
+      return [
+        ...currentFeatures,
+        {
+          ...feature,
+          operation: "add_extrude",
+          target: reference.name,
+        },
+      ];
+    });
+    setStatus(
+      reference.kind === "edge"
+        ? `Added a chamfer targeting ${reference.name}.`
+        : `Added an extrusion targeting ${reference.name}.`,
+    );
   }
 
   const downloadUrl = getDownloadUrl(result?.download_url);
@@ -139,7 +173,11 @@ export default function App() {
           {mode === "manual" && (
             <>
               <DrawingPreview base={base} features={features} usesApiAssistance={usesApiAssistance} />
-              <FeatureTreePanel base={base} features={features} />
+              <FeatureTreePanel
+                base={base}
+                features={features}
+                onTargetReferenceClick={handleTargetReferenceClick}
+              />
               <DesignReview base={base} features={features} usesApiAssistance={usesApiAssistance} />
             </>
           )}

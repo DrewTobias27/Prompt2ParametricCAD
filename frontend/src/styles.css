@@ -489,6 +489,12 @@ textarea {
   font-weight: 550;
 }
 
+.tree-hint {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 0.86rem;
+}
+
 .tree-reference-list {
   display: flex;
   flex-wrap: wrap;
@@ -504,6 +510,12 @@ textarea {
   font-size: 0.74rem;
   font-weight: 700;
   line-height: 1.2;
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 
 .tree-reference-chip.face {
@@ -516,6 +528,17 @@ textarea {
   border: 1px solid #fed7aa;
   background: #fff7ed;
   color: #c2410c;
+}
+
+.tree-reference-chip:hover,
+.tree-reference-chip:focus-visible {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  transform: translateY(-1px);
+}
+
+.tree-reference-chip.edge:hover,
+.tree-reference-chip.edge:focus-visible {
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.14);
 }
 
 .quiet-button {
