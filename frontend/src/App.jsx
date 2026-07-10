@@ -14,6 +14,7 @@ import {
   createFeature,
   defaultBase,
   hasApiAssistedFields,
+  isEdgeTreatment,
 } from "./modelBuilders.js";
 import { DesignReview, OutputPanel } from "./SidePanels.jsx";
 
@@ -23,6 +24,7 @@ export default function App() {
   const [prompt, setPrompt] = useState("Create an 80 mm by 50 mm rectangular plate that is 6 mm thick.");
   const [base, setBase] = useState(defaultBase);
   const [features, setFeatures] = useState([]);
+  const [activeFeatureId, setActiveFeatureId] = useState(null);
   const [status, setStatus] = useState("");
   const [result, setResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -76,30 +78,37 @@ export default function App() {
 
   function handleTargetReferenceClick(reference) {
     setMode("manual");
-    setFeatures((currentFeatures) => {
-      const feature = createFeature(currentFeatures.length + 1);
+    const activeFeature = features.find((feature) => feature.localId === activeFeatureId);
+    const canRetargetActiveFeature = activeFeature
+      && ((reference.kind === "edge" && isEdgeTreatment(activeFeature))
+        || (reference.kind === "face" && !isEdgeTreatment(activeFeature)));
 
-      if (reference.kind === "edge") {
-        return [
-          ...currentFeatures,
-          {
-            ...feature,
-            operation: "chamfer",
-            target: reference.name,
-            amount: 1,
-          },
-        ];
+    if (canRetargetActiveFeature) {
+      setFeatures((currentFeatures) => currentFeatures.map((feature) => (
+        feature.localId === activeFeatureId
+          ? { ...feature, target: reference.name }
+          : feature
+      )));
+      setStatus(`Retargeted the active feature to ${reference.name}.`);
+      return;
+    }
+
+    const feature = createFeature(features.length + 1);
+    const newFeature = reference.kind === "edge"
+      ? {
+        ...feature,
+        operation: "chamfer",
+        target: reference.name,
+        amount: 1,
       }
+      : {
+        ...feature,
+        operation: "add_extrude",
+        target: reference.name,
+      };
 
-      return [
-        ...currentFeatures,
-        {
-          ...feature,
-          operation: "add_extrude",
-          target: reference.name,
-        },
-      ];
-    });
+    setFeatures((currentFeatures) => [...currentFeatures, newFeature]);
+    setActiveFeatureId(newFeature.localId);
     setStatus(
       reference.kind === "edge"
         ? `Added a chamfer targeting ${reference.name}.`
@@ -151,6 +160,8 @@ export default function App() {
               setBase={setBase}
               features={features}
               setFeatures={setFeatures}
+              activeFeatureId={activeFeatureId}
+              setActiveFeatureId={setActiveFeatureId}
               modelData={manualModelData}
               manualPrompt={manualPrompt}
               usesApiAssistance={usesApiAssistance}

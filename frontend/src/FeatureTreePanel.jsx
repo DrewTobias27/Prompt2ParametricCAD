@@ -10,7 +10,9 @@ export function FeatureTreePanel({ base, features, onTargetReferenceClick }) {
         <div>
           <h2>Feature tree</h2>
           <p>Build order, parent faces, edge groups, and major dimensions.</p>
-          <p className="tree-hint">Click a face or edge chip to add a new feature on that target.</p>
+          <p className="tree-hint">
+            Click a chip to retarget the active compatible feature, or add a new feature there.
+          </p>
         </div>
       </div>
 

@@ -38,6 +38,8 @@ export function ManualBuilder({
   setBase,
   features,
   setFeatures,
+  activeFeatureId,
+  setActiveFeatureId,
   modelData,
   manualPrompt,
   usesApiAssistance,
@@ -82,18 +84,20 @@ export function ManualBuilder({
   }
 
   function removeFeature(indexToRemove) {
+    if (features[indexToRemove]?.localId === activeFeatureId) {
+      setActiveFeatureId(null);
+    }
     setFeatures((current) => current.filter((_, featureIndex) => featureIndex !== indexToRemove));
   }
 
   function duplicateFeature(indexToDuplicate) {
-    setFeatures((current) => {
-      const duplicate = cloneFeature(current[indexToDuplicate], current.length + 1);
-      return [
-        ...current.slice(0, indexToDuplicate + 1),
-        duplicate,
-        ...current.slice(indexToDuplicate + 1),
-      ];
-    });
+    const duplicate = cloneFeature(features[indexToDuplicate], features.length + 1);
+    setFeatures((current) => [
+      ...current.slice(0, indexToDuplicate + 1),
+      duplicate,
+      ...current.slice(indexToDuplicate + 1),
+    ]);
+    setActiveFeatureId(duplicate.localId);
   }
 
   function moveFeature(indexToMove, direction) {
@@ -117,13 +121,15 @@ export function ManualBuilder({
       reasonable: false,
       polylineDescription: "",
     });
-    setFeatures(preset.features.map((featureData, featureIndex) => ({
+    const presetFeatures = preset.features.map((featureData, featureIndex) => ({
       ...createFeature(featureIndex + 1),
       ...featureData,
       localId: crypto.randomUUID(),
       reasonable: false,
       polylineDescription: "",
-    })));
+    }));
+    setFeatures(presetFeatures);
+    setActiveFeatureId(presetFeatures[0]?.localId ?? null);
   }
 
   return (
@@ -231,13 +237,19 @@ export function ManualBuilder({
             canMoveUp={index > 0}
             canMoveDown={index < features.length - 1}
             warnings={featureReviewMap.get(index + 1) ?? []}
+            isActive={feature.localId === activeFeatureId}
+            onSelect={() => setActiveFeatureId(feature.localId)}
           />
         ))}
 
         <button
           className="secondary"
           type="button"
-          onClick={() => setFeatures([...features, createFeature(features.length + 1)])}
+          onClick={() => {
+            const feature = createFeature(features.length + 1);
+            setFeatures([...features, feature]);
+            setActiveFeatureId(feature.localId);
+          }}
         >
           Add feature
         </button>
@@ -274,6 +286,8 @@ function FeatureEditor({
   canMoveUp,
   canMoveDown,
   warnings,
+  isActive,
+  onSelect,
 }) {
   const targetOptionGroups = targetOptionGroupsForFeature(allFeatures, index);
   const isCut = feature.operation === "cut";
@@ -282,10 +296,17 @@ function FeatureEditor({
   const showExactDimensions = !edgeTreatment && !feature.reasonable && feature.profile !== "polyline";
 
   return (
-    <article className="feature-card">
+    <article
+      className={`feature-card ${isActive ? "active-feature-card" : ""}`}
+      onClick={onSelect}
+      onFocusCapture={onSelect}
+    >
       <div className="section-heading">
         <div>
-          <h4>Feature {index + 1}</h4>
+          <div className="feature-title-row">
+            <h4>Feature {index + 1}</h4>
+            {isActive && <span className="active-feature-pill">Active target</span>}
+          </div>
           <p className="feature-summary">{featureSummaryText(feature)}</p>
           {warnings.length > 0 && (
             <div className="feature-badges">
@@ -301,16 +322,46 @@ function FeatureEditor({
           )}
         </div>
         <div className="feature-actions" aria-label={`Feature ${index + 1} actions`}>
-          <button type="button" className="quiet-button" onClick={onMoveUp} disabled={!canMoveUp}>
+          <button
+            type="button"
+            className="quiet-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onMoveUp();
+            }}
+            disabled={!canMoveUp}
+          >
             Up
           </button>
-          <button type="button" className="quiet-button" onClick={onMoveDown} disabled={!canMoveDown}>
+          <button
+            type="button"
+            className="quiet-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onMoveDown();
+            }}
+            disabled={!canMoveDown}
+          >
             Down
           </button>
-          <button type="button" className="quiet-button" onClick={onDuplicate}>
+          <button
+            type="button"
+            className="quiet-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDuplicate();
+            }}
+          >
             Duplicate
           </button>
-          <button type="button" className="quiet-button danger" onClick={onRemove}>
+          <button
+            type="button"
+            className="quiet-button danger"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemove();
+            }}
+          >
             Remove
           </button>
         </div>
@@ -530,7 +581,7 @@ function featureSummaryText(feature) {
     return [
       `${operation}: ${dimension}`,
       `on ${humanizeTarget(feature.target)}`,
-    ].join(" Â· ");
+    ].join(" - ");
   }
 
   const operation = feature.operation === "cut" ? "Cut" : "Extrusion";
@@ -553,7 +604,7 @@ function featureSummaryText(feature) {
     `on ${humanizeTarget(feature.target)}`,
     depth,
     pattern ? `pattern: ${pattern}` : "",
-  ].filter(Boolean).join(" · ");
+  ].filter(Boolean).join(" - ");
 }
 
 function humanizeTarget(target) {
