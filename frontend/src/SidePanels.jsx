@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { reviewGeneratedModel } from "./generatedModelReview.js";
 import * as preview from "./previewEngine.js";
 
 export function DesignReview({ base, features, usesApiAssistance }) {
@@ -51,6 +52,39 @@ export function OutputPanel({ status, result, downloadUrl }) {
       )}
 
       <pre>{result ? JSON.stringify(result, null, 2) : "No result yet."}</pre>
+    </section>
+  );
+}
+
+export function GeneratedModelReview({ modelData }) {
+  const warnings = useMemo(() => reviewGeneratedModel(modelData), [modelData]);
+  if (!modelData) {
+    return null;
+  }
+
+  const isClear = warnings.length === 1 && warnings[0].severity === "success";
+
+  return (
+    <section className="review-card">
+      <h2>Generated model review</h2>
+      <p>
+        Deterministic checks on the API-generated CAD JSON before deeper geometry validation.
+      </p>
+      <div className={isClear ? "review-message ok" : "review-message warn"}>
+        <strong>{isClear ? warnings[0].title : `${warnings.length} generated review item${warnings.length > 1 ? "s" : ""}`}</strong>
+        {isClear && <p>{warnings[0].message}</p>}
+        {!isClear && (
+          <div className="review-list">
+            {warnings.map((warning) => (
+              <div className={`review-item ${warning.severity}`} key={`${warning.title}-${warning.message}`}>
+                <strong>{warning.title}</strong>
+                <p>{warning.message}</p>
+                {warning.suggestion && <p className="review-suggestion">Suggested fix: {warning.suggestion}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

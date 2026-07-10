@@ -17,7 +17,7 @@ import {
   hasApiAssistedFields,
   isEdgeTreatment,
 } from "./modelBuilders.js";
-import { DesignReview, OutputPanel } from "./SidePanels.jsx";
+import { DesignReview, GeneratedModelReview, OutputPanel } from "./SidePanels.jsx";
 
 export default function App() {
   const [mode, setMode] = useState("manual");
@@ -200,13 +200,16 @@ export default function App() {
             </>
           )}
           {mode === "prompt" && generatedTreeView && (
-            <FeatureTreePanel
-              base={generatedTreeView.base}
-              features={generatedTreeView.features}
-              title="Generated feature tree"
-              description="How the API-generated CAD JSON is structured before CadQuery builds the part."
-              hint="Read-only for now. Use this to inspect feature order, parent targets, and available references."
-            />
+            <>
+              <FeatureTreePanel
+                base={generatedTreeView.base}
+                features={generatedTreeView.features}
+                title="Generated feature tree"
+                description="How the API-generated CAD JSON is structured before CadQuery builds the part."
+                hint="Read-only for now. Use this to inspect feature order, parent targets, and available references."
+              />
+              <GeneratedModelReview modelData={result?.model_data} />
+            </>
           )}
           <OutputPanel status={status} result={result} downloadUrl={downloadUrl} />
         </aside>
