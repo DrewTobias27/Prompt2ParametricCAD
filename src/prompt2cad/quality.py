@@ -73,6 +73,7 @@ def check_model_quality(
     build_succeeded: bool = False,
     build_error: str | None = None,
     exported_path: str | Path | None = None,
+    localize_build_failure: bool = True,
 ) -> dict[str, Any]:
     """Run the current quality gate and return a structured report."""
     issues: list[QualityIssue] = []
@@ -82,14 +83,11 @@ def check_model_quality(
 
     if build_error and not stage_has_errors(issues, "schema"):
         checked_stages.append("build")
-        issues.append(
-            issue(
-                severity="error",
-                stage="build",
-                code="build_failed",
-                title="CadQuery build failed",
-                message=build_error,
-                suggestion=build_failure_suggestion(build_error),
+        issues.extend(
+            build_failure_issues(
+                model_data,
+                build_error,
+                localize_build_failure=localize_build_failure,
             )
         )
     elif build_succeeded:
@@ -101,14 +99,11 @@ def check_model_quality(
 
             build_model(model_data)
         except Exception as error:
-            issues.append(
-                issue(
-                    severity="error",
-                    stage="build",
-                    code="build_failed",
-                    title="CadQuery build failed",
-                    message=str(error),
-                    suggestion=build_failure_suggestion(str(error)),
+            issues.extend(
+                build_failure_issues(
+                    model_data,
+                    str(error),
+                    localize_build_failure=localize_build_failure,
                 )
             )
 
@@ -642,6 +637,77 @@ def check_exported_path(exported_path: str | Path) -> list[QualityIssue]:
         ]
 
     return []
+
+
+def build_failure_issues(
+    model_data: dict | None,
+    error_message: str,
+    *,
+    localize_build_failure: bool,
+) -> list[QualityIssue]:
+    """Return build failure issues, localized to an operation when possible."""
+    if localize_build_failure and model_data is not None:
+        localized_issue = localize_build_failure_issue(model_data, error_message)
+        if localized_issue is not None:
+            return [localized_issue]
+
+    return [
+        issue(
+            severity="error",
+            stage="build",
+            code="build_failed",
+            title="CadQuery build failed",
+            message=error_message,
+            suggestion=build_failure_suggestion(error_message),
+        )
+    ]
+
+
+def localize_build_failure_issue(
+    model_data: dict,
+    fallback_error_message: str,
+) -> QualityIssue | None:
+    """Find the first operation prefix that fails during CadQuery build."""
+    operations = model_data.get("operations")
+    if not isinstance(operations, list) or len(operations) == 0:
+        return None
+
+    try:
+        from prompt2cad.interpreter import build_model
+    except Exception:
+        return None
+
+    for operation_number in range(1, len(operations) + 1):
+        prefix_model_data = {"operations": operations[:operation_number]}
+
+        try:
+            build_model(prefix_model_data)
+        except Exception as error:
+            operation = operations[operation_number - 1]
+            message = str(error) or fallback_error_message
+            if not isinstance(operation, dict):
+                return issue(
+                    severity="error",
+                    stage="build",
+                    code="operation_build_failed",
+                    title=f"Operation {operation_number} failed during build",
+                    message=message,
+                    suggestion=build_failure_suggestion(message),
+                    operation_number=operation_number,
+                )
+
+            return issue_for_operation(
+                operation,
+                operation_number,
+                severity="error",
+                stage="build",
+                code="operation_build_failed",
+                title=f"Operation {operation_number} failed during build",
+                message=message,
+                suggestion=build_failure_suggestion(message),
+            )
+
+    return None
 
 
 def quality_report(

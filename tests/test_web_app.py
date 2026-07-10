@@ -94,3 +94,47 @@ def test_export_model_data_returns_quality_report(monkeypatch, tmp_path):
     assert response["quality_report"]["stages"]["build"] == "pass"
     assert response["quality_report"]["stages"]["export"] == "pass"
     assert response["quality_report"]["issues"] == []
+
+
+def test_build_cad_error_response_localizes_build_failure(monkeypatch):
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            },
+            {
+                "type": "cut",
+                "target": "base.Top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "diameter": 10,
+                "depth": "through",
+            },
+        ]
+    }
+
+    monkeypatch.setattr(
+        web_app,
+        "build_model",
+        lambda data: (_ for _ in ()).throw(
+            ValueError("target 'base.Top' was not found")
+        ),
+    )
+
+    response = web_app.build_cad(
+        web_app.CADBuildRequest(model_data=model_data)
+    )
+
+    assert response["status"] == "error"
+    build_issues = [
+        issue for issue in response["quality_report"]["issues"]
+        if issue["code"] == "operation_build_failed"
+    ]
+    assert len(build_issues) == 1
+    assert build_issues[0]["operation_number"] == 2

@@ -154,3 +154,21 @@ def test_check_model_quality_reports_missing_export_file(tmp_path):
     assert report["passed"] is False
     assert report["stages"]["export"] == "fail"
     assert "export_file_missing" in issue_codes(report)
+
+
+def test_check_model_quality_localizes_build_failure_to_operation():
+    model_data = simple_plate_model()
+    model_data["operations"][1]["target"] = "base.Top"
+
+    report = check_model_quality(model_data, include_build=True)
+
+    assert report["passed"] is False
+    assert report["stages"]["build"] == "fail"
+    build_issues = [
+        issue for issue in report["issues"]
+        if issue["code"] == "operation_build_failed"
+    ]
+    assert len(build_issues) == 1
+    assert build_issues[0]["operation_number"] == 2
+    assert build_issues[0]["operation_id"] == "feature_1"
+    assert "base.Top" in build_issues[0]["message"]
