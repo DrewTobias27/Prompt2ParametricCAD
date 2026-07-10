@@ -1094,13 +1094,38 @@ def build_revolve_tool(
     )
 
 
+def register_revolve_references(
+    feature_graph: FeatureGraph | None,
+    operation: dict,
+    revolve_tool: cq.Workplane,
+) -> None:
+    """Remember feature references created by a revolved operation."""
+    feature_id = operation.get("id")
+    if feature_graph is None or not feature_id:
+        return
+
+    axis_start = validate_axis_point(operation["axis_start"], "Axis start")
+    axis_end = validate_axis_point(operation["axis_end"], "Axis end")
+    feature_graph.registry.register_revolved_solid_references(
+        feature_id=feature_id,
+        reference_scope=feature_id,
+        workplane=cq.Plane.named(operation["plane"]),
+        solid=revolve_tool.val(),
+        axis_start=axis_start,
+        axis_end=axis_end,
+        angle=operation["angle"],
+    )
+
+
 def build_revolve(
     operation: dict,
     operation_number: int,
+    feature_graph: FeatureGraph | None = None,
 ) -> cq.Workplane:
     """Build a solid by revolving a profile around an axis."""
     feature_id = operation["id"]
     part = build_revolve_tool(operation, operation_number)
+    register_revolve_references(feature_graph, operation, part)
 
     default_face_tags = {}
     if operation["profile"] == "rectangle":
@@ -1117,6 +1142,7 @@ def apply_add_revolve(
     part: cq.Workplane,
     operation: dict,
     operation_number: int,
+    feature_graph: FeatureGraph | None = None,
 ) -> cq.Workplane:
     """Add a revolve of a sketch to an existing model."""
     if part is None:
@@ -1140,6 +1166,11 @@ def apply_add_revolve(
         result = part.union(revolve_tool)
 
         if len(result.solids().vals()) == 1:
+            register_revolve_references(
+                feature_graph,
+                retry_operation,
+                revolve_tool,
+            )
             return result
 
         last_result = result
@@ -1223,7 +1254,11 @@ def build_model_with_graph(model_data: dict) -> tuple[cq.Workplane, FeatureGraph
                 feature_graph=feature_graph,
             )
         elif operation_type == "revolve":
-            part = build_revolve(operation, operation_number)
+            part = build_revolve(
+                operation,
+                operation_number,
+                feature_graph=feature_graph,
+            )
         elif operation_type == "cut":
             part = apply_cut_operation(
                 part,
@@ -1239,7 +1274,12 @@ def build_model_with_graph(model_data: dict) -> tuple[cq.Workplane, FeatureGraph
                 feature_graph=feature_graph,
             )
         elif operation_type == "add_revolve":
-            part = apply_add_revolve(part, operation, operation_number)
+            part = apply_add_revolve(
+                part,
+                operation,
+                operation_number,
+                feature_graph=feature_graph,
+            )
         elif operation_type == "cut_revolve":
             part = apply_cut_revolve(part, operation, operation_number)
         elif operation_type in {"chamfer", "fillet"}:

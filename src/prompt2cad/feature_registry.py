@@ -72,6 +72,16 @@ def box_metadata_from_bounding_box(bounding_box) -> dict[str, float]:
     }
 
 
+def bounding_box_corners(bounding_box) -> list[cq.Vector]:
+    """Return the eight corner vectors of a CadQuery bounding box."""
+    return [
+        cq.Vector(x, y, z)
+        for x in (bounding_box.xmin, bounding_box.xmax)
+        for y in (bounding_box.ymin, bounding_box.ymax)
+        for z in (bounding_box.zmin, bounding_box.zmax)
+    ]
+
+
 @dataclass(frozen=True)
 class ReferenceFrame:
     """A local coordinate system used to place sketches and features."""
@@ -734,6 +744,218 @@ class FeatureRegistry:
 
         return "vertical_edges"
 
+    def register_revolved_solid_references(
+        self,
+        feature_id: str | None,
+        reference_scope: str,
+        workplane: cq.Plane,
+        solid,
+        axis_start: tuple[float, float, float],
+        axis_end: tuple[float, float, float],
+        angle: float,
+    ) -> None:
+        """Register references extracted from a revolved solid."""
+        if not feature_id:
+            return
+
+        world_axis_start = workplane.toWorldCoords(axis_start)
+        world_axis_end = workplane.toWorldCoords(axis_end)
+        axis_vector = world_axis_end.sub(world_axis_start)
+        axis_direction = normalized_vector(axis_vector)
+        axis_midpoint = world_axis_start.add(world_axis_end).multiply(0.5)
+        bounding_box = solid.BoundingBox()
+        center = cq.Vector(
+            (bounding_box.xmin + bounding_box.xmax) / 2,
+            (bounding_box.ymin + bounding_box.ymax) / 2,
+            (bounding_box.zmin + bounding_box.zmax) / 2,
+        )
+        corner_projections = [
+            vector_dot(corner, axis_direction)
+            for corner in bounding_box_corners(bounding_box)
+        ]
+        min_projection = min(corner_projections)
+        max_projection = max(corner_projections)
+        center_projection = vector_dot(center, axis_direction)
+        positive_end_origin = center.add(
+            axis_direction.multiply(max_projection - center_projection)
+        )
+        negative_end_origin = center.add(
+            axis_direction.multiply(min_projection - center_projection)
+        )
+        x_axis = self.reference_x_axis_for_axis(axis_direction, workplane)
+
+        self.register_axis(
+            f"{reference_scope}.axis.a001",
+            ReferenceFrame(
+                origin=vector_to_tuple(axis_midpoint),
+                x_axis=vector_to_tuple(axis_direction),
+                normal=vector_to_tuple(x_axis),
+            ),
+            source_feature_id=feature_id,
+            aliases=[f"{reference_scope}.axis", f"{feature_id}.axis"],
+            metadata={
+                "axis_start": vector_to_tuple(world_axis_start),
+                "axis_end": vector_to_tuple(world_axis_end),
+                "angle": angle,
+            },
+        )
+
+        end_faces = [
+            (
+                "front",
+                positive_end_origin,
+                axis_direction,
+            ),
+            (
+                "back",
+                negative_end_origin,
+                axis_direction.multiply(-1),
+            ),
+        ]
+        for index, (face_name, origin, normal) in enumerate(end_faces, start=1):
+            aliases = [
+                f"{reference_scope}.{face_name}",
+                f"{reference_scope}.face.{face_name}",
+            ]
+            if reference_scope == feature_id:
+                aliases.extend([f"{feature_id}.{face_name}"])
+
+            self.register_plane(
+                f"{reference_scope}.face.f{index:03d}",
+                ReferenceFrame(
+                    origin=vector_to_tuple(origin),
+                    x_axis=vector_to_tuple(x_axis),
+                    normal=vector_to_tuple(normal),
+                ),
+                source_feature_id=feature_id,
+                aliases=aliases,
+                metadata={
+                    "semantic_label": face_name,
+                    "surface_family": "revolved_end_face",
+                    "angle": angle,
+                },
+            )
+
+        self.register_surface(
+            f"{reference_scope}.surface.s001",
+            ReferenceFrame(
+                origin=vector_to_tuple(center),
+                x_axis=vector_to_tuple(axis_direction),
+                normal=vector_to_tuple(x_axis),
+            ),
+            source_feature_id=feature_id,
+            aliases=[
+                f"{reference_scope}.outer_surface",
+                f"{feature_id}.outer_surface",
+            ],
+            metadata={
+                "surface_family": "revolved",
+                "surface_type": "cylindrical_or_conical",
+                "axis_reference": f"{reference_scope}.axis.a001",
+                "angle": angle,
+            },
+        )
+
+        edge_names_by_group = {
+            "front_outer_edges": [],
+            "back_outer_edges": [],
+            "end_edges": [],
+            "all_edges": [],
+        }
+        edges = sorted(
+            solid.Edges(),
+            key=lambda edge: (
+                round(edge.Center().z, 9),
+                round(edge.Center().y, 9),
+                round(edge.Center().x, 9),
+            ),
+        )
+        for index, edge in enumerate(edges, start=1):
+            canonical_name = f"{reference_scope}.edge.e{index:03d}"
+            center_tuple = vector_to_tuple(edge.Center())
+            bounding_box_metadata = box_metadata_from_bounding_box(
+                edge.BoundingBox()
+            )
+            group_label = self.edge_group_label_for_revolve(
+                edge.Center(),
+                axis_direction,
+                min_projection,
+                max_projection,
+            )
+
+            edge_names_by_group["all_edges"].append(canonical_name)
+            if group_label in {"front_outer_edges", "back_outer_edges"}:
+                edge_names_by_group[group_label].append(canonical_name)
+                edge_names_by_group["end_edges"].append(canonical_name)
+
+            self.register_edge(
+                canonical_name,
+                ReferenceFrame(
+                    origin=center_tuple,
+                    x_axis=vector_to_tuple(x_axis),
+                    normal=vector_to_tuple(axis_direction),
+                ),
+                source_feature_id=feature_id,
+                aliases=[f"{reference_scope}.edge.e{index:03d}"],
+                metadata={
+                    "semantic_label": group_label,
+                    "center": center_tuple,
+                    "bounding_box": bounding_box_metadata,
+                    "surface_family": "revolved",
+                    "angle": angle,
+                },
+            )
+
+        for group_label, edge_names in edge_names_by_group.items():
+            if not edge_names:
+                continue
+
+            aliases = [
+                f"{reference_scope}.{group_label}",
+                f"{reference_scope}.edge.{group_label}",
+            ]
+            if reference_scope == feature_id:
+                aliases.extend(
+                    [
+                        f"{feature_id}.{group_label}",
+                        f"{feature_id}.edge.{group_label}",
+                    ]
+                )
+
+            self.register_reference_group(
+                f"{reference_scope}.edge_group.{group_label}",
+                edge_names,
+                aliases=aliases,
+            )
+
+    @staticmethod
+    def reference_x_axis_for_axis(axis_direction: cq.Vector, workplane: cq.Plane) -> cq.Vector:
+        """Return a useful x-axis for references perpendicular to a revolve axis."""
+        candidates = [workplane.xDir, workplane.yDir, workplane.zDir]
+        for candidate in candidates:
+            if abs(vector_dot(candidate, axis_direction)) < 0.95:
+                return candidate
+
+        return cq.Vector(1, 0, 0)
+
+    @staticmethod
+    def edge_group_label_for_revolve(
+        edge_center: cq.Vector,
+        axis_direction: cq.Vector,
+        min_projection: float,
+        max_projection: float,
+    ) -> str:
+        """Classify a revolved edge by location along the revolve axis."""
+        projection = vector_dot(edge_center, axis_direction)
+        tolerance = 1e-6
+
+        if abs(projection - max_projection) <= tolerance:
+            return "front_outer_edges"
+        if abs(projection - min_projection) <= tolerance:
+            return "back_outer_edges"
+
+        return "side_edges"
+
     @staticmethod
     def edge_frame(
         start_point: tuple[float, float, float],
@@ -805,6 +1027,24 @@ class FeatureRegistry:
         self.register_reference(
             name=name,
             kind="vertex",
+            frame=frame,
+            source_feature_id=source_feature_id,
+            aliases=aliases,
+            metadata=metadata,
+        )
+
+    def register_axis(
+        self,
+        name: str,
+        frame: ReferenceFrame,
+        source_feature_id: str | None = None,
+        aliases: list[str] | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """Register an axis reference scaffold."""
+        self.register_reference(
+            name=name,
+            kind="axis",
             frame=frame,
             source_feature_id=source_feature_id,
             aliases=aliases,

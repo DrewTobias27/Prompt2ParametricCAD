@@ -286,3 +286,70 @@ def test_circular_base_registers_generalized_edge_groups():
     assert graph.registry.get_reference_group("base.bottom_outer_edges") is not None
     assert graph.registry.get_reference_group("base.all_edges") is not None
     assert "base.edge.e001" in graph.get_feature("base").created_references
+
+
+def test_revolved_base_registers_axis_faces_surface_and_edge_groups():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[5, 0]],
+                "width": 10,
+                "height": 40,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+            },
+        ]
+    }
+
+    _, graph = build_model_with_graph(model_data)
+
+    assert graph.registry.get_reference("base.axis").kind == "axis"
+    assert graph.registry.get_plane("base.front") is not None
+    assert graph.registry.get_plane("base.back") is not None
+    assert graph.registry.get_reference("base.outer_surface").kind == "surface"
+    assert graph.registry.get_reference_group("base.front_outer_edges") is not None
+    assert graph.registry.get_reference_group("base.back_outer_edges") is not None
+    assert graph.registry.get_reference_group("base.end_edges") is not None
+
+
+def test_added_revolve_registers_own_references_when_id_is_present():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[5, 0]],
+                "width": 10,
+                "height": 50,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+            },
+            {
+                "type": "add_revolve",
+                "id": "collar",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[11, 0]],
+                "width": 2,
+                "height": 12,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+            },
+        ]
+    }
+
+    _, graph = build_model_with_graph(model_data)
+
+    assert graph.registry.get_reference("collar.axis").kind == "axis"
+    assert graph.registry.get_reference("collar.outer_surface").kind == "surface"
+    assert graph.registry.get_reference_group("collar.front_outer_edges") is not None
+    assert graph.registry.get_reference_group("collar.back_outer_edges") is not None
