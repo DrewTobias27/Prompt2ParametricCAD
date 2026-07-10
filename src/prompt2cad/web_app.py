@@ -69,12 +69,16 @@ def make_safe_filename(prompt: str) -> str:
 
 def export_model_data(model_data: dict, filename_hint: str) -> dict:
     """Validate, build, export, and return web response data for a CAD model."""
-    quality_report = check_model_quality(model_data)
     validate_model_data(model_data)
     part = build_model(model_data)
     step_filename = make_safe_filename(filename_hint)
     step_path = GENERATED_DIR / step_filename
     cq.exporters.export(part, str(step_path))
+    quality_report = check_model_quality(
+        model_data,
+        build_succeeded=True,
+        exported_path=step_path,
+    )
 
     return {
         "status": "success",
@@ -122,7 +126,7 @@ def generate_cad(request: CADRequest):
             "message": str(error),
             "model_data": model_data if "model_data" in locals() else None,
             "quality_report": (
-                check_model_quality(model_data)
+                check_model_quality(model_data, build_error=str(error))
                 if "model_data" in locals()
                 else check_model_quality(None)
             ),
@@ -150,7 +154,7 @@ def generate_cad_from_design_intent(request: CADRequest):
             "design_intent": design_intent if "design_intent" in locals() else None,
             "model_data": model_data if "model_data" in locals() else None,
             "quality_report": (
-                check_model_quality(model_data)
+                check_model_quality(model_data, build_error=str(error))
                 if "model_data" in locals()
                 else check_model_quality(None)
             ),
@@ -171,7 +175,7 @@ def build_cad(request: CADBuildRequest):
             "message": str(error),
             "model_data": model_data if "model_data" in locals() else None,
             "quality_report": (
-                check_model_quality(model_data)
+                check_model_quality(model_data, build_error=str(error))
                 if "model_data" in locals()
                 else check_model_quality(None)
             ),

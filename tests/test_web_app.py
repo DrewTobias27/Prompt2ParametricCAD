@@ -77,11 +77,20 @@ def test_export_model_data_returns_quality_report(monkeypatch, tmp_path):
 
     monkeypatch.setattr(web_app, "GENERATED_DIR", tmp_path)
     monkeypatch.setattr(web_app, "build_model", lambda data: object())
-    monkeypatch.setattr(web_app.cq.exporters, "export", lambda part, path: None)
+    monkeypatch.setattr(
+        web_app.cq.exporters,
+        "export",
+        lambda part, path: web_app.Path(path).write_text(
+            "STEP DATA",
+            encoding="utf-8",
+        ),
+    )
 
     response = web_app.export_model_data(model_data, "simple plate")
 
     assert response["status"] == "success"
     assert response["model_data"] == model_data
     assert response["quality_report"]["status"] == "pass"
+    assert response["quality_report"]["stages"]["build"] == "pass"
+    assert response["quality_report"]["stages"]["export"] == "pass"
     assert response["quality_report"]["issues"] == []

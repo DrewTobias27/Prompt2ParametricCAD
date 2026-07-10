@@ -66,13 +66,57 @@ class QualityIssue:
         return asdict(self)
 
 
-def check_model_quality(model_data: dict | None) -> dict[str, Any]:
+def check_model_quality(
+    model_data: dict | None,
+    *,
+    include_build: bool = False,
+    build_succeeded: bool = False,
+    build_error: str | None = None,
+    exported_path: str | Path | None = None,
+) -> dict[str, Any]:
     """Run the current quality gate and return a structured report."""
     issues: list[QualityIssue] = []
+    checked_stages = ["schema", "structure"]
     issues.extend(check_schema(model_data))
     issues.extend(check_structure(model_data))
 
-    return quality_report(issues)
+    if build_error and not stage_has_errors(issues, "schema"):
+        checked_stages.append("build")
+        issues.append(
+            issue(
+                severity="error",
+                stage="build",
+                code="build_failed",
+                title="CadQuery build failed",
+                message=build_error,
+                suggestion=build_failure_suggestion(build_error),
+            )
+        )
+    elif build_succeeded:
+        checked_stages.append("build")
+    elif include_build and model_data is not None and not has_errors(issues):
+        checked_stages.append("build")
+        try:
+            from prompt2cad.interpreter import build_model
+
+            build_model(model_data)
+        except Exception as error:
+            issues.append(
+                issue(
+                    severity="error",
+                    stage="build",
+                    code="build_failed",
+                    title="CadQuery build failed",
+                    message=str(error),
+                    suggestion=build_failure_suggestion(str(error)),
+                )
+            )
+
+    if exported_path is not None:
+        checked_stages.append("export")
+        issues.extend(check_exported_path(exported_path))
+
+    return quality_report(issues, checked_stages)
 
 
 def check_schema(model_data: dict | None) -> list[QualityIssue]:
@@ -570,15 +614,50 @@ def register_operation_references(
         )
 
 
-def quality_report(issues: list[QualityIssue]) -> dict[str, Any]:
+def check_exported_path(exported_path: str | Path) -> list[QualityIssue]:
+    """Check that an exported artifact exists and is non-empty."""
+    path = Path(exported_path)
+    if not path.exists():
+        return [
+            issue(
+                severity="error",
+                stage="export",
+                code="export_file_missing",
+                title="STEP export file was not created",
+                message=f"Expected exported file at {path}, but it does not exist.",
+                suggestion="Check the exporter path and CadQuery export call.",
+            )
+        ]
+
+    if path.stat().st_size == 0:
+        return [
+            issue(
+                severity="error",
+                stage="export",
+                code="export_file_empty",
+                title="STEP export file is empty",
+                message=f"The exported file at {path} exists but has zero bytes.",
+                suggestion="Re-run export and verify the built part is valid before writing the STEP file.",
+            )
+        ]
+
+    return []
+
+
+def quality_report(
+    issues: list[QualityIssue],
+    checked_stages: list[str] | None = None,
+) -> dict[str, Any]:
     """Build a JSON-friendly quality report from issues."""
     issue_dicts = [quality_issue.to_dict() for quality_issue in issues]
     error_count = sum(1 for item in issues if item.severity == "error")
     warning_count = sum(1 for item in issues if item.severity == "warning")
+    checked_stages = checked_stages or ["schema", "structure"]
 
     return {
         "passed": error_count == 0,
         "status": report_status(error_count, warning_count),
+        "stages": stage_statuses(issues, checked_stages),
         "summary": {
             "errors": error_count,
             "warnings": warning_count,
@@ -595,6 +674,45 @@ def report_status(error_count: int, warning_count: int) -> str:
     if warning_count:
         return "warning"
     return "pass"
+
+
+def stage_statuses(
+    issues: list[QualityIssue],
+    checked_stages: list[str],
+) -> dict[str, str]:
+    """Return pass/warning/fail status for each checked stage."""
+    statuses: dict[str, str] = {}
+    for stage in checked_stages:
+        stage_issues = [item for item in issues if item.stage == stage]
+        if any(item.severity == "error" for item in stage_issues):
+            statuses[stage] = "fail"
+        elif any(item.severity == "warning" for item in stage_issues):
+            statuses[stage] = "warning"
+        else:
+            statuses[stage] = "pass"
+
+    return statuses
+
+
+def has_errors(issues: list[QualityIssue]) -> bool:
+    """Return whether any quality issue is an error."""
+    return any(item.severity == "error" for item in issues)
+
+
+def stage_has_errors(issues: list[QualityIssue], stage: str) -> bool:
+    """Return whether a quality stage has any error issue."""
+    return any(item.stage == stage and item.severity == "error" for item in issues)
+
+
+def build_failure_suggestion(error_message: str) -> str:
+    """Return a concise suggestion for a build error."""
+    if "Expected one connected solid" in error_message:
+        return "Move or resize added features so they overlap the existing solid, or add connecting material."
+    if "target" in error_message and "not found" in error_message:
+        return "Use an existing target or create the parent feature before targeting it."
+    if "Sketch" in error_message or "arc" in error_message:
+        return "Simplify the sketch and ensure it forms one valid closed profile."
+    return "Check feature order, targets, dimensions, and whether all additions remain connected."
 
 
 def issue_for_operation(
@@ -667,12 +785,31 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Check Prompt2CAD model quality.")
     parser.add_argument("model_json", type=Path, help="Path to model_data JSON.")
+    parser.add_argument(
+        "--include-build",
+        action="store_true",
+        help="Run the CadQuery build stage as part of the quality check.",
+    )
+    parser.add_argument(
+        "--exported-path",
+        type=Path,
+        help="Optional exported STEP path to check for existence and non-empty output.",
+    )
     args = parser.parse_args()
 
     with args.model_json.open("r", encoding="utf-8") as file:
         model_data = json.load(file)
 
-    print(json.dumps(check_model_quality(model_data), indent=2))
+    print(
+        json.dumps(
+            check_model_quality(
+                model_data,
+                include_build=args.include_build,
+                exported_path=args.exported_path,
+            ),
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

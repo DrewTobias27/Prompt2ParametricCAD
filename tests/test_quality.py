@@ -45,6 +45,7 @@ def test_check_model_quality_passes_valid_structure():
 
     assert report["passed"] is True
     assert report["status"] == "pass"
+    assert report["stages"] == {"schema": "pass", "structure": "pass"}
     assert report["summary"] == {"errors": 0, "warnings": 0, "infos": 0}
     assert report["issues"] == []
 
@@ -113,3 +114,43 @@ def test_check_model_quality_reports_duplicate_ids():
 
     assert report["passed"] is False
     assert "duplicate_feature_id" in issue_codes(report)
+
+
+def test_check_model_quality_reports_build_success_stage():
+    report = check_model_quality(simple_plate_model(), build_succeeded=True)
+
+    assert report["passed"] is True
+    assert report["stages"]["build"] == "pass"
+
+
+def test_check_model_quality_reports_build_failure_stage():
+    report = check_model_quality(
+        simple_plate_model(),
+        build_error="Expected one connected solid, but generated 2",
+    )
+
+    assert report["passed"] is False
+    assert report["stages"]["build"] == "fail"
+    assert "build_failed" in issue_codes(report)
+    assert "overlap" in report["issues"][-1]["suggestion"]
+
+
+def test_check_model_quality_checks_exported_path(tmp_path):
+    step_path = tmp_path / "model.step"
+    step_path.write_text("STEP DATA", encoding="utf-8")
+
+    report = check_model_quality(simple_plate_model(), exported_path=step_path)
+
+    assert report["passed"] is True
+    assert report["stages"]["export"] == "pass"
+
+
+def test_check_model_quality_reports_missing_export_file(tmp_path):
+    report = check_model_quality(
+        simple_plate_model(),
+        exported_path=tmp_path / "missing.step",
+    )
+
+    assert report["passed"] is False
+    assert report["stages"]["export"] == "fail"
+    assert "export_file_missing" in issue_codes(report)
