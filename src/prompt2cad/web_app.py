@@ -77,6 +77,7 @@ def export_model_data(model_data: dict, filename_hint: str) -> dict:
     quality_report = check_model_quality(
         model_data,
         build_succeeded=True,
+        built_part=part,
         exported_path=step_path,
     )
 

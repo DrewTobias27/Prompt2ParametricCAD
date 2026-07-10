@@ -1,5 +1,7 @@
 """Tests for local FastAPI route helpers."""
 
+import cadquery as cq
+
 from prompt2cad import web_app
 
 
@@ -76,7 +78,7 @@ def test_export_model_data_returns_quality_report(monkeypatch, tmp_path):
     }
 
     monkeypatch.setattr(web_app, "GENERATED_DIR", tmp_path)
-    monkeypatch.setattr(web_app, "build_model", lambda data: object())
+    monkeypatch.setattr(web_app, "build_model", lambda data: cq.Workplane("XY").box(80, 50, 6))
     monkeypatch.setattr(
         web_app.cq.exporters,
         "export",
@@ -93,6 +95,8 @@ def test_export_model_data_returns_quality_report(monkeypatch, tmp_path):
     assert response["quality_report"]["status"] == "pass"
     assert response["quality_report"]["stages"]["build"] == "pass"
     assert response["quality_report"]["stages"]["export"] == "pass"
+    assert response["quality_report"]["stages"]["geometry"] == "pass"
+    assert response["quality_report"]["geometry_summary"]["solid_count"] == 1
     assert response["quality_report"]["issues"] == []
 
 

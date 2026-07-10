@@ -123,6 +123,33 @@ def test_check_model_quality_reports_build_success_stage():
     assert report["stages"]["build"] == "pass"
 
 
+def test_check_model_quality_includes_geometry_summary_when_building():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            }
+        ]
+    }
+
+    report = check_model_quality(model_data, include_build=True)
+
+    assert report["passed"] is True
+    assert report["stages"]["geometry"] == "pass"
+    assert report["geometry_summary"]["solid_count"] == 1
+    assert report["geometry_summary"]["invalid_solid_count"] == 0
+    assert report["geometry_summary"]["volume"] == 80 * 50 * 6
+    assert report["geometry_summary"]["bounding_box"]["xlen"] == 80
+    assert report["geometry_summary"]["bounding_box"]["ylen"] == 50
+    assert report["geometry_summary"]["bounding_box"]["zlen"] == 6
+
+
 def test_check_model_quality_reports_build_failure_stage():
     report = check_model_quality(
         simple_plate_model(),

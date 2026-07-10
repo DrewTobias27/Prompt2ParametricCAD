@@ -72,12 +72,14 @@ def check_model_quality(
     include_build: bool = False,
     build_succeeded: bool = False,
     build_error: str | None = None,
+    built_part: Any | None = None,
     exported_path: str | Path | None = None,
     localize_build_failure: bool = True,
 ) -> dict[str, Any]:
     """Run the current quality gate and return a structured report."""
     issues: list[QualityIssue] = []
     checked_stages = ["schema", "structure"]
+    geometry_summary = None
     issues.extend(check_schema(model_data))
     issues.extend(check_structure(model_data))
 
@@ -92,12 +94,17 @@ def check_model_quality(
         )
     elif build_succeeded:
         checked_stages.append("build")
+        if built_part is not None:
+            checked_stages.append("geometry")
+            geometry_summary = summarize_geometry(built_part)
     elif include_build and model_data is not None and not has_errors(issues):
         checked_stages.append("build")
         try:
             from prompt2cad.interpreter import build_model
 
-            build_model(model_data)
+            built_part = build_model(model_data)
+            checked_stages.append("geometry")
+            geometry_summary = summarize_geometry(built_part)
         except Exception as error:
             issues.extend(
                 build_failure_issues(
@@ -111,7 +118,11 @@ def check_model_quality(
         checked_stages.append("export")
         issues.extend(check_exported_path(exported_path))
 
-    return quality_report(issues, checked_stages)
+    return quality_report(
+        issues,
+        checked_stages,
+        geometry_summary=geometry_summary,
+    )
 
 
 def check_schema(model_data: dict | None) -> list[QualityIssue]:
@@ -639,6 +650,46 @@ def check_exported_path(exported_path: str | Path) -> list[QualityIssue]:
     return []
 
 
+def summarize_geometry(part: Any) -> dict[str, Any]:
+    """Return measurable geometry facts from a built CadQuery part."""
+    shape = part.val()
+    bounding_box = shape.BoundingBox()
+    solids = part.solids().vals()
+
+    return {
+        "solid_count": len(solids),
+        "valid_solid_count": sum(1 for solid in solids if solid.isValid()),
+        "invalid_solid_count": sum(1 for solid in solids if not solid.isValid()),
+        "volume": round_float(sum(solid.Volume() for solid in solids)),
+        "bounding_box": {
+            "xmin": round_float(bounding_box.xmin),
+            "xmax": round_float(bounding_box.xmax),
+            "ymin": round_float(bounding_box.ymin),
+            "ymax": round_float(bounding_box.ymax),
+            "zmin": round_float(bounding_box.zmin),
+            "zmax": round_float(bounding_box.zmax),
+            "xlen": round_float(bounding_box.xlen),
+            "ylen": round_float(bounding_box.ylen),
+            "zlen": round_float(bounding_box.zlen),
+        },
+        "face_count": safe_shape_count(shape, "Faces"),
+        "edge_count": safe_shape_count(shape, "Edges"),
+    }
+
+
+def safe_shape_count(shape: Any, method_name: str) -> int | None:
+    """Return count for a CadQuery/OCP shape collection when available."""
+    try:
+        return len(getattr(shape, method_name)())
+    except Exception:
+        return None
+
+
+def round_float(value: float, digits: int = 6) -> float:
+    """Round float metadata to stable JSON-friendly precision."""
+    return round(float(value), digits)
+
+
 def build_failure_issues(
     model_data: dict | None,
     error_message: str,
@@ -713,6 +764,7 @@ def localize_build_failure_issue(
 def quality_report(
     issues: list[QualityIssue],
     checked_stages: list[str] | None = None,
+    geometry_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a JSON-friendly quality report from issues."""
     issue_dicts = [quality_issue.to_dict() for quality_issue in issues]
@@ -720,7 +772,7 @@ def quality_report(
     warning_count = sum(1 for item in issues if item.severity == "warning")
     checked_stages = checked_stages or ["schema", "structure"]
 
-    return {
+    report = {
         "passed": error_count == 0,
         "status": report_status(error_count, warning_count),
         "stages": stage_statuses(issues, checked_stages),
@@ -731,6 +783,10 @@ def quality_report(
         },
         "issues": issue_dicts,
     }
+    if geometry_summary is not None:
+        report["geometry_summary"] = geometry_summary
+
+    return report
 
 
 def report_status(error_count: int, warning_count: int) -> str:
