@@ -1,5 +1,6 @@
 """Tests for structured model quality reports."""
 
+from prompt2cad.quality import check_geometry_summary
 from prompt2cad.quality import check_model_quality
 
 
@@ -148,6 +149,7 @@ def test_check_model_quality_includes_geometry_summary_when_building():
     assert report["geometry_summary"]["bounding_box"]["xlen"] == 80
     assert report["geometry_summary"]["bounding_box"]["ylen"] == 50
     assert report["geometry_summary"]["bounding_box"]["zlen"] == 6
+    assert "unexpected_solid_count" not in issue_codes(report)
 
 
 def test_check_model_quality_reports_build_failure_stage():
@@ -181,6 +183,30 @@ def test_check_model_quality_reports_missing_export_file(tmp_path):
     assert report["passed"] is False
     assert report["stages"]["export"] == "fail"
     assert "export_file_missing" in issue_codes(report)
+
+
+def test_check_geometry_summary_reports_obvious_geometry_failures():
+    issues = check_geometry_summary(
+        {
+            "solid_count": 2,
+            "valid_solid_count": 1,
+            "invalid_solid_count": 1,
+            "volume": 0,
+            "bounding_box": {
+                "xlen": 80,
+                "ylen": 0,
+                "zlen": 6,
+            },
+        }
+    )
+
+    codes = {issue.code for issue in issues}
+    assert codes == {
+        "unexpected_solid_count",
+        "invalid_solid_geometry",
+        "non_positive_volume",
+        "degenerate_bounding_box",
+    }
 
 
 def test_check_model_quality_localizes_build_failure_to_operation():

@@ -97,6 +97,7 @@ def check_model_quality(
         if built_part is not None:
             checked_stages.append("geometry")
             geometry_summary = summarize_geometry(built_part)
+            issues.extend(check_geometry_summary(geometry_summary))
     elif include_build and model_data is not None and not has_errors(issues):
         checked_stages.append("build")
         try:
@@ -105,6 +106,7 @@ def check_model_quality(
             built_part = build_model(model_data)
             checked_stages.append("geometry")
             geometry_summary = summarize_geometry(built_part)
+            issues.extend(check_geometry_summary(geometry_summary))
         except Exception as error:
             issues.extend(
                 build_failure_issues(
@@ -675,6 +677,70 @@ def summarize_geometry(part: Any) -> dict[str, Any]:
         "face_count": safe_shape_count(shape, "Faces"),
         "edge_count": safe_shape_count(shape, "Edges"),
     }
+
+
+def check_geometry_summary(geometry_summary: dict[str, Any]) -> list[QualityIssue]:
+    """Return obvious geometry-quality issues from measured geometry."""
+    issues: list[QualityIssue] = []
+
+    solid_count = geometry_summary.get("solid_count")
+    if solid_count != 1:
+        issues.append(
+            issue(
+                severity="error",
+                stage="geometry",
+                code="unexpected_solid_count",
+                title="Built model is not one connected solid",
+                message=f"Expected one connected solid, but found {solid_count}.",
+                suggestion=(
+                    "Keep additive features connected to existing material, or "
+                    "explicitly support multi-body output if multiple solids are intended."
+                ),
+            )
+        )
+
+    invalid_solid_count = geometry_summary.get("invalid_solid_count", 0)
+    if invalid_solid_count:
+        issues.append(
+            issue(
+                severity="error",
+                stage="geometry",
+                code="invalid_solid_geometry",
+                title="Built model contains invalid solid geometry",
+                message=f"Found {invalid_solid_count} invalid solid(s).",
+                suggestion="Simplify fragile sketches/features and rebuild the model.",
+            )
+        )
+
+    volume = geometry_summary.get("volume")
+    if not isinstance(volume, (int, float)) or volume <= 0:
+        issues.append(
+            issue(
+                severity="error",
+                stage="geometry",
+                code="non_positive_volume",
+                title="Built model has non-positive volume",
+                message=f"Expected positive model volume, but found {volume}.",
+                suggestion="Check that the base creates material and cuts do not remove the entire model.",
+            )
+        )
+
+    bounding_box = geometry_summary.get("bounding_box", {})
+    for axis in ("xlen", "ylen", "zlen"):
+        axis_length = bounding_box.get(axis)
+        if not isinstance(axis_length, (int, float)) or axis_length <= 0:
+            issues.append(
+                issue(
+                    severity="error",
+                    stage="geometry",
+                    code="degenerate_bounding_box",
+                    title="Built model has a degenerate bounding box",
+                    message=f"Expected positive {axis} bounding-box length, but found {axis_length}.",
+                    suggestion="Check base dimensions and avoid features that collapse the model to a plane or line.",
+                )
+            )
+
+    return issues
 
 
 def safe_shape_count(shape: Any, method_name: str) -> int | None:
