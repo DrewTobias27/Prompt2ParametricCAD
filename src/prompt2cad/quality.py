@@ -34,18 +34,48 @@ PROFILE_DIMENSION_FIELDS = {
     "circle": ["diameter"],
     "polygon": ["diameter", "sides"],
 }
-BASE_TARGETS = {
-    "base.top",
-    "base.bottom",
-    "base.front",
-    "base.back",
-    "base.left",
-    "base.right",
-    "base.top_outer_edges",
-    "base.bottom_outer_edges",
-    "base.vertical_edges",
-    "base.all_edges",
-}
+FACE_REFERENCE_KIND = "face"
+EDGE_GROUP_REFERENCE_KIND = "edge_group"
+SURFACE_REFERENCE_KIND = "surface"
+AXIS_REFERENCE_KIND = "axis"
+
+
+@dataclass
+class TargetCatalog:
+    """Lightweight feature-reference catalog for pre-build quality checks."""
+
+    feature_ids: set[str]
+    reference_kinds: dict[str, str]
+
+    @classmethod
+    def empty(cls) -> "TargetCatalog":
+        """Return an empty target catalog."""
+        return cls(feature_ids=set(), reference_kinds={})
+
+    def has_feature(self, feature_id: str) -> bool:
+        """Return whether a feature id has already been registered."""
+        return feature_id in self.feature_ids
+
+    def has_reference(self, reference_name: str) -> bool:
+        """Return whether a face/edge/surface/axis reference is known."""
+        return reference_name in self.reference_kinds
+
+    def reference_kind(self, reference_name: str) -> str | None:
+        """Return the known reference kind for a target name."""
+        return self.reference_kinds.get(reference_name)
+
+    def add_feature_id(self, feature_id: str) -> None:
+        """Register a feature id as available for later targets."""
+        self.feature_ids.add(feature_id)
+
+    def add_reference(self, reference_name: str, reference_kind: str) -> None:
+        """Register one target reference by kind."""
+        self.reference_kinds[reference_name] = reference_kind
+
+    def add_references(self, reference_kind: str, reference_names: set[str]) -> None:
+        """Register several target references with the same kind."""
+        for reference_name in reference_names:
+            self.add_reference(reference_name, reference_kind)
 
 
 @dataclass(frozen=True)
@@ -177,8 +207,7 @@ def check_structure(model_data: dict | None) -> list[QualityIssue]:
         ]
 
     issues: list[QualityIssue] = []
-    known_feature_ids = {"base"}
-    known_targets = set(BASE_TARGETS)
+    target_catalog = TargetCatalog.empty()
     seen_ids: set[str] = set()
 
     first_operation = operations[0]
@@ -253,8 +282,7 @@ def check_structure(model_data: dict | None) -> list[QualityIssue]:
             check_operation_target(
                 operation,
                 operation_number,
-                known_feature_ids,
-                known_targets,
+                target_catalog,
             )
         )
         issues.extend(check_operation_dimensions(operation, operation_number))
@@ -262,8 +290,7 @@ def check_structure(model_data: dict | None) -> list[QualityIssue]:
         register_operation_references(
             operation,
             operation_number,
-            known_feature_ids,
-            known_targets,
+            target_catalog,
         )
 
     return issues
@@ -318,8 +345,7 @@ def check_operation_id(
 def check_operation_target(
     operation: dict[str, Any],
     operation_number: int,
-    known_feature_ids: set[str],
-    known_targets: set[str],
+    target_catalog: TargetCatalog,
 ) -> list[QualityIssue]:
     """Check operation target existence and target-kind compatibility."""
     if operation.get("type") in BASE_OPERATION_TYPES:
@@ -343,7 +369,7 @@ def check_operation_target(
 
     issues: list[QualityIssue] = []
     target_owner = str(target).split(".")[0]
-    if target_owner not in known_feature_ids:
+    if not target_catalog.has_feature(target_owner):
         issues.append(
             issue_for_operation(
                 operation,
@@ -358,7 +384,9 @@ def check_operation_target(
         )
         return issues
 
-    if target not in known_targets:
+    known_reference_kind = target_catalog.reference_kind(str(target))
+    reference_kind = known_reference_kind or infer_target_reference_kind(str(target))
+    if known_reference_kind is None:
         issues.append(
             issue_for_operation(
                 operation,
@@ -375,8 +403,11 @@ def check_operation_target(
             )
         )
 
-    target_looks_like_edge = "edge" in str(target)
-    if operation_type in EDGE_OPERATION_TYPES and not target_looks_like_edge:
+    if (
+        operation_type in EDGE_OPERATION_TYPES
+        and reference_kind is not None
+        and reference_kind != EDGE_GROUP_REFERENCE_KIND
+    ):
         issues.append(
             issue_for_operation(
                 operation,
@@ -390,7 +421,14 @@ def check_operation_target(
             )
         )
 
-    if operation_type in FACE_OPERATION_TYPES and target_looks_like_edge:
+    if (
+        operation_type in FACE_OPERATION_TYPES
+        and reference_kind is not None
+        and reference_kind not in {
+            FACE_REFERENCE_KIND,
+            SURFACE_REFERENCE_KIND,
+        }
+    ):
         issues.append(
             issue_for_operation(
                 operation,
@@ -577,8 +615,7 @@ def check_revolve_axis(
 def register_operation_references(
     operation: dict[str, Any],
     operation_number: int,
-    known_feature_ids: set[str],
-    known_targets: set[str],
+    target_catalog: TargetCatalog,
 ) -> None:
     """Add references created by this operation to the known target set."""
     operation_id = operation.get("id")
@@ -588,38 +625,118 @@ def register_operation_references(
         else:
             return
 
-    known_feature_ids.add(operation_id)
-    known_targets.update(
+    target_catalog.add_feature_id(operation_id)
+    operation_type = operation.get("type")
+    if operation_type in {"extrude", "add_extrude"}:
+        register_extrude_target_references(operation_id, operation, target_catalog)
+    if operation_type in {"revolve", "add_revolve"}:
+        register_revolve_target_references(operation_id, target_catalog)
+
+
+def register_extrude_target_references(
+    operation_id: str,
+    operation: dict[str, Any],
+    target_catalog: TargetCatalog,
+) -> None:
+    """Register lightweight target references created by an extrusion."""
+    target_catalog.add_references(
+        FACE_REFERENCE_KIND,
         {
             f"{operation_id}.top",
             f"{operation_id}.bottom",
+        },
+    )
+    target_catalog.add_references(
+        SURFACE_REFERENCE_KIND,
+        {
+            f"{operation_id}.side_surface",
+        },
+    )
+    target_catalog.add_references(
+        EDGE_GROUP_REFERENCE_KIND,
+        {
             f"{operation_id}.top_outer_edges",
             f"{operation_id}.bottom_outer_edges",
             f"{operation_id}.vertical_edges",
             f"{operation_id}.all_edges",
-        }
+        },
     )
 
     if operation.get("profile") == "rectangle":
-        known_targets.update(
+        target_catalog.add_references(
+            FACE_REFERENCE_KIND,
             {
                 f"{operation_id}.front",
                 f"{operation_id}.back",
                 f"{operation_id}.left",
                 f"{operation_id}.right",
-            }
+            },
         )
 
-    if operation.get("type") in {"revolve", "add_revolve"}:
-        known_targets.update(
-            {
-                f"{operation_id}.axis",
-                f"{operation_id}.outer_surface",
-                f"{operation_id}.start_face",
-                f"{operation_id}.end_face",
-                f"{operation_id}.end_edges",
-            }
-        )
+
+def register_revolve_target_references(
+    operation_id: str,
+    target_catalog: TargetCatalog,
+) -> None:
+    """Register lightweight target references created by a revolve."""
+    target_catalog.add_references(
+        FACE_REFERENCE_KIND,
+        {
+            f"{operation_id}.front",
+            f"{operation_id}.back",
+            f"{operation_id}.face.front",
+            f"{operation_id}.face.back",
+        },
+    )
+    target_catalog.add_references(
+        SURFACE_REFERENCE_KIND,
+        {
+            f"{operation_id}.outer_surface",
+        },
+    )
+    target_catalog.add_references(
+        AXIS_REFERENCE_KIND,
+        {
+            f"{operation_id}.axis",
+        },
+    )
+    target_catalog.add_references(
+        EDGE_GROUP_REFERENCE_KIND,
+        {
+            f"{operation_id}.front_outer_edges",
+            f"{operation_id}.back_outer_edges",
+            f"{operation_id}.end_edges",
+            f"{operation_id}.all_edges",
+        },
+    )
+
+
+def infer_target_reference_kind(target: str) -> str | None:
+    """Infer reference kind from common target naming conventions."""
+    if "." not in target:
+        return None
+
+    reference_name = target.split(".", 1)[1]
+    if (
+        reference_name.endswith("_edges")
+        or reference_name.startswith("edge_group.")
+        or reference_name.startswith("edge.")
+    ):
+        return EDGE_GROUP_REFERENCE_KIND
+
+    if reference_name == "axis" or reference_name.startswith("axis."):
+        return AXIS_REFERENCE_KIND
+
+    if "surface" in reference_name:
+        return SURFACE_REFERENCE_KIND
+
+    if reference_name in {"top", "bottom", "front", "back", "left", "right"}:
+        return FACE_REFERENCE_KIND
+
+    if reference_name.startswith("face."):
+        return FACE_REFERENCE_KIND
+
+    return None
 
 
 def check_exported_path(exported_path: str | Path) -> list[QualityIssue]:

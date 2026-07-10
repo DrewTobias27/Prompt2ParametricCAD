@@ -107,6 +107,58 @@ def test_check_model_quality_warns_on_unknown_but_ordered_target():
     assert "unknown_target_reference" in issue_codes(report)
 
 
+def test_check_model_quality_accepts_revolve_surface_and_edge_targets():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[5, 0]],
+                "width": 10,
+                "height": 40,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+            },
+            {
+                "type": "cut",
+                "id": "feature_1",
+                "target": "base.outer_surface",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "depth": "through",
+                "diameter": 5,
+            },
+            {
+                "type": "chamfer",
+                "id": "feature_2",
+                "target": "base.front_outer_edges",
+                "distance": 1,
+            },
+        ]
+    }
+
+    report = check_model_quality(model_data)
+
+    assert report["passed"] is True
+    assert "unknown_target_reference" not in issue_codes(report)
+    assert "face_operation_targets_edge" not in issue_codes(report)
+    assert "edge_operation_targets_face" not in issue_codes(report)
+
+
+def test_check_model_quality_rejects_face_operation_on_known_edge_group():
+    model_data = simple_plate_model()
+    model_data["operations"][1]["target"] = "base.top_outer_edges"
+
+    report = check_model_quality(model_data)
+
+    assert report["passed"] is True
+    assert report["status"] == "warning"
+    assert "face_operation_targets_edge" in issue_codes(report)
+
+
 def test_check_model_quality_reports_duplicate_ids():
     model_data = simple_plate_model()
     model_data["operations"][2]["id"] = "feature_1"
