@@ -269,6 +269,15 @@ def build_base_extrusion(
             distance,
             [0, 0],
         )
+    elif feature_graph is not None:
+        feature_graph.registry.register_extruded_solid_references(
+            feature_id=feature_id,
+            reference_scope=feature_id,
+            target_plane=cq.Plane.named(plane),
+            solid=part.val(),
+            distance=distance,
+            position=[0, 0],
+        )
 
     return apply_face_tags(part, feature_id, face_tags)
 
@@ -800,11 +809,7 @@ def register_add_extrusion_references(
     positions: list,
 ) -> None:
     """Remember feature references for a single added extrusion."""
-    if (
-        feature_graph is None
-        or operation.get("profile") != "rectangle"
-        or not operation.get("id")
-    ):
+    if feature_graph is None or not operation.get("id"):
         return
 
     target_workplane, _ = get_target_workplane(
@@ -821,16 +826,41 @@ def register_add_extrusion_references(
         if use_instances:
             instance_name = f"inst{index:03d}"
 
-        feature_graph.registry.register_rectangular_prism_faces(
-            operation["id"],
-            target_workplane.plane,
-            operation["width"],
-            operation["height"],
-            operation["distance"],
-            position,
-            instance_name=instance_name,
-            semantic_aliases=not use_instances,
-        )
+        if operation.get("profile") == "rectangle":
+            feature_graph.registry.register_rectangular_prism_faces(
+                operation["id"],
+                target_workplane.plane,
+                operation["width"],
+                operation["height"],
+                operation["distance"],
+                position,
+                instance_name=instance_name,
+                semantic_aliases=not use_instances,
+            )
+        else:
+            reference_scope = operation["id"]
+            if instance_name is not None:
+                reference_scope = f"{operation['id']}.{instance_name}"
+
+            reference_workplane = cq.Workplane(target_workplane.plane).pushPoints(
+                [position]
+            )
+            reference_workplane = create_profile(
+                reference_workplane,
+                operation,
+                operation_number,
+            )
+            reference_solid = reference_workplane.extrude(operation["distance"])
+            feature_graph.registry.register_extruded_solid_references(
+                feature_id=operation["id"],
+                reference_scope=reference_scope,
+                target_plane=target_workplane.plane,
+                solid=reference_solid.val(),
+                distance=operation["distance"],
+                position=position,
+                instance_name=instance_name,
+                semantic_aliases=not use_instances,
+            )
 
 
 def apply_cut_operation(

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { createFeature, defaultBase } from "./modelBuilders.js";
+import { createFeature, defaultBase, isEdgeTreatment } from "./modelBuilders.js";
 import { MANUAL_PRESETS } from "./manualPresets.js";
 import * as preview from "./previewEngine.js";
 import { featureWarningsByNumber } from "./reviewHelpers.js";
@@ -21,6 +21,18 @@ const TARGET_OPTIONS = [
   ["base.right", "Base right"],
 ];
 
+const EDGE_GROUP_OPTIONS = [
+  ["top_outer_edges", "top outer edges"],
+  ["bottom_outer_edges", "bottom outer edges"],
+  ["vertical_edges", "vertical edges"],
+  ["all_edges", "all edges"],
+];
+
+const ADDED_FEATURE_EDGE_GROUP_OPTIONS = [
+  ["top_outer_edges", "top outer edges"],
+  ["vertical_edges", "vertical edges"],
+];
+
 export function ManualBuilder({
   base,
   setBase,
@@ -39,7 +51,7 @@ export function ManualBuilder({
 
   useEffect(() => {
     setFeatures((currentFeatures) => currentFeatures.map((feature, index) => {
-      const targetOptions = flattenOptionGroups(targetOptionGroupsForFeature(currentFeatures, index));
+      const targetOptions = flattenOptionGroups(targetOptionGroupsForFeature(currentFeatures, index, feature));
       if (targetOptions.some(([value]) => value === feature.target)) {
         return feature;
       }
@@ -52,9 +64,21 @@ export function ManualBuilder({
   }
 
   function updateFeature(index, field, value) {
-    setFeatures((current) => current.map((feature, featureIndex) => (
-      featureIndex === index ? { ...feature, [field]: value } : feature
-    )));
+    setFeatures((current) => current.map((feature, featureIndex) => {
+      if (featureIndex !== index) {
+        return feature;
+      }
+
+      const updatedFeature = { ...feature, [field]: value };
+      if (field === "operation") {
+        const targetOptions = flattenOptionGroups(
+          targetOptionGroupsForFeature(current, index, updatedFeature),
+        );
+        updatedFeature.target = targetOptions[0][0];
+      }
+
+      return updatedFeature;
+    }));
   }
 
   function removeFeature(indexToRemove) {
@@ -253,8 +277,9 @@ function FeatureEditor({
 }) {
   const targetOptionGroups = targetOptionGroupsForFeature(allFeatures, index);
   const isCut = feature.operation === "cut";
+  const edgeTreatment = isEdgeTreatment(feature);
   const needsDistance = !isCut || feature.depthMode === "blind";
-  const showExactDimensions = !feature.reasonable && feature.profile !== "polyline";
+  const showExactDimensions = !edgeTreatment && !feature.reasonable && feature.profile !== "polyline";
 
   return (
     <article className="feature-card">
@@ -299,33 +324,41 @@ function FeatureEditor({
           options={[
             ["add_extrude", "Extrusion"],
             ["cut", "Cut"],
+            ["chamfer", "Chamfer"],
+            ["fillet", "Fillet"],
           ]}
         />
         <GroupedSelectField
-          label="Target face"
+          label={edgeTreatment ? "Target edge group" : "Target face"}
           value={feature.target}
           onChange={(value) => onChange(index, "target", value)}
           groups={targetOptionGroups}
-          helpText="Choose the face where this feature starts. Later features can target faces made by earlier extrusions."
+          helpText={edgeTreatment
+            ? "Choose which saved edge group should receive this chamfer or fillet."
+            : "Choose the face where this feature starts. Later features can target faces made by earlier extrusions."}
         />
-        <SelectField
-          label="Shape"
-          value={feature.profile}
-          onChange={(value) => onChange(index, "profile", value)}
-          options={SHAPE_OPTIONS}
-        />
-        <SelectField
-          label="Pattern"
-          value={feature.pattern}
-          onChange={(value) => onChange(index, "pattern", value)}
-          options={[
-            ["single", "Single"],
-            ["circular", "Circular pattern"],
-          ]}
-        />
+        {!edgeTreatment && (
+          <>
+            <SelectField
+              label="Shape"
+              value={feature.profile}
+              onChange={(value) => onChange(index, "profile", value)}
+              options={SHAPE_OPTIONS}
+            />
+            <SelectField
+              label="Pattern"
+              value={feature.pattern}
+              onChange={(value) => onChange(index, "pattern", value)}
+              options={[
+                ["single", "Single"],
+                ["circular", "Circular pattern"],
+              ]}
+            />
+          </>
+        )}
       </div>
 
-      {feature.pattern === "circular" ? (
+      {!edgeTreatment && feature.pattern === "circular" ? (
         <div className="field-grid compact">
           <NumberField
             label="Circular copies"
@@ -333,7 +366,7 @@ function FeatureEditor({
             onChange={(value) => onChange(index, "copies", value)}
           />
         </div>
-      ) : (
+      ) : !edgeTreatment ? (
         <div className="inline-checks">
           <CheckboxField
             label="Mirror across X axis"
@@ -346,17 +379,19 @@ function FeatureEditor({
             onChange={(value) => onChange(index, "mirrorY", value)}
           />
         </div>
+      ) : null}
+
+      {!edgeTreatment && (
+        <div className="inline-checks">
+          <CheckboxField
+            label="Use reasonable dimensions"
+            checked={feature.reasonable}
+            onChange={(value) => onChange(index, "reasonable", value)}
+          />
+        </div>
       )}
 
-      <div className="inline-checks">
-        <CheckboxField
-          label="Use reasonable dimensions"
-          checked={feature.reasonable}
-          onChange={(value) => onChange(index, "reasonable", value)}
-        />
-      </div>
-
-      {feature.profile === "polyline" && (
+      {!edgeTreatment && feature.profile === "polyline" && (
         <label>
           Polyline description
           <textarea
@@ -387,9 +422,13 @@ function FeatureEditor({
       )}
 
       <div className="field-grid">
-        <NumberField label="Position X" value={feature.x} onChange={(value) => onChange(index, "x", value)} />
-        <NumberField label="Position Y" value={feature.y} onChange={(value) => onChange(index, "y", value)} />
-        {isCut && (
+        {!edgeTreatment && (
+          <>
+            <NumberField label="Position X" value={feature.x} onChange={(value) => onChange(index, "x", value)} />
+            <NumberField label="Position Y" value={feature.y} onChange={(value) => onChange(index, "y", value)} />
+          </>
+        )}
+        {!edgeTreatment && isCut && (
           <SelectField
             label="Cut depth type"
             value={feature.depthMode}
@@ -402,7 +441,11 @@ function FeatureEditor({
         )}
         {needsDistance && (
           <NumberField
-            label={isCut ? "Cut depth" : "Extrusion distance"}
+            label={
+              edgeTreatment
+                ? feature.operation === "chamfer" ? "Chamfer distance" : "Fillet radius"
+                : isCut ? "Cut depth" : "Extrusion distance"
+            }
             value={feature.amount}
             onChange={(value) => onChange(index, "amount", value)}
           />
@@ -479,6 +522,17 @@ function cloneFeature(feature, featureNumber) {
 }
 
 function featureSummaryText(feature) {
+  if (isEdgeTreatment(feature)) {
+    const operation = feature.operation === "chamfer" ? "Chamfer" : "Fillet";
+    const dimension = feature.operation === "chamfer"
+      ? `${preview.formatDimension(feature.amount)} distance`
+      : `${preview.formatDimension(feature.amount)} radius`;
+    return [
+      `${operation}: ${dimension}`,
+      `on ${humanizeTarget(feature.target)}`,
+    ].join(" Â· ");
+  }
+
   const operation = feature.operation === "cut" ? "Cut" : "Extrusion";
   const shape = feature.profile === "circle"
     ? `${DIAMETER_SYMBOL}${preview.formatDimension(feature.diameter)} circle`
@@ -503,19 +557,25 @@ function featureSummaryText(feature) {
 }
 
 function humanizeTarget(target) {
-  const [id, face] = String(target).split(".");
-  if (!id || !face) {
+  const [id, ...rest] = String(target).split(".");
+  const reference = rest.join(".");
+  if (!id || !reference) {
     return target;
   }
 
+  const readableReference = reference.replaceAll("_", " ");
   if (id === "base") {
-    return `base ${face}`;
+    return `base ${readableReference}`;
   }
 
-  return `${id.replace("_", " ")} ${face}`;
+  return `${id.replace("_", " ")} ${readableReference}`;
 }
 
-function targetOptionGroupsForFeature(features, featureIndex) {
+function targetOptionGroupsForFeature(features, featureIndex, feature = features[featureIndex]) {
+  if (isEdgeTreatment(feature)) {
+    return edgeTargetOptionGroupsForFeature(features, featureIndex);
+  }
+
   const groups = [
     {
       label: "Base faces",
@@ -549,6 +609,36 @@ function targetOptionGroupsForFeature(features, featureIndex) {
       options: faces.map(([faceValue, faceLabel]) => [
         `feature_${featureNumber}.${faceValue}`,
         `Feature ${featureNumber} ${faceLabel}`,
+      ]),
+    });
+  }
+
+  return groups;
+}
+
+function edgeTargetOptionGroupsForFeature(features, featureIndex) {
+  const groups = [
+    {
+      label: "Base edge groups",
+      options: EDGE_GROUP_OPTIONS.map(([edgeValue, edgeLabel]) => [
+        `base.${edgeValue}`,
+        `Base ${edgeLabel}`,
+      ]),
+    },
+  ];
+
+  for (let priorIndex = 0; priorIndex < featureIndex; priorIndex += 1) {
+    const priorFeature = features[priorIndex];
+    if (priorFeature.operation !== "add_extrude" || priorFeature.profile !== "rectangle") {
+      continue;
+    }
+
+    const featureNumber = priorIndex + 1;
+    groups.push({
+      label: `Feature ${featureNumber} edge groups`,
+      options: ADDED_FEATURE_EDGE_GROUP_OPTIONS.map(([edgeValue, edgeLabel]) => [
+        `feature_${featureNumber}.${edgeValue}`,
+        `Feature ${featureNumber} ${edgeLabel}`,
       ]),
     });
   }

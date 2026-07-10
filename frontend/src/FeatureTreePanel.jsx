@@ -1,4 +1,5 @@
 import { DIAMETER_SYMBOL, MULTIPLY_SYMBOL } from "./symbols.js";
+import { isEdgeTreatment } from "./modelBuilders.js";
 
 export function FeatureTreePanel({ base, features }) {
   const tree = buildFeatureTree(features);
@@ -75,6 +76,14 @@ function baseSummary(base) {
 }
 
 function featureSummary(feature) {
+  if (isEdgeTreatment(feature)) {
+    const operation = feature.operation === "chamfer" ? "Chamfer" : "Fillet";
+    const dimension = feature.operation === "chamfer"
+      ? `${feature.amount} distance`
+      : `${feature.amount} radius`;
+    return `${operation} Â· ${dimension}`;
+  }
+
   const operation = feature.operation === "cut" ? "Cut" : "Extrusion";
   const shape = shapeSummary(feature);
   const depth = feature.operation === "cut"

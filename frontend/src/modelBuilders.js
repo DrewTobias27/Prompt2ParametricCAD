@@ -14,6 +14,7 @@ export function createFeature(featureNumber = 1) {
     localId: crypto.randomUUID(),
     operation: "add_extrude",
     target: "base.top",
+    edgeSelector: "top_outer_edges",
     profile: "rectangle",
     pattern: "single",
     mirrorX: false,
@@ -33,11 +34,18 @@ export function createFeature(featureNumber = 1) {
   };
 }
 
+export function isEdgeTreatment(feature) {
+  return feature.operation === "chamfer" || feature.operation === "fillet";
+}
+
 export function hasApiAssistedFields({ base, features }) {
   return (
     base.reasonable ||
     base.profile === "polyline" ||
-    features.some((feature) => feature.reasonable || feature.profile === "polyline")
+    features.some((feature) => (
+      !isEdgeTreatment(feature)
+      && (feature.reasonable || feature.profile === "polyline")
+    ))
   );
 }
 
@@ -98,6 +106,22 @@ function buildBaseOperation(base) {
 }
 
 function buildFeatureOperation(feature, featureNumber, instances) {
+  if (isEdgeTreatment(feature)) {
+    const operation = {
+      type: feature.operation,
+      id: `feature_${featureNumber}`,
+      target: feature.target,
+    };
+
+    if (feature.operation === "chamfer") {
+      operation.distance = numberValue(feature.amount);
+    } else {
+      operation.radius = numberValue(feature.amount);
+    }
+
+    return operation;
+  }
+
   const operation = {
     type: feature.operation,
     target: feature.target,
@@ -181,6 +205,14 @@ function describeBase(base) {
 }
 
 function describeFeature(feature, featureNumber) {
+  if (isEdgeTreatment(feature)) {
+    const treatmentText = feature.operation === "chamfer" ? "chamfer" : "fillet";
+    const dimensionText = feature.operation === "chamfer"
+      ? `${feature.amount} mm chamfer distance`
+      : `${feature.amount} mm fillet radius`;
+    return `Add feature ${featureNumber}: a ${treatmentText} on ${feature.target.replace(".", " ")}, using ${dimensionText}.`;
+  }
+
   const operationText = feature.operation === "cut" ? "cut" : "extrusion";
   const shapeText = describeFeatureShape(feature);
   const targetText = feature.target.replace(".", " ");

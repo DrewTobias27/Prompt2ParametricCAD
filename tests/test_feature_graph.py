@@ -263,3 +263,26 @@ def test_feature_graph_debug_tree_exports_build_history():
     assert debug_tree["features"][1]["canonical_target"] == "base.face.f001"
     assert debug_tree["features"][0]["sketch"]["entities"][0]["id"] == "p001"
     assert debug_tree["registry"]["aliases"]["base.top"] == "base.face.f001"
+
+
+def test_circular_base_registers_generalized_edge_groups():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "circle",
+                "distance": 8,
+                "diameter": 60,
+            },
+        ]
+    }
+
+    _, graph = build_model_with_graph(model_data)
+
+    assert graph.registry.get_plane("base.top") is not None
+    assert graph.registry.get_reference_group("base.top_outer_edges") is not None
+    assert graph.registry.get_reference_group("base.bottom_outer_edges") is not None
+    assert graph.registry.get_reference_group("base.all_edges") is not None
+    assert "base.edge.e001" in graph.get_feature("base").created_references

@@ -60,6 +60,18 @@ def box_metadata_from_points(
     }
 
 
+def box_metadata_from_bounding_box(bounding_box) -> dict[str, float]:
+    """Return JSON-friendly metadata from a CadQuery bounding box."""
+    return {
+        "xmin": bounding_box.xmin,
+        "xmax": bounding_box.xmax,
+        "ymin": bounding_box.ymin,
+        "ymax": bounding_box.ymax,
+        "zmin": bounding_box.zmin,
+        "zmax": bounding_box.zmax,
+    }
+
+
 @dataclass(frozen=True)
 class ReferenceFrame:
     """A local coordinate system used to place sketches and features."""
@@ -538,6 +550,189 @@ class FeatureRegistry:
                 [edge_names_by_label[edge_label] for edge_label in edge_labels],
                 aliases=aliases,
             )
+
+    def register_extruded_solid_references(
+        self,
+        feature_id: str | None,
+        reference_scope: str,
+        target_plane: cq.Plane,
+        solid,
+        distance: float,
+        position: list,
+        instance_name: str | None = None,
+        semantic_aliases: bool = True,
+    ) -> None:
+        """Register faces, edges, and vertices extracted from an extruded solid."""
+        if not feature_id:
+            return
+
+        parent_frame = ReferenceFrame.from_plane(target_plane)
+        face_specs = [
+            (
+                "top",
+                parent_frame.child_frame(
+                    (position[0], position[1], distance),
+                    target_plane.xDir,
+                    target_plane.zDir,
+                ),
+            ),
+            (
+                "bottom",
+                parent_frame.child_frame(
+                    (position[0], position[1], 0),
+                    target_plane.xDir,
+                    target_plane.zDir.multiply(-1),
+                ),
+            ),
+        ]
+
+        for index, (face_name, frame) in enumerate(face_specs, start=1):
+            canonical_name = f"{reference_scope}.face.f{index:03d}"
+            aliases = [f"{reference_scope}.{face_name}"]
+            if semantic_aliases and instance_name is None:
+                aliases.extend(
+                    [
+                        f"{feature_id}.{face_name}",
+                        f"{feature_id}.face.{face_name}",
+                    ]
+                )
+
+            self.register_plane(
+                canonical_name,
+                frame,
+                source_feature_id=feature_id,
+                aliases=aliases,
+                metadata={
+                    "semantic_label": face_name,
+                    "distance": distance,
+                    "position": position,
+                    "instance_name": instance_name,
+                    "extraction": "extruded_solid",
+                },
+            )
+
+        self.register_surface(
+            f"{reference_scope}.surface.s001",
+            parent_frame.child_frame(
+                (position[0], position[1], distance / 2),
+                target_plane.xDir,
+                target_plane.yDir,
+            ),
+            source_feature_id=feature_id,
+            aliases=[f"{reference_scope}.side_surface"],
+            metadata={
+                "surface_family": "extruded_side_faces",
+                "distance": distance,
+                "position": position,
+                "instance_name": instance_name,
+            },
+        )
+
+        edge_names_by_group = {
+            "top_outer_edges": [],
+            "bottom_outer_edges": [],
+            "vertical_edges": [],
+            "all_edges": [],
+        }
+        edges = sorted(
+            solid.Edges(),
+            key=lambda edge: (
+                round(edge.Center().z, 9),
+                round(edge.Center().y, 9),
+                round(edge.Center().x, 9),
+            ),
+        )
+        for index, edge in enumerate(edges, start=1):
+            canonical_name = f"{reference_scope}.edge.e{index:03d}"
+            center = vector_to_tuple(edge.Center())
+            bounding_box = box_metadata_from_bounding_box(edge.BoundingBox())
+            frame = ReferenceFrame(
+                origin=center,
+                x_axis=vector_to_tuple(target_plane.xDir),
+                normal=vector_to_tuple(target_plane.zDir),
+            )
+            semantic_label = self.edge_group_label_for_extrude(
+                edge.Center(),
+                target_plane,
+                distance,
+            )
+            edge_names_by_group["all_edges"].append(canonical_name)
+            if semantic_label in edge_names_by_group:
+                edge_names_by_group[semantic_label].append(canonical_name)
+
+            self.register_edge(
+                canonical_name,
+                frame,
+                source_feature_id=feature_id,
+                aliases=[f"{reference_scope}.edge.e{index:03d}"],
+                metadata={
+                    "semantic_label": semantic_label,
+                    "center": center,
+                    "bounding_box": bounding_box,
+                    "distance": distance,
+                    "position": position,
+                    "instance_name": instance_name,
+                    "extraction": "extruded_solid",
+                },
+            )
+
+        for index, vertex in enumerate(solid.Vertices(), start=1):
+            point = vector_to_tuple(vertex.Center())
+            self.register_vertex(
+                f"{reference_scope}.vertex.v{index:03d}",
+                ReferenceFrame(
+                    origin=point,
+                    x_axis=vector_to_tuple(target_plane.xDir),
+                    normal=vector_to_tuple(target_plane.zDir),
+                ),
+                source_feature_id=feature_id,
+                aliases=[f"{reference_scope}.vertex.v{index:03d}"],
+                metadata={
+                    "point": point,
+                    "instance_name": instance_name,
+                    "extraction": "extruded_solid",
+                },
+            )
+
+        for group_label, edge_names in edge_names_by_group.items():
+            if not edge_names:
+                continue
+
+            aliases = [
+                f"{reference_scope}.{group_label}",
+                f"{reference_scope}.edge.{group_label}",
+            ]
+            if semantic_aliases and instance_name is None:
+                aliases.extend(
+                    [
+                        f"{feature_id}.{group_label}",
+                        f"{feature_id}.edge.{group_label}",
+                    ]
+                )
+
+            self.register_reference_group(
+                f"{reference_scope}.edge_group.{group_label}",
+                edge_names,
+                aliases=aliases,
+            )
+
+    @staticmethod
+    def edge_group_label_for_extrude(
+        edge_center: cq.Vector,
+        target_plane: cq.Plane,
+        distance: float,
+    ) -> str:
+        """Classify an extracted edge by height along the extrusion direction."""
+        relative_center = edge_center.sub(target_plane.origin)
+        distance_along_normal = vector_dot(relative_center, target_plane.zDir)
+        tolerance = 1e-6
+
+        if abs(distance_along_normal - distance) <= tolerance:
+            return "top_outer_edges"
+        if abs(distance_along_normal) <= tolerance:
+            return "bottom_outer_edges"
+
+        return "vertical_edges"
 
     @staticmethod
     def edge_frame(

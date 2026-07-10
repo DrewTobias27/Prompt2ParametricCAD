@@ -721,6 +721,11 @@ function collectExactFeaturePreviewData(baseGeometry, features) {
 
   for (const [featureIndex, feature] of features.entries()) {
     const featureNumber = featureIndex + 1;
+    if (feature.operation === "chamfer" || feature.operation === "fillet") {
+      skippedCount += 1;
+      continue;
+    }
+
     const localGeometry = featureLocalGeometry(feature);
     const faceInfo = faceInfoForTarget(feature.target, volumeById);
 

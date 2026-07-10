@@ -1633,6 +1633,48 @@ def test_chamfer_added_feature_top_outer_edges_uses_registered_edge_group():
     assert solid.Volume() > base_volume
 
 
+def test_chamfer_circular_boss_uses_generalized_edge_group():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "add_extrude",
+                "id": "feature_1",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "distance": 8,
+                "diameter": 24,
+            },
+            {
+                "type": "chamfer",
+                "id": "boss_top_chamfer",
+                "target": "feature_1.top_outer_edges",
+                "distance": 1,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    base_volume = 80 * 50 * 6
+    boss_volume = math.pi * 12**2 * 8
+
+    assert len(part.solids().vals()) == 1
+    assert solid.isValid()
+    assert solid.Volume() < base_volume + boss_volume
+    assert solid.Volume() > base_volume
+
+
 def test_fillet_vertical_edges_builds_valid_modified_solid():
     model_data = {
         "operations": [
