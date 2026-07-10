@@ -78,8 +78,10 @@ export default function App() {
 
   function handleTargetReferenceClick(reference) {
     setMode("manual");
-    const activeFeature = features.find((feature) => feature.localId === activeFeatureId);
+    const activeFeatureIndex = features.findIndex((feature) => feature.localId === activeFeatureId);
+    const activeFeature = features[activeFeatureIndex];
     const canRetargetActiveFeature = activeFeature
+      && referenceCanTargetFeature(reference, activeFeatureIndex)
       && ((reference.kind === "edge" && isEdgeTreatment(activeFeature))
         || (reference.kind === "face" && !isEdgeTreatment(activeFeature)));
 
@@ -197,6 +199,20 @@ export default function App() {
       </section>
     </main>
   );
+}
+
+function referenceCanTargetFeature(reference, featureIndex) {
+  const [ownerId] = String(reference.name).split(".");
+  if (ownerId === "base") {
+    return true;
+  }
+
+  const match = ownerId.match(/^feature_(\d+)$/);
+  if (!match) {
+    return false;
+  }
+
+  return Number(match[1]) - 1 < featureIndex;
 }
 
 function PromptBuilder({

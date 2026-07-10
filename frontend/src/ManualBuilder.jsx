@@ -2,6 +2,11 @@ import { useEffect, useMemo } from "react";
 import { createFeature, defaultBase, isEdgeTreatment } from "./modelBuilders.js";
 import { MANUAL_PRESETS } from "./manualPresets.js";
 import * as preview from "./previewEngine.js";
+import {
+  flattenOptionGroups,
+  humanizeTarget,
+  targetOptionGroupsForFeature,
+} from "./referenceMetadata.js";
 import { featureWarningsByNumber } from "./reviewHelpers.js";
 import { DIAMETER_SYMBOL, MULTIPLY_SYMBOL } from "./symbols.js";
 
@@ -10,27 +15,6 @@ const SHAPE_OPTIONS = [
   ["circle", "Circle"],
   ["polygon", "Polygon"],
   ["polyline", "Polyline"],
-];
-
-const TARGET_OPTIONS = [
-  ["base.top", "Base top"],
-  ["base.bottom", "Base bottom"],
-  ["base.front", "Base front"],
-  ["base.back", "Base back"],
-  ["base.left", "Base left"],
-  ["base.right", "Base right"],
-];
-
-const EDGE_GROUP_OPTIONS = [
-  ["top_outer_edges", "top outer edges"],
-  ["bottom_outer_edges", "bottom outer edges"],
-  ["vertical_edges", "vertical edges"],
-  ["all_edges", "all edges"],
-];
-
-const ADDED_FEATURE_EDGE_GROUP_OPTIONS = [
-  ["top_outer_edges", "top outer edges"],
-  ["vertical_edges", "vertical edges"],
 ];
 
 export function ManualBuilder({
@@ -53,13 +37,18 @@ export function ManualBuilder({
 
   useEffect(() => {
     setFeatures((currentFeatures) => currentFeatures.map((feature, index) => {
-      const targetOptions = flattenOptionGroups(targetOptionGroupsForFeature(currentFeatures, index, feature));
+      const targetOptions = flattenOptionGroups(targetOptionGroupsForFeature({
+        base,
+        features: currentFeatures,
+        featureIndex: index,
+        feature,
+      }));
       if (targetOptions.some(([value]) => value === feature.target)) {
         return feature;
       }
       return { ...feature, target: targetOptions[0][0] };
     }));
-  }, [features.length, setFeatures]);
+  }, [base, features.length, setFeatures]);
 
   function updateBase(field, value) {
     setBase((current) => ({ ...current, [field]: value }));
@@ -74,7 +63,12 @@ export function ManualBuilder({
       const updatedFeature = { ...feature, [field]: value };
       if (field === "operation") {
         const targetOptions = flattenOptionGroups(
-          targetOptionGroupsForFeature(current, index, updatedFeature),
+          targetOptionGroupsForFeature({
+            base,
+            features: current,
+            featureIndex: index,
+            feature: updatedFeature,
+          }),
         );
         updatedFeature.target = targetOptions[0][0];
       }
@@ -228,6 +222,7 @@ export function ManualBuilder({
             key={feature.localId}
             feature={feature}
             index={index}
+            base={base}
             allFeatures={features}
             onChange={updateFeature}
             onRemove={() => removeFeature(index)}
@@ -277,6 +272,7 @@ export function ManualBuilder({
 function FeatureEditor({
   feature,
   index,
+  base,
   allFeatures,
   onChange,
   onRemove,
@@ -289,7 +285,12 @@ function FeatureEditor({
   isActive,
   onSelect,
 }) {
-  const targetOptionGroups = targetOptionGroupsForFeature(allFeatures, index);
+  const targetOptionGroups = targetOptionGroupsForFeature({
+    base,
+    features: allFeatures,
+    featureIndex: index,
+    feature,
+  });
   const isCut = feature.operation === "cut";
   const edgeTreatment = isEdgeTreatment(feature);
   const needsDistance = !isCut || feature.depthMode === "blind";
@@ -605,98 +606,4 @@ function featureSummaryText(feature) {
     depth,
     pattern ? `pattern: ${pattern}` : "",
   ].filter(Boolean).join(" - ");
-}
-
-function humanizeTarget(target) {
-  const [id, ...rest] = String(target).split(".");
-  const reference = rest.join(".");
-  if (!id || !reference) {
-    return target;
-  }
-
-  const readableReference = reference.replaceAll("_", " ");
-  if (id === "base") {
-    return `base ${readableReference}`;
-  }
-
-  return `${id.replace("_", " ")} ${readableReference}`;
-}
-
-function targetOptionGroupsForFeature(features, featureIndex, feature = features[featureIndex]) {
-  if (isEdgeTreatment(feature)) {
-    return edgeTargetOptionGroupsForFeature(features, featureIndex);
-  }
-
-  const groups = [
-    {
-      label: "Base faces",
-      options: [...TARGET_OPTIONS],
-    },
-  ];
-
-  for (let priorIndex = 0; priorIndex < featureIndex; priorIndex += 1) {
-    const priorFeature = features[priorIndex];
-    if (priorFeature.operation !== "add_extrude") {
-      continue;
-    }
-
-    const featureNumber = priorIndex + 1;
-    const faces = [
-      ["top", "top"],
-      ["bottom", "bottom"],
-    ];
-
-    if (priorFeature.profile === "rectangle") {
-      faces.push(
-        ["front", "front"],
-        ["back", "back"],
-        ["left", "left"],
-        ["right", "right"],
-      );
-    }
-
-    groups.push({
-      label: `Feature ${featureNumber} faces`,
-      options: faces.map(([faceValue, faceLabel]) => [
-        `feature_${featureNumber}.${faceValue}`,
-        `Feature ${featureNumber} ${faceLabel}`,
-      ]),
-    });
-  }
-
-  return groups;
-}
-
-function edgeTargetOptionGroupsForFeature(features, featureIndex) {
-  const groups = [
-    {
-      label: "Base edge groups",
-      options: EDGE_GROUP_OPTIONS.map(([edgeValue, edgeLabel]) => [
-        `base.${edgeValue}`,
-        `Base ${edgeLabel}`,
-      ]),
-    },
-  ];
-
-  for (let priorIndex = 0; priorIndex < featureIndex; priorIndex += 1) {
-    const priorFeature = features[priorIndex];
-    if (priorFeature.operation !== "add_extrude" || priorFeature.profile !== "rectangle") {
-      continue;
-    }
-
-    const featureNumber = priorIndex + 1;
-    groups.push({
-      label: `Feature ${featureNumber} edge groups`,
-      options: ADDED_FEATURE_EDGE_GROUP_OPTIONS.map(([edgeValue, edgeLabel]) => [
-        `feature_${featureNumber}.${edgeValue}`,
-        `Feature ${featureNumber} ${edgeLabel}`,
-      ]),
-    });
-  }
-
-  return groups;
-}
-
-function flattenOptionGroups(groups) {
-  return groups.flatMap((group) => group.options);
 }

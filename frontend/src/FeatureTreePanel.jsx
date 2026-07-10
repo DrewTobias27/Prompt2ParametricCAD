@@ -1,5 +1,10 @@
 import { DIAMETER_SYMBOL, MULTIPLY_SYMBOL } from "./symbols.js";
 import { isEdgeTreatment } from "./modelBuilders.js";
+import {
+  baseReferences,
+  featureReferences,
+  humanizeTarget,
+} from "./referenceMetadata.js";
 
 export function FeatureTreePanel({ base, features, onTargetReferenceClick }) {
   const tree = buildFeatureTree(features);
@@ -155,21 +160,6 @@ function patternSummary(feature) {
   ].filter(Boolean).join(", ");
 }
 
-function humanizeTarget(target) {
-  const [id, ...referenceParts] = String(target).split(".");
-  const reference = referenceParts.join(".");
-  if (!id || !reference) {
-    return target;
-  }
-
-  const readableReference = reference.replaceAll("_", " ");
-  if (id === "base") {
-    return `base ${readableReference}`;
-  }
-
-  return `${id.replace("_", " ")} ${readableReference}`;
-}
-
 function buildFeatureTree(features) {
   const nodes = features.map((feature, index) => ({
     id: `feature_${index + 1}`,
@@ -199,65 +189,6 @@ function buildFeatureTree(features) {
 function parentFeatureId(target) {
   const [id] = String(target).split(".");
   return id?.startsWith("feature_") ? id : "base";
-}
-
-function baseReferences(base) {
-  const references = [
-    targetReference("base.top", "top face", "face"),
-    targetReference("base.bottom", "bottom face", "face"),
-  ];
-
-  if (base.profile === "rectangle") {
-    references.push(
-      targetReference("base.front", "front face", "face"),
-      targetReference("base.back", "back face", "face"),
-      targetReference("base.left", "left face", "face"),
-      targetReference("base.right", "right face", "face"),
-      targetReference("base.top_outer_edges", "top outer edges", "edge"),
-      targetReference("base.bottom_outer_edges", "bottom outer edges", "edge"),
-      targetReference("base.vertical_edges", "vertical edges", "edge"),
-    );
-  } else {
-    references.push(
-      targetReference("base.top_outer_edges", "top outer edges", "edge"),
-      targetReference("base.bottom_outer_edges", "bottom outer edges", "edge"),
-      targetReference("base.all_edges", "all edges", "edge"),
-    );
-  }
-
-  return references;
-}
-
-function featureReferences(feature, featureNumber) {
-  if (feature.operation !== "add_extrude") {
-    return [];
-  }
-
-  const featureId = `feature_${featureNumber}`;
-  const references = [
-    targetReference(`${featureId}.top`, "top face", "face"),
-    targetReference(`${featureId}.bottom`, "bottom face", "face"),
-  ];
-
-  if (feature.profile === "rectangle") {
-    references.push(
-      targetReference(`${featureId}.front`, "front face", "face"),
-      targetReference(`${featureId}.back`, "back face", "face"),
-      targetReference(`${featureId}.left`, "left face", "face"),
-      targetReference(`${featureId}.right`, "right face", "face"),
-    );
-  }
-
-  references.push(
-    targetReference(`${featureId}.top_outer_edges`, "top outer edges", "edge"),
-    targetReference(`${featureId}.vertical_edges`, "vertical edges", "edge"),
-  );
-
-  return references;
-}
-
-function targetReference(name, label, kind) {
-  return { name, label, kind };
 }
 
 function targetActionTitle(reference) {
