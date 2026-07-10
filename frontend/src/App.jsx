@@ -8,6 +8,7 @@ import {
 import { DrawingPreview } from "./DrawingPreview.jsx";
 import { FeatureTreePanel } from "./FeatureTreePanel.jsx";
 import { ManualBuilder } from "./ManualBuilder.jsx";
+import { modelDataToTreeView } from "./modelDataViewModel.js";
 import {
   buildManualModelData,
   buildManualPrompt,
@@ -37,6 +38,10 @@ export default function App() {
   const manualPrompt = useMemo(
     () => buildManualPrompt({ base, features }),
     [base, features],
+  );
+  const generatedTreeView = useMemo(
+    () => modelDataToTreeView(result?.model_data),
+    [result],
   );
 
   async function runRequest(request) {
@@ -193,6 +198,15 @@ export default function App() {
               />
               <DesignReview base={base} features={features} usesApiAssistance={usesApiAssistance} />
             </>
+          )}
+          {mode === "prompt" && generatedTreeView && (
+            <FeatureTreePanel
+              base={generatedTreeView.base}
+              features={generatedTreeView.features}
+              title="Generated feature tree"
+              description="How the API-generated CAD JSON is structured before CadQuery builds the part."
+              hint="Read-only for now. Use this to inspect feature order, parent targets, and available references."
+            />
           )}
           <OutputPanel status={status} result={result} downloadUrl={downloadUrl} />
         </aside>

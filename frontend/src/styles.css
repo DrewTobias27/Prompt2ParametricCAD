@@ -570,6 +570,16 @@ textarea {
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.14);
 }
 
+.tree-reference-chip.readonly {
+  cursor: default;
+}
+
+.tree-reference-chip.readonly:hover,
+.tree-reference-chip.readonly:focus-visible {
+  box-shadow: none;
+  transform: none;
+}
+
 .quiet-button {
   border: 1px solid #dbe3ef;
   padding: 0.5rem 0.7rem;

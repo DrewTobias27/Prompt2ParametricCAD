@@ -6,22 +6,27 @@ import {
   humanizeTarget,
 } from "./referenceMetadata.js";
 
-export function FeatureTreePanel({ base, features, onTargetReferenceClick }) {
+export function FeatureTreePanel({
+  base,
+  features,
+  onTargetReferenceClick,
+  title = "Feature tree",
+  description = "Build order, parent faces, edge groups, and major dimensions.",
+  hint = "Click a chip to retarget the active compatible feature, or add a new feature there.",
+}) {
   const tree = buildFeatureTree(features);
 
   return (
     <section className="feature-tree-card">
       <div className="section-heading">
         <div>
-          <h2>Feature tree</h2>
-          <p>Build order, parent faces, edge groups, and major dimensions.</p>
-          <p className="tree-hint">
-            Click a chip to retarget the active compatible feature, or add a new feature there.
-          </p>
+          <h2>{title}</h2>
+          <p>{description}</p>
+          {hint && <p className="tree-hint">{hint}</p>}
         </div>
       </div>
 
-      <div className="feature-tree" role="tree" aria-label="Manual model feature tree">
+      <div className="feature-tree" role="tree" aria-label={`${title} feature tree`}>
         <TreeNode
           title="Base"
           summary={baseSummary(base)}
@@ -56,15 +61,21 @@ function TreeNode({
           {references.length > 0 && (
             <div className="tree-reference-list" aria-label={`${title} available targets`}>
               {references.map((reference) => (
-                <button
-                  className={`tree-reference-chip ${reference.kind}`}
-                  key={reference.name}
-                  type="button"
-                  title={targetActionTitle(reference)}
-                  onClick={() => onTargetReferenceClick?.(reference)}
-                >
-                  {reference.label}
-                </button>
+                onTargetReferenceClick ? (
+                  <button
+                    className={`tree-reference-chip ${reference.kind}`}
+                    key={reference.name}
+                    type="button"
+                    title={targetActionTitle(reference)}
+                    onClick={() => onTargetReferenceClick(reference)}
+                  >
+                    {reference.label}
+                  </button>
+                ) : (
+                  <span className={`tree-reference-chip ${reference.kind} readonly`} key={reference.name}>
+                    {reference.label}
+                  </span>
+                )
               ))}
             </div>
           )}
@@ -91,6 +102,10 @@ function TreeNode({
 }
 
 function baseSummary(base) {
+  if (base.summary) {
+    return base.summary;
+  }
+
   if (base.reasonable) {
     return `Reasonable ${base.profile} base`;
   }
@@ -111,6 +126,10 @@ function baseSummary(base) {
 }
 
 function featureSummary(feature) {
+  if (feature.summary) {
+    return feature.summary;
+  }
+
   if (isEdgeTreatment(feature)) {
     const operation = feature.operation === "chamfer" ? "Chamfer" : "Fillet";
     const dimension = feature.operation === "chamfer"
