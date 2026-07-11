@@ -9,6 +9,7 @@ from prompt2cad.design_intent import intent_to_model_data
 from prompt2cad.diagnostics import check_model_data
 from prompt2cad.example_library import format_examples_for_prompt
 from prompt2cad.example_library import select_relevant_examples
+from prompt2cad.quality import check_model_quality
 from prompt2cad.schema import OPENAI_CAD_MODEL_SCHEMA
 from prompt2cad.schema import OPENAI_RELATIONAL_CAD_MODEL_SCHEMA
 
@@ -303,14 +304,16 @@ You will receive:
 - the original user prompt
 - failed CAD JSON
 - local CAD failure analysis
+- a structured quality report with issue codes, messages, and suggestions
 
 Your job is to revise the JSON so it preserves the user's intent while fixing
 the identified CAD problem.
 
 Important repair rules:
 - Do not return the same geometry with tiny numeric changes.
-- Use the failure reason and suggested fixes directly.
+- Use the failure reason, quality issue codes, and suggested fixes directly.
 - The final model must build as one connected, valid solid.
+- Fix every quality-report error and any repairable target-kind warning.
 - If an inner object sits inside a through-cut frame opening, either add bridge
   tabs/ribs connecting it to the frame or replace the through cut with a shallow
   pocket/recess.
@@ -320,6 +323,12 @@ Important repair rules:
   geometry changes.
 - Prefer simple, robust geometry over clever fragile geometry.
 """.strip()
+
+
+REPAIRABLE_QUALITY_WARNING_CODES = {
+    "edge_operation_targets_face",
+    "face_operation_targets_edge",
+}
 
 
 def create_openai_client() -> OpenAI:
@@ -421,6 +430,76 @@ def repair_model_data(
     return json.loads(response.output_text)
 
 
+def quality_report_needs_repair(quality_report: dict) -> bool:
+    """Return whether quality issues should trigger an API repair attempt."""
+    if not quality_report.get("passed", False):
+        return True
+
+    return any(
+        issue.get("code") in REPAIRABLE_QUALITY_WARNING_CODES
+        for issue in quality_report.get("issues", [])
+    )
+
+
+def quality_issue_suggestions(quality_report: dict) -> list[str]:
+    """Return concise repair suggestions from quality issues."""
+    suggestions = []
+    for issue in quality_report.get("issues", []):
+        suggestion = issue.get("suggestion")
+        if suggestion and suggestion not in suggestions:
+            suggestions.append(suggestion)
+
+    return suggestions
+
+
+def build_repair_failure_analysis(model_data: dict) -> dict:
+    """Combine build diagnostics and quality-gate output for repair."""
+    diagnostics = check_model_data(model_data)
+    quality_report = check_model_quality(model_data)
+    needs_repair = (
+        not diagnostics.get("passed", False)
+        or quality_report_needs_repair(quality_report)
+    )
+
+    if not needs_repair:
+        return {
+            "passed": True,
+            "failure_type": None,
+            "reason": "Model data passed diagnostics and quality checks.",
+            "suggested_fixes": [],
+            "diagnostics": diagnostics,
+            "quality_report": quality_report,
+        }
+
+    suggested_fixes = list(diagnostics.get("suggested_fixes", []))
+    for suggestion in quality_issue_suggestions(quality_report):
+        if suggestion not in suggested_fixes:
+            suggested_fixes.append(suggestion)
+
+    repairable_quality_codes = [
+        issue.get("code")
+        for issue in quality_report.get("issues", [])
+        if issue.get("severity") == "error"
+        or issue.get("code") in REPAIRABLE_QUALITY_WARNING_CODES
+    ]
+
+    return {
+        "passed": False,
+        "failure_type": (
+            diagnostics.get("failure_type")
+            or "quality_gate_failed"
+        ),
+        "reason": diagnostics.get(
+            "reason",
+            "The model failed diagnostics or quality-gate checks.",
+        ),
+        "suggested_fixes": suggested_fixes,
+        "repairable_quality_codes": repairable_quality_codes,
+        "diagnostics": diagnostics,
+        "quality_report": quality_report,
+    }
+
+
 def prompt_to_model_data_with_repair(
     user_prompt: str,
     max_repairs: int = 1,
@@ -430,18 +509,18 @@ def prompt_to_model_data_with_repair(
     repair_history = []
 
     for _ in range(max_repairs):
-        diagnosis = check_model_data(model_data)
-        if diagnosis["passed"]:
+        failure_analysis = build_repair_failure_analysis(model_data)
+        if failure_analysis["passed"]:
             return model_data, repair_history
 
         repaired_model_data = repair_model_data(
             user_prompt,
             model_data,
-            diagnosis,
+            failure_analysis,
         )
         repair_history.append(
             {
-                "failure_analysis": diagnosis,
+                "failure_analysis": failure_analysis,
                 "repaired_model_data": repaired_model_data,
             }
         )
