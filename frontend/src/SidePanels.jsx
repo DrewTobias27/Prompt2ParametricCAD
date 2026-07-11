@@ -56,6 +56,77 @@ export function OutputPanel({ status, result, downloadUrl }) {
   );
 }
 
+export function RepairHistoryPanel({ repairHistory }) {
+  if (!repairHistory?.length) {
+    return null;
+  }
+
+  return (
+    <section className="review-card">
+      <h2>Repair history</h2>
+      <p>
+        The API generated CAD JSON, the backend checked it, and at least one
+        repair attempt was made using the structured diagnostics below.
+      </p>
+      <div className="repair-history-list">
+        {repairHistory.map((repair, index) => (
+          <RepairHistoryItem
+            key={`repair-${index + 1}`}
+            repair={repair}
+            attemptNumber={index + 1}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RepairHistoryItem({ repair, attemptNumber }) {
+  const failureAnalysis = repair.failure_analysis ?? {};
+  const qualityReport = failureAnalysis.quality_report;
+  const issueCodes = failureAnalysis.repairable_quality_codes ?? [];
+  const suggestions = failureAnalysis.suggested_fixes ?? [];
+  const statusLabel = qualityReport?.status ?? (failureAnalysis.passed ? "pass" : "needs repair");
+  const statusClass = String(statusLabel).replace(/\s+/g, "-");
+
+  return (
+    <article className="repair-history-item">
+      <div className="repair-history-heading">
+        <strong>Attempt {attemptNumber}</strong>
+        <span className={`repair-status ${statusClass}`}>{statusLabel}</span>
+      </div>
+
+      <p>
+        <span className="repair-label">Reason:</span>{" "}
+        {failureAnalysis.reason ?? "No repair reason was provided."}
+      </p>
+
+      {failureAnalysis.failure_type && (
+        <p>
+          <span className="repair-label">Failure type:</span>{" "}
+          <code>{failureAnalysis.failure_type}</code>
+        </p>
+      )}
+
+      {issueCodes.length > 0 && (
+        <div className="repair-chip-row" aria-label="Repairable quality issue codes">
+          {issueCodes.map((code) => (
+            <code className="repair-chip" key={code}>{code}</code>
+          ))}
+        </div>
+      )}
+
+      {suggestions.length > 0 && (
+        <ul className="repair-suggestion-list">
+          {suggestions.map((suggestion) => (
+            <li key={suggestion}>{suggestion}</li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
+}
+
 export function GeneratedModelReview({ modelData, qualityReport }) {
   const warnings = useMemo(
     () => qualityReport?.issues ?? reviewGeneratedModel(modelData),

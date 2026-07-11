@@ -17,7 +17,12 @@ import {
   hasApiAssistedFields,
   isEdgeTreatment,
 } from "./modelBuilders.js";
-import { DesignReview, GeneratedModelReview, OutputPanel } from "./SidePanels.jsx";
+import {
+  DesignReview,
+  GeneratedModelReview,
+  OutputPanel,
+  RepairHistoryPanel,
+} from "./SidePanels.jsx";
 
 export default function App() {
   const [mode, setMode] = useState("manual");
@@ -212,6 +217,7 @@ export default function App() {
                 modelData={result?.model_data}
                 qualityReport={result?.quality_report}
               />
+              <RepairHistoryPanel repairHistory={result?.repair_history} />
             </>
           )}
           <OutputPanel status={status} result={result} downloadUrl={downloadUrl} />

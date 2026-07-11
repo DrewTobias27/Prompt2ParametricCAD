@@ -879,6 +879,83 @@ textarea {
   color: #991b1b;
 }
 
+.repair-history-list {
+  display: grid;
+  gap: 14px;
+}
+
+.repair-history-item {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dbe4f0;
+  border-radius: 16px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.repair-history-item p {
+  margin: 0;
+  color: #475569;
+}
+
+.repair-history-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.repair-label {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.repair-status {
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.repair-status.pass {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.repair-status.warning,
+.repair-status.needs-repair {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.repair-status.fail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.repair-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.repair-chip {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+}
+
+.repair-suggestion-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+}
+
 .download-link {
   display: inline-flex;
   width: fit-content;
