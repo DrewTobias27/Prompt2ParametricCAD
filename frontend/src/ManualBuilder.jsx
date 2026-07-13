@@ -36,19 +36,25 @@ export function ManualBuilder({
   );
 
   useEffect(() => {
-    setFeatures((currentFeatures) => currentFeatures.map((feature, index) => {
-      const targetOptions = flattenOptionGroups(targetOptionGroupsForFeature({
-        base,
-        features: currentFeatures,
-        featureIndex: index,
-        feature,
-      }));
-      if (targetOptions.some(([value]) => value === feature.target)) {
-        return feature;
-      }
-      return { ...feature, target: targetOptions[0][0] };
-    }));
-  }, [base, features.length, setFeatures]);
+    setFeatures((currentFeatures) => {
+      let changed = false;
+      const validatedFeatures = currentFeatures.map((feature, index) => {
+        const targetOptions = flattenOptionGroups(targetOptionGroupsForFeature({
+          base,
+          features: currentFeatures,
+          featureIndex: index,
+          feature,
+        }));
+        if (targetOptions.length === 0 || targetOptions.some(([value]) => value === feature.target)) {
+          return feature;
+        }
+        changed = true;
+        return { ...feature, target: targetOptions[0][0] };
+      });
+
+      return changed ? validatedFeatures : currentFeatures;
+    });
+  }, [base, features, setFeatures]);
 
   function updateBase(field, value) {
     setBase((current) => ({ ...current, [field]: value }));
@@ -368,7 +374,7 @@ function FeatureEditor({
         </div>
       </div>
 
-      <div className="field-grid">
+      <div className={`feature-workflow-grid ${edgeTreatment ? "edge-workflow" : ""}`}>
         <SelectField
           label="Operation"
           value={feature.operation}
@@ -387,16 +393,102 @@ function FeatureEditor({
           groups={targetOptionGroups}
           helpText={edgeTreatment
             ? "Choose which saved edge group should receive this chamfer or fillet."
-            : "Choose the face where this feature starts. Later features can target faces made by earlier extrusions."}
+            : "Choose the face where this feature starts."}
         />
         {!edgeTreatment && (
-          <>
-            <SelectField
-              label="Shape"
-              value={feature.profile}
-              onChange={(value) => onChange(index, "profile", value)}
-              options={SHAPE_OPTIONS}
+          <SelectField
+            label="Shape"
+            value={feature.profile}
+            onChange={(value) => onChange(index, "profile", value)}
+            options={SHAPE_OPTIONS}
+          />
+        )}
+      </div>
+
+      {!edgeTreatment && (
+        <section className="feature-workflow-section">
+          <div className="feature-workflow-heading">
+            <span>Sketch dimensions</span>
+            <CheckboxField
+              label="Use reasonable dimensions"
+              checked={feature.reasonable}
+              onChange={(value) => onChange(index, "reasonable", value)}
             />
+          </div>
+
+          {feature.profile === "polyline" && (
+            <label className="full-span">
+              Polyline description
+              <textarea
+                rows={3}
+                value={feature.polylineDescription}
+                onChange={(event) => onChange(index, "polylineDescription", event.target.value)}
+                placeholder="Example: rounded triangular tab or narrow slot with angled sides"
+              />
+            </label>
+          )}
+
+          {showExactDimensions && (
+            <div className="feature-dimension-grid">
+              {feature.profile === "rectangle" ? (
+                <>
+                  <NumberField label="Width" value={feature.width} onChange={(value) => onChange(index, "width", value)} />
+                  <NumberField label="Height" value={feature.height} onChange={(value) => onChange(index, "height", value)} />
+                </>
+              ) : (
+                <>
+                  <NumberField label="Diameter" value={feature.diameter} onChange={(value) => onChange(index, "diameter", value)} />
+                  {feature.profile === "polygon" && (
+                    <NumberField label="Sides" value={feature.sides} onChange={(value) => onChange(index, "sides", value)} />
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="feature-dimension-grid">
+            <NumberField label="Position X" value={feature.x} onChange={(value) => onChange(index, "x", value)} />
+            <NumberField label="Position Y" value={feature.y} onChange={(value) => onChange(index, "y", value)} />
+          </div>
+        </section>
+      )}
+
+      <section className="feature-workflow-section">
+        <div className="feature-workflow-heading">
+          <span>{edgeTreatment ? "Edge treatment size" : "Feature depth"}</span>
+        </div>
+        <div className="feature-depth-grid">
+          {!edgeTreatment && isCut && (
+            <SelectField
+              label="Cut depth type"
+              value={feature.depthMode}
+              onChange={(value) => onChange(index, "depthMode", value)}
+              options={[
+                ["through", "Through cut"],
+                ["blind", "Blind depth"],
+              ]}
+            />
+          )}
+          {needsDistance && (
+            <NumberField
+              label={
+                edgeTreatment
+                  ? feature.operation === "chamfer" ? "Chamfer distance" : "Fillet radius"
+                  : isCut ? "Cut depth" : "Extrusion distance"
+              }
+              value={feature.amount}
+              onChange={(value) => onChange(index, "amount", value)}
+            />
+          )}
+        </div>
+      </section>
+
+      {!edgeTreatment && (
+        <section className="feature-workflow-section">
+          <div className="feature-workflow-heading">
+            <span>Pattern after feature</span>
+          </div>
+          <div className="feature-pattern-grid">
             <SelectField
               label="Pattern"
               value={feature.pattern}
@@ -406,103 +498,32 @@ function FeatureEditor({
                 ["circular", "Circular pattern"],
               ]}
             />
-          </>
-        )}
-      </div>
-
-      {!edgeTreatment && feature.pattern === "circular" ? (
-        <div className="field-grid compact">
-          <NumberField
-            label="Circular copies"
-            value={feature.copies}
-            onChange={(value) => onChange(index, "copies", value)}
-          />
-        </div>
-      ) : !edgeTreatment ? (
-        <div className="inline-checks">
-          <CheckboxField
-            label="Mirror across X axis"
-            checked={feature.mirrorX}
-            onChange={(value) => onChange(index, "mirrorX", value)}
-          />
-          <CheckboxField
-            label="Mirror across Y axis"
-            checked={feature.mirrorY}
-            onChange={(value) => onChange(index, "mirrorY", value)}
-          />
-        </div>
-      ) : null}
-
-      {!edgeTreatment && (
-        <div className="inline-checks">
-          <CheckboxField
-            label="Use reasonable dimensions"
-            checked={feature.reasonable}
-            onChange={(value) => onChange(index, "reasonable", value)}
-          />
-        </div>
+            {feature.pattern === "circular" ? (
+              <>
+                <NumberField
+                  label="Circular copies"
+                  value={feature.copies}
+                  onChange={(value) => onChange(index, "copies", value)}
+                />
+                <div className="pattern-placeholder" aria-hidden="true" />
+              </>
+            ) : (
+              <>
+                <CheckboxField
+                  label="Mirror across X axis"
+                  checked={feature.mirrorX}
+                  onChange={(value) => onChange(index, "mirrorX", value)}
+                />
+                <CheckboxField
+                  label="Mirror across Y axis"
+                  checked={feature.mirrorY}
+                  onChange={(value) => onChange(index, "mirrorY", value)}
+                />
+              </>
+            )}
+          </div>
+        </section>
       )}
-
-      {!edgeTreatment && feature.profile === "polyline" && (
-        <label>
-          Polyline description
-          <textarea
-            rows={3}
-            value={feature.polylineDescription}
-            onChange={(event) => onChange(index, "polylineDescription", event.target.value)}
-            placeholder="Example: rounded triangular tab or narrow slot with angled sides"
-          />
-        </label>
-      )}
-
-      {showExactDimensions && (
-        <div className="field-grid">
-          {feature.profile === "rectangle" ? (
-            <>
-              <NumberField label="Width" value={feature.width} onChange={(value) => onChange(index, "width", value)} />
-              <NumberField label="Height" value={feature.height} onChange={(value) => onChange(index, "height", value)} />
-            </>
-          ) : (
-            <>
-              <NumberField label="Diameter" value={feature.diameter} onChange={(value) => onChange(index, "diameter", value)} />
-              {feature.profile === "polygon" && (
-                <NumberField label="Sides" value={feature.sides} onChange={(value) => onChange(index, "sides", value)} />
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      <div className="field-grid">
-        {!edgeTreatment && (
-          <>
-            <NumberField label="Position X" value={feature.x} onChange={(value) => onChange(index, "x", value)} />
-            <NumberField label="Position Y" value={feature.y} onChange={(value) => onChange(index, "y", value)} />
-          </>
-        )}
-        {!edgeTreatment && isCut && (
-          <SelectField
-            label="Cut depth type"
-            value={feature.depthMode}
-            onChange={(value) => onChange(index, "depthMode", value)}
-            options={[
-              ["through", "Through cut"],
-              ["blind", "Blind depth"],
-            ]}
-          />
-        )}
-        {needsDistance && (
-          <NumberField
-            label={
-              edgeTreatment
-                ? feature.operation === "chamfer" ? "Chamfer distance" : "Fillet radius"
-                : isCut ? "Cut depth" : "Extrusion distance"
-            }
-            value={feature.amount}
-            onChange={(value) => onChange(index, "amount", value)}
-          />
-        )}
-      </div>
     </article>
   );
 }

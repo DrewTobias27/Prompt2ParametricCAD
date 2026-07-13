@@ -226,6 +226,40 @@ function testMountingPlatePresetKeepsCornerHolesInsideBase() {
   assert(linkedWarnings.length === 0, `mounting plate preset should not warn, found ${linkedWarnings.length} warnings`);
 }
 
+function testManualPresetsHaveIsolatedPreviewRecords() {
+  const expectedPrimaryCounts = new Map([
+    ["mounting_plate", 4],
+    ["flange", 8],
+    ["boss_block", 3],
+  ]);
+
+  for (const preset of MANUAL_PRESETS) {
+    const model = buildPreviewModel({
+      base: {
+        ...defaultBase,
+        ...preset.base,
+        reasonable: false,
+        polylineDescription: "",
+      },
+      features: preset.features.map((featureData, index) => ({
+        ...createFeature(index + 1),
+        ...featureData,
+        localId: `${preset.id}_feature_${index + 1}`,
+        reasonable: false,
+        polylineDescription: "",
+      })),
+    });
+    const primaryCount = Object.values(model.views)
+      .flatMap((view) => view.features)
+      .filter((record) => record.isPrimary).length;
+
+    assert(
+      primaryCount === expectedPrimaryCounts.get(preset.id),
+      `${preset.id} should render only its own primary records; expected ${expectedPrimaryCounts.get(preset.id)}, found ${primaryCount}`,
+    );
+  }
+}
+
 function testFeatureLinkedWarningsIncludeSuggestions() {
   const model = buildPreviewModel({
     base: {
@@ -262,6 +296,7 @@ const tests = [
   testCutCanTargetPriorFeatureTopFace,
   testMirroredFeatureCreatesFourPrimaryRecords,
   testMountingPlatePresetKeepsCornerHolesInsideBase,
+  testManualPresetsHaveIsolatedPreviewRecords,
   testFeatureLinkedWarningsIncludeSuggestions,
 ];
 

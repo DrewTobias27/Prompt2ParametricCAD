@@ -110,9 +110,19 @@ function DrawingView({ title, viewData, view, sharedScale, dimensionPlan }) {
           </>
         )}
 
-        {features.map((feature) => (
+        {features.map((feature, featureIndex) => (
           <FeaturePreview
-            key={`${feature.featureNumber}-${view}-${feature.bounds.join(",")}-${feature.isPrimary}`}
+            key={[
+              feature.featureId,
+              featureIndex,
+              feature.featureNumber,
+              view,
+              feature.operation,
+              feature.profile,
+              feature.target,
+              feature.isPrimary ? "primary" : "projection",
+              feature.bounds.join(","),
+            ].join(":")}
             feature={feature}
             mapper={mapper}
             featureCount={primaryFeatureCount}

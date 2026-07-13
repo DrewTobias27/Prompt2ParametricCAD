@@ -296,6 +296,75 @@ h4 {
   align-items: center;
 }
 
+.feature-workflow-grid,
+.feature-dimension-grid,
+.feature-depth-grid,
+.feature-pattern-grid {
+  display: grid;
+  gap: 14px 18px;
+  align-items: start;
+}
+
+.feature-workflow-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.feature-workflow-grid.edge-workflow {
+  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr);
+}
+
+.feature-workflow-section {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 14px;
+}
+
+.feature-workflow-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: #0f172a;
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.feature-workflow-heading .checkbox-field {
+  color: #334155;
+  font-size: 0.95rem;
+  font-weight: 550;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.feature-dimension-grid,
+.feature-depth-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.feature-pattern-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+}
+
+.feature-pattern-grid .checkbox-field {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 0.75rem 0.85rem;
+  align-items: center;
+  background: white;
+}
+
+.full-span {
+  grid-column: 1 / -1;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -415,10 +484,15 @@ textarea {
 }
 
 .feature-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(84px, 1fr));
+  justify-content: end;
   gap: 8px;
+  min-width: 176px;
+}
+
+.feature-actions .quiet-button {
+  width: 100%;
 }
 
 .feature-tree {
@@ -1039,5 +1113,17 @@ pre {
   .review-card,
   .result-card {
     padding: 16px;
+  }
+
+  .feature-workflow-grid,
+  .feature-workflow-grid.edge-workflow,
+  .feature-dimension-grid,
+  .feature-depth-grid,
+  .feature-pattern-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-actions {
+    width: 100%;
   }
 }
