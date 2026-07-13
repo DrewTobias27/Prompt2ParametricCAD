@@ -67,6 +67,57 @@ OPENAI_DEPTH_SCHEMA = {
     ],
 }
 
+SEMANTIC_ROLE_VALUES = [
+    "base_body",
+    "plate",
+    "mounting_plate",
+    "support_plate",
+    "cradle",
+    "bracket",
+    "wall",
+    "rib",
+    "boss",
+    "hub",
+    "post",
+    "pad",
+    "tab",
+    "rim",
+    "lip",
+    "tube",
+    "collar",
+    "hole",
+    "bolt_hole",
+    "counterbore",
+    "countersink",
+    "slot",
+    "key_slot",
+    "groove",
+    "o_ring_groove",
+    "pocket",
+    "cutout",
+    "drain",
+    "spoke",
+    "chamfer",
+    "fillet",
+]
+
+ROLE_SCHEMA = {
+    "type": "string",
+    "enum": SEMANTIC_ROLE_VALUES,
+}
+
+OPENAI_ROLE_SCHEMA = {
+    "anyOf": [
+        ROLE_SCHEMA,
+        {"type": "null"},
+    ],
+}
+
+REQUIRED_CONCEPTS_SCHEMA = {
+    "type": "array",
+    "items": ROLE_SCHEMA,
+}
+
 PLACEMENT_SCHEMA = {
     "type": "object",
     "additionalProperties": True,
@@ -92,6 +143,7 @@ BASE_INTENT_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "id": {"type": "string"},
+        "role": ROLE_SCHEMA,
         "profile": {
             "type": "string",
             "enum": [
@@ -118,6 +170,7 @@ FEATURE_INTENT_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "id": {"type": "string"},
+        "role": ROLE_SCHEMA,
         "operation": {
             "type": "string",
             "enum": ["extrusion", "cut", "revolved_extrusion", "revolved_cut"],
@@ -162,6 +215,7 @@ EDGE_TREATMENT_INTENT_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "id": {"type": "string"},
+        "role": ROLE_SCHEMA,
         "treatment": {
             "type": "string",
             "enum": ["chamfer", "fillet"],
@@ -191,6 +245,7 @@ DESIGN_INTENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
+        "required_concepts": REQUIRED_CONCEPTS_SCHEMA,
         "base": BASE_INTENT_SCHEMA,
         "features": {
             "type": "array",
@@ -319,6 +374,7 @@ OPENAI_BASE_INTENT_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "id": {"type": "string"},
+        "role": OPENAI_ROLE_SCHEMA,
         "profile": {
             "type": "string",
             "enum": [
@@ -339,6 +395,7 @@ OPENAI_BASE_INTENT_SCHEMA = {
     },
     "required": [
         "id",
+        "role",
         "profile",
         "width",
         "height",
@@ -354,6 +411,7 @@ OPENAI_FEATURE_INTENT_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "id": {"type": "string"},
+        "role": OPENAI_ROLE_SCHEMA,
         "operation": {
             "type": "string",
             "enum": ["extrusion", "cut", "revolved_extrusion", "revolved_cut"],
@@ -384,6 +442,7 @@ OPENAI_FEATURE_INTENT_SCHEMA = {
     },
     "required": [
         "id",
+        "role",
         "operation",
         "target",
         "shape",
@@ -406,6 +465,7 @@ OPENAI_EDGE_TREATMENT_INTENT_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "id": {"type": "string"},
+        "role": OPENAI_ROLE_SCHEMA,
         "treatment": {
             "type": "string",
             "enum": ["chamfer", "fillet"],
@@ -425,6 +485,7 @@ OPENAI_EDGE_TREATMENT_INTENT_SCHEMA = {
     },
     "required": [
         "id",
+        "role",
         "treatment",
         "target_feature",
         "edge_selector",
@@ -437,6 +498,7 @@ OPENAI_DESIGN_INTENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
+        "required_concepts": REQUIRED_CONCEPTS_SCHEMA,
         "base": OPENAI_BASE_INTENT_SCHEMA,
         "features": {
             "type": "array",
@@ -447,7 +509,7 @@ OPENAI_DESIGN_INTENT_SCHEMA = {
             "items": OPENAI_EDGE_TREATMENT_INTENT_SCHEMA,
         },
     },
-    "required": ["base", "features", "edge_treatments"],
+    "required": ["required_concepts", "base", "features", "edge_treatments"],
 }
 
 
@@ -481,7 +543,7 @@ def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
     for feature in intent["features"]:
         operation = feature_operation(base, feature)
         operations.append(operation)
-        relationships.extend(feature_relationships(feature))
+        relationships.extend(feature_relationships(base, feature))
 
     features_by_id = {
         feature["id"]: feature
@@ -1314,33 +1376,55 @@ def offset_from_edge_position(
     raise ValueError(f"Unsupported edge: {edge}")
 
 
-def feature_relationships(feature: dict[str, Any]) -> list[dict[str, Any]]:
+EXTERNAL_SUPPORT_ROLES = {
+    "mounting_plate",
+    "support_plate",
+    "tab",
+    "lip",
+    "rim",
+}
+
+
+def feature_relationships(base: dict[str, Any], feature: dict[str, Any]) -> list[dict[str, Any]]:
     """Generate basic relationship constraints from feature intent."""
     relationships = []
     placement_type = feature["placement"]["type"]
+    target_parent, _, target_reference = feature["target"].partition(".")
+    planar_target = target_reference in {"top", "bottom", "front", "back", "left", "right"}
+    simple_base_target = target_parent == "base" and base["profile"] not in {
+        "half_cylinder",
+        "capsule",
+    }
 
-    if placement_type == "centered" and feature["operation"] not in {
-        "revolved_extrusion",
-        "revolved_cut",
-    }:
+    if (
+        placement_type == "centered"
+        and planar_target
+        and (target_parent != "base" or simple_base_target)
+        and feature["operation"] not in {
+            "revolved_extrusion",
+            "revolved_cut",
+        }
+    ):
         relationships.append(
             {
                 "type": "centered_on",
                 "feature": feature["id"],
-                "reference": "base",
+                "reference": target_parent,
                 "tolerance": 0.001,
             }
         )
 
     if (
-        feature["target"].startswith("base.")
+        target_reference == "top"
+        and (target_parent != "base" or simple_base_target)
+        and feature.get("role") not in EXTERNAL_SUPPORT_ROLES
         and feature["operation"] not in {"revolved_extrusion", "revolved_cut"}
     ):
         relationships.append(
             {
                 "type": "inside",
                 "feature": feature["id"],
-                "container": "base",
+                "container": target_parent,
                 "margin": 0,
             }
         )

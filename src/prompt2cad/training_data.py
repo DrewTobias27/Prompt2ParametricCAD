@@ -25,7 +25,8 @@ INTENT_TRAINING_SYSTEM_MESSAGE = (
     "Convert the user's CAD request into Prompt2ParametricCAD design-intent "
     "JSON. Use high-level placements like centered, near_corners, "
     "circular_pattern, mirrored, and explicit instead of calculating raw CAD "
-    "operation positions yourself."
+    "operation positions yourself. Include required_concepts and semantic "
+    "roles so every major requested part concept is represented."
 )
 
 

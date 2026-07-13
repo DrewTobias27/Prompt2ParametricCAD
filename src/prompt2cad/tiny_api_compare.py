@@ -27,6 +27,7 @@ from prompt2cad.design_intent import missing_required_intent_dimensions
 from prompt2cad.evaluator import evaluate_model_data as evaluate_against_case
 from prompt2cad.intent_evaluator import evaluate_design_intent
 from prompt2cad.interpreter import build_model
+from prompt2cad.intent_coverage import intent_coverage_failures
 from prompt2cad.prompting import prompt_to_design_intent
 from prompt2cad.prompting import prompt_to_model_data
 from prompt2cad.quality import check_model_quality
@@ -231,6 +232,7 @@ def run_direct(prompt: str) -> dict[str, Any]:
 def run_intent(prompt: str) -> dict[str, Any]:
     """Generate design intent, then lower it deterministically to model JSON."""
     design_intent = prompt_to_design_intent(prompt)
+    coverage_failures = intent_coverage_failures(design_intent)
     missing_dimensions = missing_required_intent_dimensions(design_intent)
     try:
         model_data = intent_to_model_data(design_intent)
@@ -247,6 +249,8 @@ def run_intent(prompt: str) -> dict[str, Any]:
         raise
     return {
         "design_intent": design_intent,
+        "intent_coverage_passed": not coverage_failures,
+        "intent_coverage_failures": coverage_failures,
         "intent_missing_required_dimensions": missing_dimensions,
         "model_data": model_data,
         **evaluation,
@@ -344,6 +348,8 @@ def status_for_result(result: dict[str, Any]) -> str:
     if result.get("concept_passed") is False:
         status = "warn"
     if result.get("intent_eval_passed") is False:
+        status = "warn"
+    if result.get("intent_coverage_passed") is False:
         status = "warn"
     return status
 
@@ -444,6 +450,9 @@ def rescore_report(
             if result.get("design_intent") is not None:
                 try:
                     design_intent = result["design_intent"]
+                    coverage_failures = intent_coverage_failures(design_intent)
+                    result["intent_coverage_passed"] = not coverage_failures
+                    result["intent_coverage_failures"] = coverage_failures
                     result["intent_missing_required_dimensions"] = (
                         missing_required_intent_dimensions(design_intent)
                     )
@@ -675,6 +684,12 @@ def print_summary(report: dict[str, Any], output_path: Path) -> None:
                 detail = (
                     f"{detail} "
                     f"intent_eval_failures={len(result['intent_eval_failures'])}"
+                )
+            if result.get("intent_coverage_failures"):
+                detail = (
+                    f"{detail} "
+                    f"intent_coverage_failures="
+                    f"{len(result['intent_coverage_failures'])}"
                 )
             print(
                 f"  {result['status'].upper()} {result['mode']} "

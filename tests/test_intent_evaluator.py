@@ -172,6 +172,45 @@ def test_intent_eval_uses_same_reasonable_dimension_fill_as_lowerer():
     assert result.passed is True
 
 
+def test_intent_eval_fails_when_required_concept_is_uncovered():
+    eval_case = {
+        "name": "cradle_with_mounting_plate",
+        "expected_intent": {
+            "base": {
+                "profile": "half_cylinder",
+            }
+        },
+    }
+    design_intent = {
+        "required_concepts": ["cradle", "mounting_plate", "hole"],
+        "base": {
+            "id": "base",
+            "role": "cradle",
+            "profile": "half_cylinder",
+            "diameter": 60,
+            "length": 100,
+        },
+        "features": [
+            {
+                "id": "mounting_holes",
+                "role": "hole",
+                "operation": "cut",
+                "target": "base.bottom",
+                "shape": "circle",
+                "diameter": 6,
+                "depth": "through",
+                "placement": {"type": "centered"},
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    result = evaluate_design_intent(design_intent, eval_case)
+
+    assert result.passed is False
+    assert "mounting_plate" in result.failures[0]
+
+
 def test_intent_eval_case_files_have_expected_intent():
     for case_path in INTENT_CASES_DIR.glob("*.json"):
         eval_case = load_json(case_path)

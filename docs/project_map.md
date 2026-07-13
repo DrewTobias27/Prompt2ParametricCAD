@@ -22,6 +22,9 @@ you are deciding where new work belongs.
 - `src/prompt2cad/sketch_model.py` represents sketch-level geometry for future
   editable feature-tree and SolidWorks export work.
 - `src/prompt2cad/feature_tree_export.py` exports debug feature-tree data.
+- `src/prompt2cad/intent_coverage.py` checks whether design intent covers the
+  major semantic concepts requested by the prompt, such as mounting plates,
+  holes, slots, grooves, bosses, ribs, chamfers, and fillets.
 
 ## Testing and evaluation
 
@@ -42,13 +45,16 @@ you are deciding where new work belongs.
 - `src/prompt2cad/concept_evaluator.py` checks whether generated CAD contains
   important prompt-level concepts.
 - `src/prompt2cad/tiny_api_compare.py` compares direct JSON generation against
-  design-intent generation.
+  design-intent generation. The intent path now also reports semantic coverage
+  warnings when the JSON builds but omits a requested concept.
 
 ## Examples and training
 
 - `examples/` contains hand-written executable CAD JSON examples.
 - `training/intent_examples/` contains design-intent examples intended for
-  future dataset/fine-tuning work.
+  future dataset/fine-tuning work. New examples should include
+  `required_concepts` and semantic `role` fields so they train both geometry
+  and design relationships.
 - `data/external/` is for downloaded external datasets and should stay out of
   git.
 

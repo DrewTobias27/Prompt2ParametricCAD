@@ -13,6 +13,7 @@ from prompt2cad.design_intent import intent_to_model_data
 from prompt2cad.design_intent import remove_null_values
 from prompt2cad.design_intent import validate_design_intent
 from prompt2cad.diagnostics import check_model_data
+from prompt2cad.intent_coverage import intent_coverage_failures
 
 
 DEFAULT_CASES_DIR = Path("evals/intent_cases")
@@ -166,6 +167,7 @@ def evaluate_design_intent(
         )
 
     expected = eval_case.get("expected_intent", {})
+    failures.extend(intent_coverage_failures(design_intent))
     failures.extend(expected_base_failures(design_intent, expected.get("base", {})))
     failures.extend(
         expected_feature_failures(

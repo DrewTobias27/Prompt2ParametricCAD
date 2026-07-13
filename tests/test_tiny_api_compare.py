@@ -543,3 +543,51 @@ def test_rescore_report_relowers_stale_saved_model_data(tmp_path):
     assert "message" not in result
     assert result["model_data"]["operations"][0]["profile"] == "polygon"
     assert result["model_data"]["operations"][0]["diameter"] == 80.0
+
+
+def test_rescore_report_warns_on_missing_required_concept(tmp_path):
+    report_path = tmp_path / "old_report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "case": "cradle",
+                        "prompt": "Create a cradle with a mounting plate.",
+                        "results": [
+                            {
+                                "mode": "intent",
+                                "status": "pass",
+                                "design_intent": {
+                                    "required_concepts": [
+                                        "cradle",
+                                        "mounting_plate",
+                                    ],
+                                    "base": {
+                                        "id": "base",
+                                        "role": "cradle",
+                                        "profile": "half_cylinder",
+                                        "diameter": 60,
+                                        "length": 100,
+                                    },
+                                    "features": [],
+                                    "edge_treatments": [],
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = tiny_api_compare.rescore_report(
+        report_path,
+        output_path=tmp_path / "rescored.json",
+    )
+
+    result = report["cases"][0]["results"][0]
+    assert result["status"] == "warn"
+    assert result["intent_coverage_passed"] is False
+    assert "mounting_plate" in result["intent_coverage_failures"][0]
