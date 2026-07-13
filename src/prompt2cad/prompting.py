@@ -521,6 +521,7 @@ def prompt_to_model_data_with_repair(
         repair_history.append(
             {
                 "failure_analysis": failure_analysis,
+                "failed_model_data": model_data,
                 "repaired_model_data": repaired_model_data,
             }
         )

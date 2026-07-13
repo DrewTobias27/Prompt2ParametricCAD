@@ -139,6 +139,11 @@ The API workflow requires an `OPENAI_API_KEY` environment variable in the
 terminal running the server. The manual-builder workflow can generate structured
 model data without relying as heavily on natural-language prompting.
 
+When the API workflow needs a repair attempt or ends in an error, the app saves
+a local JSON log under `generated/repair_logs/`. These logs include the prompt,
+failed model data, quality report, repair suggestions, repaired model data, and
+final result so real failures can later become eval or training examples.
+
 ## Command-line usage
 
 Generate a STEP file from a saved operation JSON file:

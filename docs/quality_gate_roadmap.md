@@ -20,6 +20,17 @@ the full prompt-to-model pipeline.
 4. Export checks
    - Verify STEP output exists and is non-empty.
 
+5. Repair-loop feedback
+   - Feed structured quality issues and build diagnostics back into bounded API
+     repair attempts.
+   - Surface repair history in the frontend so generation failures are visible.
+
+6. Repair/eval logging
+   - Save repaired or failed prompt generations to local JSON logs under
+     `generated/repair_logs/`.
+   - Preserve the original prompt, failed model data, diagnostics, quality
+     report, repaired model data, and final result for future eval/training use.
+
 ## Permanent improvement targets
 
 1. Progressive build diagnostics
@@ -63,8 +74,9 @@ the full prompt-to-model pipeline.
 
 ## Near-term sequence
 
-1. Add progressive build diagnostics.
-2. Add geometry summary to successful build reports.
-3. Use feature graph references for target validation.
-4. Convert quality reports into API repair prompts.
-5. Integrate quality reports into eval output summaries.
+1. Integrate quality reports into eval output summaries.
+2. Build a command to promote selected repair logs into eval fixtures.
+3. Use feature graph references for target validation instead of lightweight
+   target-kind inference.
+4. Add prompt/design-intent checks for relationships and feature counts.
+5. Add partial scoring for generated output quality.

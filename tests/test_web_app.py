@@ -62,6 +62,66 @@ def test_generate_cad_from_design_intent_returns_intent_and_model(monkeypatch):
     assert response["model_data"] == model_data
 
 
+def test_generate_cad_logs_repaired_prompt_generation(monkeypatch, tmp_path):
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            }
+        ]
+    }
+    repair_history = [
+        {
+            "failure_analysis": {"passed": False},
+            "failed_model_data": {"operations": []},
+            "repaired_model_data": model_data,
+        }
+    ]
+    log_calls = []
+
+    monkeypatch.setattr(
+        web_app,
+        "prompt_to_model_data_with_repair",
+        lambda prompt, max_repairs: (model_data, repair_history),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "export_model_data",
+        lambda generated_model_data, filename_hint: {
+            "status": "success",
+            "model_data": generated_model_data,
+            "quality_report": {"status": "pass"},
+            "step_file": "generated/web/test.step",
+            "download_url": "/download/test.step",
+        },
+    )
+
+    def fake_save_generation_log(**kwargs):
+        log_calls.append(kwargs)
+        return tmp_path / "repair-log.json"
+
+    monkeypatch.setattr(web_app, "save_generation_log", fake_save_generation_log)
+
+    response = web_app.generate_cad(
+        web_app.CADRequest(prompt="make a repaired plate")
+    )
+
+    assert response["status"] == "success"
+    assert response["repair_history"] == repair_history
+    assert response["generation_log"] == str(tmp_path / "repair-log.json")
+    assert len(log_calls) == 1
+    assert log_calls[0]["prompt"] == "make a repaired plate"
+    assert log_calls[0]["final_model_data"] == model_data
+    assert log_calls[0]["repair_history"] == repair_history
+    assert log_calls[0]["quality_report"] == {"status": "pass"}
+
+
 def test_export_model_data_returns_quality_report(monkeypatch, tmp_path):
     model_data = {
         "operations": [

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from prompt2cad.interpreter import build_model
 from prompt2cad.design_intent import intent_to_model_data
+from prompt2cad.generation_log import save_generation_log
 from prompt2cad.prompting import prompt_to_design_intent
 from prompt2cad.prompting import prompt_to_model_data_with_repair
 from prompt2cad.prompting import suggest_base_model_data
@@ -98,6 +99,31 @@ def with_repair_history(response_data: dict, repair_history: list[dict]) -> dict
     return response_data
 
 
+def attach_generation_log(
+    response_data: dict,
+    *,
+    prompt: str,
+    repair_history: list[dict],
+    error_message: str | None = None,
+    generation_mode: str = "prompt",
+) -> dict:
+    """Save useful prompt-generation failures/repairs and attach log path."""
+    if not repair_history and error_message is None:
+        return response_data
+
+    log_path = save_generation_log(
+        prompt=prompt,
+        status=response_data.get("status", "unknown"),
+        final_model_data=response_data.get("model_data"),
+        repair_history=repair_history,
+        quality_report=response_data.get("quality_report"),
+        error_message=error_message,
+        generation_mode=generation_mode,
+    )
+    response_data["generation_log"] = str(log_path)
+    return response_data
+
+
 @app.get("/download/{filename}")
 def download_step_file(filename: str):
     """Download a generated STEP file."""
@@ -117,12 +143,18 @@ def generate_cad(request: CADRequest):
             request.prompt,
             max_repairs=1,
         )
-        return with_repair_history(
+        response_data = with_repair_history(
             export_model_data(model_data, request.prompt),
             repair_history,
         )
+        return attach_generation_log(
+            response_data,
+            prompt=request.prompt,
+            repair_history=repair_history,
+        )
     except Exception as error:
-        return {
+        repair_history = repair_history if "repair_history" in locals() else []
+        response_data = {
             "status": "error",
             "message": str(error),
             "model_data": model_data if "model_data" in locals() else None,
@@ -131,8 +163,14 @@ def generate_cad(request: CADRequest):
                 if "model_data" in locals()
                 else check_model_quality(None)
             ),
-            "repair_history": repair_history if "repair_history" in locals() else [],
+            "repair_history": repair_history,
         }
+        return attach_generation_log(
+            response_data,
+            prompt=request.prompt,
+            repair_history=repair_history,
+            error_message=str(error),
+        )
 
 
 @app.post("/generate-intent")
