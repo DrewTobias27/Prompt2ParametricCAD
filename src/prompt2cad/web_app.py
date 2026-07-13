@@ -1,7 +1,11 @@
 """Local web app for Prompt2CAD."""
 
+from collections import OrderedDict
+from copy import deepcopy
 from pathlib import Path
 import re
+from time import perf_counter
+from typing import Any
 
 import cadquery as cq
 from fastapi import FastAPI
@@ -45,6 +49,8 @@ class CADSuggestFeatureRequest(BaseModel):
 app = FastAPI()
 GENERATED_DIR = Path("generated/web")
 WEB_DIR = Path(__file__).parent / "web"
+CACHE_MAX_ENTRIES = 64
+SUCCESS_RESPONSE_CACHE: OrderedDict[str, dict] = OrderedDict()
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
@@ -68,19 +74,83 @@ def make_safe_filename(prompt: str) -> str:
     return f"{name}.step"
 
 
+def seconds_since(started_at: float) -> float:
+    """Return rounded elapsed seconds for user-facing performance data."""
+    return round(perf_counter() - started_at, 3)
+
+
+def cache_key(kind: str, payload: dict[str, Any]) -> str:
+    """Return a stable key for exact-result caching."""
+    import json
+
+    return (
+        f"{kind}:"
+        + json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+    )
+
+
+def request_payload(request: BaseModel) -> dict[str, Any]:
+    """Return request data for cache keys across Pydantic versions."""
+    if hasattr(request, "model_dump"):
+        return request.model_dump()
+    return request.dict()
+
+
+def get_cached_success_response(key: str) -> dict | None:
+    """Return a cached successful response copy, if available."""
+    cached_response = SUCCESS_RESPONSE_CACHE.get(key)
+    if cached_response is None:
+        return None
+
+    SUCCESS_RESPONSE_CACHE.move_to_end(key)
+    response = deepcopy(cached_response)
+    performance = dict(response.get("performance", {}))
+    performance["cache_hit"] = True
+    performance["served_from_cache"] = True
+    response["performance"] = performance
+    return response
+
+
+def cache_success_response(key: str, response_data: dict) -> None:
+    """Cache a successful response without changing caller-visible behavior."""
+    if response_data.get("status") != "success":
+        return
+
+    SUCCESS_RESPONSE_CACHE[key] = deepcopy(response_data)
+    SUCCESS_RESPONSE_CACHE.move_to_end(key)
+    while len(SUCCESS_RESPONSE_CACHE) > CACHE_MAX_ENTRIES:
+        SUCCESS_RESPONSE_CACHE.popitem(last=False)
+
+
 def export_model_data(model_data: dict, filename_hint: str) -> dict:
     """Validate, build, export, and return web response data for a CAD model."""
+    started_at = perf_counter()
     validate_model_data(model_data)
+    validation_seconds = seconds_since(started_at)
+
+    build_started_at = perf_counter()
     part = build_model(model_data)
+    build_seconds = seconds_since(build_started_at)
+
+    export_started_at = perf_counter()
     step_filename = make_safe_filename(filename_hint)
     step_path = GENERATED_DIR / step_filename
     cq.exporters.export(part, str(step_path))
+    export_seconds = seconds_since(export_started_at)
+
+    quality_started_at = perf_counter()
     quality_report = check_model_quality(
         model_data,
         build_succeeded=True,
         built_part=part,
         exported_path=step_path,
     )
+    quality_seconds = seconds_since(quality_started_at)
 
     return {
         "status": "success",
@@ -88,6 +158,14 @@ def export_model_data(model_data: dict, filename_hint: str) -> dict:
         "quality_report": quality_report,
         "step_file": str(step_path),
         "download_url": f"/download/{step_filename}",
+        "performance": {
+            "validation_seconds": validation_seconds,
+            "build_seconds": build_seconds,
+            "export_seconds": export_seconds,
+            "quality_seconds": quality_seconds,
+            "export_model_total_seconds": seconds_since(started_at),
+            "cache_hit": False,
+        },
     }
 
 
@@ -138,20 +216,38 @@ def download_step_file(filename: str):
 @app.post("/generate")
 def generate_cad(request: CADRequest):
     """Generate CAD model data from a natural language prompt."""
+    started_at = perf_counter()
+    key = cache_key("generate", {"prompt": request.prompt})
+    cached_response = get_cached_success_response(key)
+    if cached_response is not None:
+        cached_response["performance"]["total_seconds"] = seconds_since(started_at)
+        return cached_response
+
     try:
+        api_started_at = perf_counter()
         model_data, repair_history = prompt_to_model_data_with_repair(
             request.prompt,
             max_repairs=1,
         )
+        api_seconds = seconds_since(api_started_at)
         response_data = with_repair_history(
             export_model_data(model_data, request.prompt),
             repair_history,
         )
-        return attach_generation_log(
+        performance = dict(response_data.get("performance", {}))
+        performance.update({
+            "api_seconds": api_seconds,
+            "total_seconds": seconds_since(started_at),
+            "cache_hit": False,
+        })
+        response_data["performance"] = performance
+        response_data = attach_generation_log(
             response_data,
             prompt=request.prompt,
             repair_history=repair_history,
         )
+        cache_success_response(key, response_data)
+        return response_data
     except Exception as error:
         repair_history = repair_history if "repair_history" in locals() else []
         response_data = {
@@ -164,6 +260,10 @@ def generate_cad(request: CADRequest):
                 else check_model_quality(None)
             ),
             "repair_history": repair_history,
+            "performance": {
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
         }
         return attach_generation_log(
             response_data,
@@ -176,15 +276,37 @@ def generate_cad(request: CADRequest):
 @app.post("/generate-intent")
 def generate_cad_from_design_intent(request: CADRequest):
     """Generate CAD through the experimental design-intent pipeline."""
+    started_at = perf_counter()
+    key = cache_key("generate-intent", {"prompt": request.prompt})
+    cached_response = get_cached_success_response(key)
+    if cached_response is not None:
+        cached_response["performance"]["total_seconds"] = seconds_since(started_at)
+        return cached_response
+
     try:
+        api_started_at = perf_counter()
         design_intent = prompt_to_design_intent(request.prompt)
+        api_seconds = seconds_since(api_started_at)
+
+        lowering_started_at = perf_counter()
         model_data = intent_to_model_data(design_intent)
+        lowering_seconds = seconds_since(lowering_started_at)
+
         response_data = export_model_data(
             model_data,
             f"intent {request.prompt}",
         )
         response_data["design_intent"] = design_intent
         response_data["generation_mode"] = "design_intent"
+        performance = dict(response_data.get("performance", {}))
+        performance.update({
+            "api_seconds": api_seconds,
+            "lowering_seconds": lowering_seconds,
+            "total_seconds": seconds_since(started_at),
+            "cache_hit": False,
+        })
+        response_data["performance"] = performance
+        cache_success_response(key, response_data)
         return response_data
     except Exception as error:
         return {
@@ -198,16 +320,25 @@ def generate_cad_from_design_intent(request: CADRequest):
                 else check_model_quality(None)
             ),
             "generation_mode": "design_intent",
+            "performance": {
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
         }
 
 
 @app.post("/build")
 def build_cad(request: CADBuildRequest):
     """Build CAD directly from structured model data."""
+    started_at = perf_counter()
     model_data = request.model_data
 
     try:
-        return export_model_data(model_data, request.filename_hint)
+        response_data = export_model_data(model_data, request.filename_hint)
+        performance = dict(response_data.get("performance", {}))
+        performance["total_seconds"] = seconds_since(started_at)
+        response_data["performance"] = performance
+        return response_data
     except Exception as error:
         return {
             "status": "error",
@@ -218,18 +349,34 @@ def build_cad(request: CADBuildRequest):
                 if "model_data" in locals()
                 else check_model_quality(None)
             ),
+            "performance": {
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
         }
 
 
 @app.post("/suggest-base")
 def suggest_base(request: CADSuggestBaseRequest):
     """Suggest one base extrusion model for the manual builder."""
+    started_at = perf_counter()
+    key = cache_key(
+        "suggest-base",
+        request_payload(request),
+    )
+    cached_response = get_cached_success_response(key)
+    if cached_response is not None:
+        cached_response["performance"]["total_seconds"] = seconds_since(started_at)
+        return cached_response
+
     try:
+        api_started_at = perf_counter()
         model_data = suggest_base_model_data(
             profile=request.profile,
             description=request.description,
             distance=request.distance,
         )
+        api_seconds = seconds_since(api_started_at)
         validate_model_data(model_data)
 
         operations = model_data["operations"]
@@ -245,28 +392,51 @@ def suggest_base(request: CADSuggestBaseRequest):
                 "Suggested base operation profile did not match selected profile"
             )
 
-        return {
+        response_data = {
             "status": "success",
             "model_data": model_data,
+            "performance": {
+                "api_seconds": api_seconds,
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
         }
+        cache_success_response(key, response_data)
+        return response_data
     except Exception as error:
         return {
             "status": "error",
             "message": str(error),
             "model_data": model_data if "model_data" in locals() else None,
+            "performance": {
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
         }
 
 
 @app.post("/suggest-feature")
 def suggest_feature(request: CADSuggestFeatureRequest):
     """Suggest one feature operation for the manual builder."""
+    started_at = perf_counter()
+    key = cache_key(
+        "suggest-feature",
+        request_payload(request),
+    )
+    cached_response = get_cached_success_response(key)
+    if cached_response is not None:
+        cached_response["performance"]["total_seconds"] = seconds_since(started_at)
+        return cached_response
+
     try:
+        api_started_at = perf_counter()
         model_data = suggest_feature_model_data(
             operation_type=request.operation_type,
             target=request.target,
             profile=request.profile,
             description=request.description,
         )
+        api_seconds = seconds_since(api_started_at)
         validate_model_data(model_data)
 
         operations = model_data["operations"]
@@ -283,13 +453,24 @@ def suggest_feature(request: CADSuggestFeatureRequest):
         if operation["profile"] != request.profile:
             raise ValueError("Suggested feature profile did not match selection")
 
-        return {
+        response_data = {
             "status": "success",
             "model_data": model_data,
+            "performance": {
+                "api_seconds": api_seconds,
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
         }
+        cache_success_response(key, response_data)
+        return response_data
     except Exception as error:
         return {
             "status": "error",
             "message": str(error),
             "model_data": model_data if "model_data" in locals() else None,
+            "performance": {
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
         }

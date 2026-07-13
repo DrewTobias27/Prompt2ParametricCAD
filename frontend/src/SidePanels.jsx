@@ -51,9 +51,44 @@ export function OutputPanel({ status, result, downloadUrl }) {
         </a>
       )}
 
+      {result?.performance && <PerformanceSummary performance={result.performance} />}
+
       <pre>{result ? JSON.stringify(result, null, 2) : "No result yet."}</pre>
     </section>
   );
+}
+
+function PerformanceSummary({ performance }) {
+  const rows = [
+    ["Total", performance.total_seconds],
+    ["API", performance.api_seconds],
+    ["Build", performance.build_seconds],
+    ["Export", performance.export_seconds],
+    ["Quality", performance.quality_seconds],
+  ].filter(([, value]) => value !== undefined);
+
+  return (
+    <div className="performance-summary">
+      <div className="performance-heading">
+        <strong>Performance</strong>
+        <span className={performance.cache_hit ? "cache-hit" : "cache-miss"}>
+          {performance.cache_hit ? "Cache hit" : "Fresh run"}
+        </span>
+      </div>
+      <dl>
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{formatSeconds(value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function formatSeconds(value) {
+  return `${Number(value).toFixed(3)}s`;
 }
 
 export function RepairHistoryPanel({ repairHistory }) {
