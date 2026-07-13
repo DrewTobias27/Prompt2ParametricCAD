@@ -148,6 +148,54 @@ def test_check_model_quality_accepts_revolve_surface_and_edge_targets():
     assert "edge_operation_targets_face" not in issue_codes(report)
 
 
+def test_check_model_quality_accepts_positioned_revolve_features_without_target():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[5, 0]],
+                "width": 10,
+                "height": 80,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+            },
+            {
+                "type": "add_revolve",
+                "id": "collar",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[11, 0]],
+                "width": 2,
+                "height": 6,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+            },
+            {
+                "type": "cut_revolve",
+                "id": "groove",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[9.5, 32.5]],
+                "width": 1,
+                "height": 3,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+            },
+        ]
+    }
+
+    report = check_model_quality(model_data)
+
+    assert report["passed"] is True
+    assert "missing_target" not in issue_codes(report)
+
+
 def test_check_model_quality_rejects_face_operation_on_known_edge_group():
     model_data = simple_plate_model()
     model_data["operations"][1]["target"] = "base.top_outer_edges"
@@ -157,6 +205,41 @@ def test_check_model_quality_rejects_face_operation_on_known_edge_group():
     assert report["passed"] is True
     assert report["status"] == "warning"
     assert "face_operation_targets_edge" in issue_codes(report)
+
+
+def test_check_model_quality_registers_cut_edge_groups():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "circle",
+                "diameter": 80,
+                "distance": 8,
+            },
+            {
+                "type": "cut",
+                "id": "bolt_holes",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[25, 0], [-25, 0]],
+                "diameter": 6,
+                "depth": "through",
+            },
+            {
+                "type": "chamfer",
+                "id": "hole_chamfers",
+                "target": "bolt_holes.all_edges",
+                "distance": 0.5,
+            },
+        ]
+    }
+
+    report = check_model_quality(model_data)
+
+    assert report["passed"] is True
+    assert "unknown_target_reference" not in issue_codes(report)
 
 
 def test_check_model_quality_reports_duplicate_ids():

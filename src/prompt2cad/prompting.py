@@ -238,18 +238,26 @@ This is not the final CadQuery operation JSON. Use intent concepts such as
 placement and shape so the backend can compute exact coordinates.
 
 Supported base profiles:
-- rectangle
-- circle
-- polygon
+- rectangle: flat rectangular plates/blocks
+- circle: flat circular plates/flanges
+- polygon: flat polygon plates
+- cylinder: shaft-like round parts described by diameter and length
+- half_cylinder: half-round bases described by diameter and length
+- capsule: shaft-like bodies with hemispherical/rounded ends, described by
+  diameter and total length
 
 Supported feature operations:
-- extrusion
-- cut
+- extrusion: add material from a face target
+- cut: remove material from a face target
+- revolved_extrusion: add an axial collar/ring/band around a shaft-like base
+- revolved_cut: remove an axial groove/ring/channel around a shaft-like base
 
 Supported feature shapes:
 - rectangle
 - circle
 - polygon
+- polyline: arbitrary closed straight-edge profiles such as triangular ribs,
+  L-shaped pads, custom tabs, or gussets. Use points to describe the outline.
 - slot
 - rounded_rectangle
 
@@ -280,16 +288,47 @@ Use stable ids such as "corner_holes", "center_boss", "bolt_holes", or
 "side_slot". Use target "base.top" unless a side or feature face is clearly
 requested.
 
+For shaft-like parts:
+- Use base profile "cylinder" for normal shafts/cylinders that have diameter
+  and length.
+- Use base profile "capsule" for cylindrical bodies with hemispherical or
+  rounded ends.
+- Use revolved_extrusion with rectangle shape for raised collars, rings, and
+  bands around a shaft. The rectangle width is radial thickness; height is
+  axial width.
+- Use revolved_cut with rectangle shape for grooves around a shaft. The
+  rectangle width is radial cut depth; height is axial groove width.
+- For centered collars/grooves, use centered placement. For features near one
+  end, use offset_from_edge with edge "front" or "back".
+
 For strict schema compatibility, fill unrelated numeric/string fields with
 null. Examples:
 - A circle feature needs diameter, but width, height, length, sides,
   radius, orientation, and unrelated distance/depth fields may be null.
 - A cut uses depth. An extrusion uses distance.
+- A revolved_extrusion or revolved_cut uses rectangle width and height, not
+  distance or depth.
+- A polyline feature needs at least three outline points. These points describe
+  the closed sketch shape; placement describes where that sketch instance is
+  located.
 - A rounded_rectangle feature needs width, height, and radius.
 - A near_corners placement should include count and may use margin null when
   the backend should choose a default.
 - A circular_pattern placement should include count and may use radius null
   when the backend should choose a reasonable radius.
+
+Do not use null for dimensions required by the chosen base profile, feature
+shape, or operation. If the user asks for a hole, boss, slot, flange, or other
+feature without exact dimensions, choose simple reasonable numeric dimensions
+proportional to the base. For example:
+- A circular hole must include a numeric diameter.
+- A rectangular boss must include numeric width, height, and distance.
+- A slot must include numeric length and width.
+- A triangular rib should usually use shape "polyline" with three outline
+  points, not a polygon diameter.
+- A cylinder, half_cylinder, or capsule base must include numeric diameter and
+  length.
+- A chamfer must include numeric distance; a fillet must include numeric radius.
 
 Prefer clear relationships over exact coordinates. For example, for "four
 holes near the corners", use one circle cut feature with near_corners
@@ -335,6 +374,10 @@ DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 
 def create_openai_client() -> OpenAI:
     """Create an OpenAI API client using the OPENAI_API_KEY environment variable."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if api_key is not None:
+        return OpenAI(api_key=api_key.strip())
+
     return OpenAI()
 
 

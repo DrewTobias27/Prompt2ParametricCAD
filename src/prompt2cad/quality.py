@@ -28,7 +28,8 @@ FEATURE_OPERATION_TYPES = {
     "fillet",
 }
 EDGE_OPERATION_TYPES = {"chamfer", "fillet"}
-FACE_OPERATION_TYPES = {"add_extrude", "cut", "add_revolve", "cut_revolve"}
+FACE_OPERATION_TYPES = {"add_extrude", "cut"}
+POSITIONED_REVOLVE_OPERATION_TYPES = {"add_revolve", "cut_revolve"}
 PROFILE_DIMENSION_FIELDS = {
     "rectangle": ["width", "height"],
     "circle": ["diameter"],
@@ -348,7 +349,7 @@ def check_operation_target(
     target_catalog: TargetCatalog,
 ) -> list[QualityIssue]:
     """Check operation target existence and target-kind compatibility."""
-    if operation.get("type") in BASE_OPERATION_TYPES:
+    if operation.get("type") in BASE_OPERATION_TYPES | POSITIONED_REVOLVE_OPERATION_TYPES:
         return []
 
     operation_type = operation.get("type")
@@ -631,6 +632,8 @@ def register_operation_references(
         register_extrude_target_references(operation_id, operation, target_catalog)
     if operation_type in {"revolve", "add_revolve"}:
         register_revolve_target_references(operation_id, target_catalog)
+    if operation_type == "cut":
+        register_cut_target_references(operation_id, target_catalog)
 
 
 def register_extrude_target_references(
@@ -707,6 +710,22 @@ def register_revolve_target_references(
             f"{operation_id}.back_outer_edges",
             f"{operation_id}.end_edges",
             f"{operation_id}.all_edges",
+        },
+    )
+
+
+def register_cut_target_references(
+    operation_id: str,
+    target_catalog: TargetCatalog,
+) -> None:
+    """Register lightweight references created by a cut feature."""
+    target_catalog.add_references(
+        EDGE_GROUP_REFERENCE_KIND,
+        {
+            f"{operation_id}.all_edges",
+            f"{operation_id}.top_outer_edges",
+            f"{operation_id}.bottom_outer_edges",
+            f"{operation_id}.vertical_edges",
         },
     )
 

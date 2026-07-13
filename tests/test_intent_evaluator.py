@@ -102,6 +102,49 @@ def test_intent_eval_accepts_matching_edge_treatment_intent():
     assert result.passed is True
 
 
+def test_intent_eval_ignores_strict_api_null_fillers():
+    eval_case = load_json(INTENT_CASES_DIR / "rectangular_plate_corner_holes.json")
+    design_intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 70,
+            "diameter": None,
+            "sides": None,
+            "thickness": 8,
+            "length": None,
+        },
+        "features": [
+            {
+                "id": "corner_holes",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "circle",
+                "placement": {
+                    "type": "near_corners",
+                    "count": 4,
+                    "margin": None,
+                },
+                "width": None,
+                "height": None,
+                "diameter": 6,
+                "sides": None,
+                "length": None,
+                "radius": None,
+                "orientation": None,
+                "distance": None,
+                "depth": "through",
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    result = evaluate_design_intent(design_intent, eval_case)
+
+    assert result.passed is True
+
+
 def test_intent_eval_case_files_have_expected_intent():
     for case_path in INTENT_CASES_DIR.glob("*.json"):
         eval_case = load_json(case_path)

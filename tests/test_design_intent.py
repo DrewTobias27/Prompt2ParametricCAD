@@ -432,3 +432,246 @@ def test_edge_treatment_intent_accepts_nulls_from_strict_api_schema():
         "target": "base.vertical_edges",
         "radius": 1.0,
     }
+
+
+def test_intent_lowering_normalizes_semantic_base_ids():
+    intent = {
+        "base": {
+            "id": "shaft",
+            "profile": "circle",
+            "diameter": 20,
+            "thickness": 80,
+        },
+        "features": [
+            {
+                "id": "center_boss",
+                "operation": "extrusion",
+                "target": "shaft.top",
+                "shape": "circle",
+                "diameter": 28,
+                "distance": 5,
+                "placement": {"type": "centered"},
+            },
+            {
+                "id": "vague_cut",
+                "operation": "cut",
+                "target": "shaft",
+                "shape": "circle",
+                "diameter": 6,
+                "depth": "through",
+                "placement": {"type": "centered"},
+            },
+        ],
+        "edge_treatments": [
+            {
+                "id": "outer_chamfer",
+                "treatment": "chamfer",
+                "target_feature": "shaft",
+                "edge_selector": "top_outer_edges",
+                "distance": 1,
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][0]["id"] == "base"
+    assert model_data["operations"][1]["target"] == "base.top"
+    assert model_data["operations"][2]["target"] == "base.top"
+    assert model_data["operations"][3]["target"] == "base.top_outer_edges"
+
+
+def test_cylinder_intent_lowers_to_revolved_base():
+    intent = {
+        "base": {
+            "id": "shaft",
+            "profile": "cylinder",
+            "diameter": 20,
+            "length": 80,
+        },
+        "features": [],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][0] == {
+        "type": "revolve",
+        "id": "base",
+        "plane": "XY",
+        "profile": "rectangle",
+        "positions": [[5, 0]],
+        "axis_start": [0, -1],
+        "axis_end": [0, 1],
+        "angle": 360,
+        "width": 10,
+        "height": 80.0,
+    }
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_capsule_intent_lowers_to_arc_revolved_base():
+    intent = {
+        "base": {
+            "id": "capsule_body",
+            "profile": "capsule",
+            "diameter": 20,
+            "length": 80,
+        },
+        "features": [],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+    base_operation = model_data["operations"][0]
+
+    assert base_operation["type"] == "revolve"
+    assert base_operation["profile"] == "sketch"
+    assert any(segment["type"] == "arc" for segment in base_operation["segments"])
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_revolved_collar_and_groove_intent_builds_on_cylinder():
+    intent = {
+        "base": {
+            "id": "shaft",
+            "profile": "cylinder",
+            "diameter": 20,
+            "length": 80,
+        },
+        "features": [
+            {
+                "id": "center_collar",
+                "operation": "revolved_extrusion",
+                "target": "shaft",
+                "shape": "rectangle",
+                "width": 4,
+                "height": 10,
+                "placement": {"type": "centered"},
+            },
+            {
+                "id": "end_groove",
+                "operation": "revolved_cut",
+                "target": "shaft",
+                "shape": "rectangle",
+                "width": 2,
+                "height": 4,
+                "placement": {
+                    "type": "offset_from_edge",
+                    "edge": "front",
+                    "offset": 8,
+                    "along": 0,
+                },
+            },
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["type"] == "add_revolve"
+    assert model_data["operations"][1]["positions"] == [[12, 0]]
+    assert model_data["operations"][2]["type"] == "cut_revolve"
+    assert model_data["operations"][2]["positions"] == [[9, 30]]
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_polyline_feature_intent_lowers_to_custom_profile_and_builds():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 120,
+            "height": 80,
+            "thickness": 6,
+        },
+        "features": [
+            {
+                "id": "center_boss",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": 20,
+                "distance": 8,
+                "placement": {"type": "centered"},
+            },
+            {
+                "id": "gusset_rib",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "polyline",
+                "points": [[-15, 40], [15, 40], [0, 0]],
+                "distance": 6,
+                "placement": {
+                    "type": "explicit",
+                    "positions": [[0, 0]],
+                },
+            },
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    rib_operation = model_data["operations"][2]
+    assert rib_operation["profile"] == "polyline"
+    assert rib_operation["points"] == [[-15, 40], [15, 40], [0, 0]]
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_intent_normalizes_half_cylinder_flat_face_alias():
+    intent = {
+        "base": {
+            "id": "half_round",
+            "profile": "half_cylinder",
+            "diameter": 30,
+            "length": 80,
+        },
+        "features": [
+            {
+                "id": "mounting_tab",
+                "operation": "extrusion",
+                "target": "half_round.flat",
+                "shape": "rectangle",
+                "width": 30,
+                "height": 10,
+                "distance": 4,
+                "placement": {"type": "centered"},
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["target"] == "base.front"
+
+
+def test_revolved_polyline_cut_intent_lowers_for_countersink_style_feature():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 40,
+            "thickness": 6,
+        },
+        "features": [
+            {
+                "id": "countersink",
+                "operation": "revolved_cut",
+                "target": "base.top",
+                "shape": "polyline",
+                "points": [[2.5, 0], [7.5, 0], [0, -2.5]],
+                "placement": {"type": "centered"},
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+    countersink = model_data["operations"][1]
+
+    assert countersink["type"] == "cut_revolve"
+    assert countersink["profile"] == "polyline"
+    assert countersink["points"] == [[2.5, 0], [7.5, 0], [0, -2.5]]

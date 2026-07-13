@@ -3,6 +3,7 @@
 import json
 
 from prompt2cad import prompting
+from prompt2cad.design_intent import missing_required_intent_dimensions
 
 
 def test_openai_model_uses_task_specific_then_general_override(monkeypatch):
@@ -326,4 +327,108 @@ def test_prompt_to_model_data_via_intent_lowers_generated_intent(monkeypatch):
         [40, 25],
         [-40, -25],
         [40, -25],
+    ]
+
+
+def test_prompt_to_model_data_via_intent_fills_reasonable_missing_dimensions(
+    monkeypatch,
+):
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 60,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "corner_holes",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "circle",
+                "depth": "through",
+                "placement": {
+                    "type": "near_corners",
+                    "count": 4,
+                    "margin": 5,
+                },
+            },
+            {
+                "id": "center_boss",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "rectangle",
+                "placement": {
+                    "type": "centered",
+                },
+            },
+        ],
+    }
+
+    monkeypatch.setattr(
+        prompting,
+        "prompt_to_design_intent",
+        lambda user_prompt: intent,
+    )
+
+    model_data = prompting.prompt_to_model_data_via_intent(
+        "make a plate with four holes and a centered boss"
+    )
+
+    assert model_data["operations"][1]["diameter"] == 8
+    assert model_data["operations"][2]["width"] == 20
+    assert model_data["operations"][2]["height"] == 15
+    assert model_data["operations"][2]["distance"] == 10
+
+
+def test_missing_required_intent_dimensions_reports_api_omissions():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 60,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "corner_holes",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": None,
+                "depth": "through",
+                "placement": {
+                    "type": "near_corners",
+                    "count": 4,
+                    "margin": None,
+                },
+            },
+            {
+                "id": "center_boss",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "rectangle",
+                "width": None,
+                "height": 15,
+                "distance": None,
+                "placement": {
+                    "type": "centered",
+                },
+            },
+        ],
+    }
+
+    assert missing_required_intent_dimensions(intent) == [
+        {
+            "kind": "feature",
+            "id": "corner_holes",
+            "fields": ["diameter"],
+        },
+        {
+            "kind": "feature",
+            "id": "center_boss",
+            "fields": ["width", "distance"],
+        },
     ]
