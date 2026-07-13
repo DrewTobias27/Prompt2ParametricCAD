@@ -488,7 +488,13 @@ def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
         for feature in intent["features"]
     }
     for edge_treatment in intent.get("edge_treatments", []):
-        operations.append(edge_treatment_operation(edge_treatment, features_by_id))
+        operations.append(
+            edge_treatment_operation(
+                edge_treatment,
+                base=base,
+                features_by_id=features_by_id,
+            )
+        )
 
     return {
         "operations": operations,
@@ -569,6 +575,12 @@ def normalize_face_target(
     if target.startswith(f"{original_base_id}."):
         target = f"base.{target.split('.', 1)[1]}"
 
+    feature_ids = {
+        candidate.get("id")
+        for candidate in (all_features or [])
+        if candidate.get("id")
+    }
+
     target_aliases = {
         "base.flat": "base.front",
         "base.side": "base.top",
@@ -577,11 +589,12 @@ def normalize_face_target(
     if target in target_aliases:
         return target_aliases[target]
 
-    feature_ids = {
-        candidate.get("id")
-        for candidate in (all_features or [])
-        if candidate.get("id")
-    }
+    if "." in target:
+        target_feature_id, face_name = target.split(".", 1)
+        vague_side_names = {"side", "outer_surface", "side_surface"}
+        if target_feature_id in feature_ids and face_name in vague_side_names:
+            return f"{target_feature_id}.front"
+
     if target in feature_ids:
         return f"{target}.{default_face_for_bare_feature_target(target, feature)}"
 
@@ -701,6 +714,8 @@ def base_operation(base: dict[str, Any]) -> dict[str, Any]:
         return axial_cylinder_base_operation(base)
 
     if base["profile"] == "capsule":
+        if "thickness" in base:
+            return flat_capsule_base_operation(base)
         return capsule_base_operation(base)
 
     operation = {
@@ -782,6 +797,24 @@ def capsule_base_operation(base: dict[str, Any]) -> dict[str, Any]:
         ],
         "close": True,
     }
+
+
+def flat_capsule_base_operation(base: dict[str, Any]) -> dict[str, Any]:
+    """Return a flat obround/capsule plate operation using true sketch arcs."""
+    operation = {
+        "type": "extrude",
+        "id": base["id"],
+        "plane": "XY",
+        "distance": number_value(base["thickness"]),
+    }
+    operation.update(
+        slot_profile_fields(
+            length=number_value(base["length"]),
+            width=number_value(base["diameter"]),
+            orientation="horizontal",
+        )
+    )
+    return operation
 
 
 def feature_operation(base: dict[str, Any], feature: dict[str, Any]) -> dict[str, Any]:
@@ -898,6 +931,7 @@ def revolved_feature_center_y(base: dict[str, Any], feature: dict[str, Any]) -> 
 
 def edge_treatment_operation(
     edge_treatment: dict[str, Any],
+    base: dict[str, Any],
     features_by_id: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Return one concrete chamfer or fillet operation."""
@@ -905,6 +939,8 @@ def edge_treatment_operation(
     target_feature = edge_treatment["target_feature"]
     edge_selector = normalize_edge_selector(
         edge_treatment["edge_selector"],
+        target_feature,
+        base,
         features_by_id.get(target_feature) if features_by_id else None,
     )
     operation = {
@@ -925,9 +961,24 @@ def edge_treatment_operation(
 
 def normalize_edge_selector(
     edge_selector: str,
+    target_feature_id: str,
+    base: dict[str, Any],
     target_feature: dict[str, Any] | None,
 ) -> str:
     """Normalize edge selectors that are invalid for curved feature geometry."""
+    if target_feature_id == "base" and base.get("profile") in {
+        "cylinder",
+        "half_cylinder",
+        "capsule",
+    }:
+        selector_aliases = {
+            "top_outer_edges": "front_outer_edges",
+            "bottom_outer_edges": "back_outer_edges",
+            "vertical_edges": "end_edges",
+        }
+        if edge_selector in selector_aliases:
+            return selector_aliases[edge_selector]
+
     if (
         edge_selector == "vertical_edges"
         and target_feature is not None
@@ -1310,6 +1361,9 @@ def base_plan_size(base: dict[str, Any]) -> tuple[float, float]:
     """Return approximate top-view size for base placement math."""
     if base["profile"] == "rectangle":
         return number_value(base["width"]), number_value(base["height"])
+
+    if base["profile"] == "capsule" and "thickness" in base:
+        return number_value(base["length"]), number_value(base["diameter"])
 
     if base["profile"] in {"cylinder", "half_cylinder", "capsule"}:
         return number_value(base["diameter"]), number_value(base["length"])

@@ -439,7 +439,13 @@
           },
           {
             "type": "cut",
-            "profile": "rectangle"
+            "profile": {
+              "one_of": [
+                "rectangle",
+                "sketch",
+                "polyline"
+              ]
+            }
           }
         ],
         "geometry": {
@@ -455,20 +461,10 @@
         "base": {
           "type": "extrude"
         },
-        "operations": [
-          {
-            "type": "cut",
-            "profile": {
-              "one_of": [
-                "polyline",
-                "sketch"
-              ]
-            }
-          },
-          {
-            "type": "add_extrude"
-          }
-        ],
+        "min_operation_counts": {
+          "cut": 2,
+          "add_extrude": 1
+        },
         "geometry": {
           "solid_count": 1
         }
