@@ -145,6 +145,33 @@ def test_intent_eval_ignores_strict_api_null_fillers():
     assert result.passed is True
 
 
+def test_intent_eval_uses_same_reasonable_dimension_fill_as_lowerer():
+    eval_case = {
+        "name": "hex_plate",
+        "expected_intent": {
+            "base": {
+                "profile": "polygon",
+            }
+        },
+    }
+    design_intent = {
+        "base": {
+            "id": "hex_plate",
+            "profile": "polygon",
+            "width": 80,
+            "diameter": None,
+            "sides": 6,
+            "thickness": 6,
+        },
+        "features": [],
+        "edge_treatments": [],
+    }
+
+    result = evaluate_design_intent(design_intent, eval_case)
+
+    assert result.passed is True
+
+
 def test_intent_eval_case_files_have_expected_intent():
     for case_path in INTENT_CASES_DIR.glob("*.json"):
         eval_case = load_json(case_path)

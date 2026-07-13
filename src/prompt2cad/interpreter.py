@@ -673,13 +673,31 @@ def select_edges_for_target(
     if feature_graph is not None:
         reference_group = feature_graph.registry.get_reference_group(target)
         if reference_group is not None:
-            return select_registered_edges(
-                part,
-                reference_group,
-                target,
-                operation_number,
-            )
+            try:
+                return select_registered_edges(
+                    part,
+                    reference_group,
+                    target,
+                    operation_number,
+                )
+            except ValueError:
+                if target.startswith("base."):
+                    return select_edges_by_selector(
+                        part,
+                        target,
+                        operation_number,
+                    )
+                raise
 
+    return select_edges_by_selector(part, target, operation_number)
+
+
+def select_edges_by_selector(
+    part: cq.Workplane,
+    target: str,
+    operation_number: int,
+) -> list:
+    """Select current model edges by a supported semantic edge selector."""
     if "." not in target:
         raise ValueError(
             f"Operation {operation_number}: edge target '{target}' must use "

@@ -441,7 +441,7 @@ def rescore_report(
         }
         for result in case.get("results", []):
             model_data = result.get("model_data")
-            if model_data is None and result.get("design_intent") is not None:
+            if result.get("design_intent") is not None:
                 try:
                     design_intent = result["design_intent"]
                     result["intent_missing_required_dimensions"] = (

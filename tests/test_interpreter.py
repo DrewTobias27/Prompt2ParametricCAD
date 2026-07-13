@@ -1675,6 +1675,42 @@ def test_chamfer_circular_boss_uses_generalized_edge_group():
     assert solid.Volume() > base_volume
 
 
+def test_base_edge_treatment_falls_back_when_saved_edges_are_stale():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "circle",
+                "distance": 8,
+                "diameter": 80,
+            },
+            {
+                "type": "cut",
+                "id": "center_hole",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "depth": "through",
+                "diameter": 12,
+            },
+            {
+                "type": "chamfer",
+                "id": "base_chamfer",
+                "target": "base.top_outer_edges",
+                "distance": 1,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    assert len(part.solids().vals()) == 1
+    assert solid.isValid()
+
+
 def test_fillet_vertical_edges_builds_valid_modified_solid():
     model_data = {
         "operations": [

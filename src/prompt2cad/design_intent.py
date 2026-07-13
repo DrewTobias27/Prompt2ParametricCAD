@@ -483,8 +483,12 @@ def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
         operations.append(operation)
         relationships.extend(feature_relationships(feature))
 
+    features_by_id = {
+        feature["id"]: feature
+        for feature in intent["features"]
+    }
     for edge_treatment in intent.get("edge_treatments", []):
-        operations.append(edge_treatment_operation(edge_treatment))
+        operations.append(edge_treatment_operation(edge_treatment, features_by_id))
 
     return {
         "operations": operations,
@@ -508,7 +512,11 @@ def normalize_intent_references(intent: dict[str, Any]) -> dict[str, Any]:
         **intent,
         "base": base,
         "features": [
-            normalize_feature_reference(feature, original_base_id)
+            normalize_feature_reference(
+                feature,
+                original_base_id,
+                intent.get("features", []),
+            )
             for feature in intent.get("features", [])
         ],
         "edge_treatments": [
@@ -521,12 +529,15 @@ def normalize_intent_references(intent: dict[str, Any]) -> dict[str, Any]:
 def normalize_feature_reference(
     feature: dict[str, Any],
     original_base_id: str,
+    all_features: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Return a feature with canonical target names."""
     normalized = dict(feature)
     normalized["target"] = normalize_face_target(
         normalized.get("target", "base.top"),
         original_base_id,
+        normalized,
+        all_features or [],
     )
     return normalized
 
@@ -542,7 +553,12 @@ def normalize_edge_treatment_reference(
     return normalized
 
 
-def normalize_face_target(target: str, original_base_id: str) -> str:
+def normalize_face_target(
+    target: str,
+    original_base_id: str,
+    feature: dict[str, Any] | None = None,
+    all_features: list[dict[str, Any]] | None = None,
+) -> str:
     """Normalize a face-operation target into feature.reference format."""
     if target == "":
         return "base.top"
@@ -555,16 +571,29 @@ def normalize_face_target(target: str, original_base_id: str) -> str:
 
     target_aliases = {
         "base.flat": "base.front",
+        "base.side": "base.top",
+        "base.outer_surface": "base.top",
     }
     if target in target_aliases:
         return target_aliases[target]
+
+    feature_ids = {
+        candidate.get("id")
+        for candidate in (all_features or [])
+        if candidate.get("id")
+    }
+    if target in feature_ids:
+        return f"{target}.{default_face_for_bare_feature_target(target, feature)}"
 
     return target
 
 
 def fill_reasonable_missing_dimensions(intent: dict[str, Any]) -> dict[str, Any]:
     """Fill omitted intent dimensions with deterministic base-relative defaults."""
-    base = intent["base"]
+    base = {
+        **intent["base"],
+        **reasonable_base_dimensions(intent["base"]),
+    }
     features = []
     for feature in intent["features"]:
         filled_feature = dict(feature)
@@ -573,8 +602,37 @@ def fill_reasonable_missing_dimensions(intent: dict[str, Any]) -> dict[str, Any]
 
     return {
         **intent,
+        "base": base,
         "features": features,
     }
+
+
+def default_face_for_bare_feature_target(
+    target_feature_id: str,
+    feature: dict[str, Any] | None,
+) -> str:
+    """Return a safe face when intent names a feature but not a feature face."""
+    if feature and feature.get("operation") == "cut":
+        target_text = target_feature_id.lower()
+        if any(word in target_text for word in ["wall", "rib", "tab"]):
+            return "front"
+
+    return "top"
+
+
+def reasonable_base_dimensions(base: dict[str, Any]) -> dict[str, Any]:
+    """Return missing base dimensions inferred from equivalent fields."""
+    updates = {}
+    if base["profile"] == "polygon":
+        if "diameter" not in base:
+            if "width" in base:
+                updates["diameter"] = base["width"]
+            elif "height" in base:
+                updates["diameter"] = base["height"]
+        if "sides" not in base:
+            updates["sides"] = 6
+
+    return updates
 
 
 def reasonable_feature_dimensions(
@@ -838,16 +896,21 @@ def revolved_feature_center_y(base: dict[str, Any], feature: dict[str, Any]) -> 
     )
 
 
-def edge_treatment_operation(edge_treatment: dict[str, Any]) -> dict[str, Any]:
+def edge_treatment_operation(
+    edge_treatment: dict[str, Any],
+    features_by_id: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Return one concrete chamfer or fillet operation."""
     treatment = edge_treatment["treatment"]
+    target_feature = edge_treatment["target_feature"]
+    edge_selector = normalize_edge_selector(
+        edge_treatment["edge_selector"],
+        features_by_id.get(target_feature) if features_by_id else None,
+    )
     operation = {
         "type": treatment,
         "id": edge_treatment["id"],
-        "target": (
-            f"{edge_treatment['target_feature']}."
-            f"{edge_treatment['edge_selector']}"
-        ),
+        "target": f"{target_feature}.{edge_selector}",
     }
 
     if treatment == "chamfer":
@@ -858,6 +921,21 @@ def edge_treatment_operation(edge_treatment: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"Unsupported edge treatment: {treatment}")
 
     return operation
+
+
+def normalize_edge_selector(
+    edge_selector: str,
+    target_feature: dict[str, Any] | None,
+) -> str:
+    """Normalize edge selectors that are invalid for curved feature geometry."""
+    if (
+        edge_selector == "vertical_edges"
+        and target_feature is not None
+        and target_feature.get("shape") == "circle"
+    ):
+        return "top_outer_edges"
+
+    return edge_selector
 
 
 def profile_fields(feature: dict[str, Any]) -> dict[str, Any]:
@@ -1376,7 +1454,10 @@ def missing_base_dimension_fields(base: dict[str, Any]) -> list[str]:
     if base["profile"] == "circle":
         return missing_keys(base, ["diameter", "thickness"])
     if base["profile"] == "polygon":
-        return missing_keys(base, ["diameter", "sides", "thickness"])
+        required_fields = ["sides", "thickness"]
+        if not any(key in base for key in ["diameter", "width", "height"]):
+            required_fields.append("diameter")
+        return missing_keys(base, required_fields)
     if base["profile"] in {"cylinder", "half_cylinder", "capsule"}:
         return missing_keys(base, ["diameter", "length"])
     return []

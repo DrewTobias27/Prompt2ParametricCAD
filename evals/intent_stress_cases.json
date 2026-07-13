@@ -246,8 +246,7 @@
             "shape": "rectangle"
           },
           {
-            "operation": "cut",
-            "shape": "rectangle"
+            "operation": "cut"
           }
         ]
       },
@@ -263,7 +262,13 @@
           },
           {
             "type": "cut",
-            "profile": "rectangle"
+            "profile": {
+              "one_of": [
+                "rectangle",
+                "polyline",
+                "sketch"
+              ]
+            }
           }
         ],
         "geometry": {
@@ -353,8 +358,7 @@
             }
           },
           {
-            "operation": "extrusion",
-            "shape": "rounded_rectangle"
+            "operation": "extrusion"
           },
           {
             "operation": "cut",

@@ -368,6 +368,71 @@ def test_intent_to_model_data_accepts_nulls_from_strict_api_schema():
     assert len(model_data["operations"][1]["positions"]) == 4
 
 
+def test_polygon_base_can_infer_diameter_from_width():
+    intent = {
+        "base": {
+            "id": "hex_plate",
+            "profile": "polygon",
+            "width": 80,
+            "sides": 6,
+            "thickness": 6,
+        },
+        "features": [],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][0]["profile"] == "polygon"
+    assert model_data["operations"][0]["diameter"] == 80.0
+    assert model_data["operations"][0]["sides"] == 6
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_intent_lowering_normalizes_vague_side_and_feature_targets():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 60,
+            "thickness": 6,
+        },
+        "features": [
+            {
+                "id": "back_wall",
+                "operation": "extrusion",
+                "target": "base.side",
+                "shape": "rectangle",
+                "width": 80,
+                "height": 6,
+                "distance": 30,
+                "placement": {
+                    "type": "offset_from_edge",
+                    "edge": "back",
+                    "offset": 0,
+                    "along": 0,
+                },
+            },
+            {
+                "id": "wall_hole",
+                "operation": "cut",
+                "target": "back_wall",
+                "shape": "circle",
+                "diameter": 8,
+                "depth": "through",
+                "placement": {"type": "centered"},
+            },
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["target"] == "base.top"
+    assert model_data["operations"][2]["target"] == "back_wall.front"
+
+
 def test_edge_treatment_intent_lowers_to_real_chamfer_operation_and_builds():
     intent = {
         "base": {
@@ -432,6 +497,41 @@ def test_edge_treatment_intent_accepts_nulls_from_strict_api_schema():
         "target": "base.vertical_edges",
         "radius": 1.0,
     }
+
+
+def test_edge_treatment_intent_maps_circle_vertical_edges_to_top_edges():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "circle",
+            "diameter": 80,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "round_boss",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": 30,
+                "distance": 8,
+                "placement": {"type": "centered"},
+            }
+        ],
+        "edge_treatments": [
+            {
+                "id": "boss_fillet",
+                "treatment": "fillet",
+                "target_feature": "round_boss",
+                "edge_selector": "vertical_edges",
+                "radius": 1,
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][2]["target"] == "round_boss.top_outer_edges"
 
 
 def test_intent_lowering_normalizes_semantic_base_ids():

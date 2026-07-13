@@ -483,3 +483,63 @@ def test_rescore_report_can_relower_saved_design_intent(tmp_path):
     assert "message" not in result
     assert result["model_data"]["operations"][1]["type"] == "cut_revolve"
     assert result["model_data"]["operations"][1]["profile"] == "polyline"
+
+
+def test_rescore_report_relowers_stale_saved_model_data(tmp_path):
+    report_path = tmp_path / "old_report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "case": "hex_plate",
+                        "prompt": "Create a hexagonal plate.",
+                        "results": [
+                            {
+                                "mode": "intent",
+                                "status": "fail",
+                                "message": "Old stale lowering error",
+                                "design_intent": {
+                                    "base": {
+                                        "id": "hex_plate",
+                                        "profile": "polygon",
+                                        "width": 80,
+                                        "sides": 6,
+                                        "thickness": 6,
+                                    },
+                                    "features": [],
+                                    "edge_treatments": [],
+                                },
+                                "model_data": {
+                                    "operations": [
+                                        {
+                                            "type": "extrude",
+                                            "id": "base",
+                                            "plane": "XY",
+                                            "profile": "rectangle",
+                                            "width": 1,
+                                            "height": 1,
+                                            "distance": 1,
+                                        }
+                                    ],
+                                    "relationships": [],
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = tiny_api_compare.rescore_report(
+        report_path,
+        output_path=tmp_path / "rescored.json",
+    )
+
+    result = report["cases"][0]["results"][0]
+    assert result["status"] == "pass"
+    assert "message" not in result
+    assert result["model_data"]["operations"][0]["profile"] == "polygon"
+    assert result["model_data"]["operations"][0]["diameter"] == 80.0

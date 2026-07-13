@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from prompt2cad.design_intent import fill_reasonable_missing_dimensions
 from prompt2cad.design_intent import intent_to_model_data
 from prompt2cad.design_intent import remove_null_values
 from prompt2cad.design_intent import validate_design_intent
@@ -155,6 +156,7 @@ def evaluate_design_intent(
     """Evaluate design intent against one intent eval case."""
     failures = []
     design_intent = remove_null_values(design_intent)
+    design_intent = fill_reasonable_missing_dimensions(design_intent)
     try:
         validate_design_intent(design_intent)
     except Exception as error:
