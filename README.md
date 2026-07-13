@@ -204,6 +204,16 @@ python -m prompt2cad.repair_log_tools generated\repair_logs\example-log.json --n
 This writes a fixture model to `evals/fixtures/` and a starter eval case to
 `evals/cases/`. Use `--fixture-only` if you only want the promoted model JSON.
 
+Compare two API models on the same eval prompts:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m prompt2cad.model_ab_eval --model gpt-5-mini --model <stronger-model> --overwrite
+```
+
+The A/B runner writes per-model generated JSON under `generated/model_ab/` and a
+summary report at `generated/model_ab/comparison_report.json`.
+
 Some eval cases can use tracked fixture models from `evals/fixtures/`, so they
 can run deterministically without making API calls.
 
