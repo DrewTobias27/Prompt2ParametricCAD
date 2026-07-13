@@ -90,6 +90,9 @@ def test_compare_prompt_cases_saves_direct_and_intent_outputs(tmp_path, monkeypa
     assert (tmp_path / "models" / "direct" / "rounded_box.json").exists()
     assert (tmp_path / "models" / "intent" / "rounded_box.json").exists()
     assert report["cases"][0]["focus"] == "rounded vocabulary"
+    assert report["summary"]["result_count"] == 2
+    assert report["summary"]["status_counts"]["pass"] == 2
+    assert report["summary"]["average_elapsed_seconds"] == 0.01
 
 
 def test_compare_prompt_cases_attaches_concept_expectations(tmp_path, monkeypatch):
@@ -157,6 +160,60 @@ def test_compare_prompt_cases_attaches_concept_expectations(tmp_path, monkeypatc
     direct_result = report["cases"][0]["results"][0]
     assert direct_result["concept_passed"] is True
     assert direct_result["concept_failures"] == []
+
+
+def test_attach_report_summary_counts_statuses_and_slowest_results():
+    report = {
+        "cases": [
+            {
+                "case": "fast",
+                "results": [
+                    {
+                        "mode": "intent",
+                        "status": "pass",
+                        "elapsed_seconds": 1.0,
+                    }
+                ],
+            },
+            {
+                "case": "slow",
+                "results": [
+                    {
+                        "mode": "intent",
+                        "status": "warn",
+                        "elapsed_seconds": 3.0,
+                    }
+                ],
+            },
+            {
+                "case": "fail",
+                "results": [
+                    {
+                        "mode": "direct",
+                        "status": "fail",
+                        "elapsed_seconds": 2.0,
+                    }
+                ],
+            },
+        ]
+    }
+
+    tiny_api_compare.attach_report_summary(report)
+
+    assert report["summary"]["case_count"] == 3
+    assert report["summary"]["result_count"] == 3
+    assert report["summary"]["status_counts"] == {
+        "pass": 1,
+        "warn": 1,
+        "fail": 1,
+    }
+    assert report["summary"]["mode_counts"] == {
+        "intent": 2,
+        "direct": 1,
+    }
+    assert report["summary"]["average_elapsed_seconds"] == 2.0
+    assert report["summary"]["total_elapsed_seconds"] == 6.0
+    assert report["summary"]["slowest_results"][0]["case"] == "slow"
 
 
 def test_filter_prompt_cases_uses_requested_names():
@@ -278,6 +335,7 @@ def test_rescore_report_adds_concept_results_without_api_calls(tmp_path):
 
     result = report["cases"][0]["results"][0]
     assert report["api_call_budget"] == 0
+    assert report["summary"]["result_count"] == 1
     assert output_path.exists()
     assert result["status"] == "pass"
     assert result["quality_passed"] is True

@@ -278,6 +278,62 @@ def run_case(prompt: str, mode: str) -> dict[str, Any]:
         }
 
 
+def iter_report_results(report: dict[str, Any]):
+    """Yield each case/result pair in a comparison report."""
+    for case in report.get("cases", []):
+        for result in case.get("results", []):
+            yield case, result
+
+
+def attach_report_summary(report: dict[str, Any]) -> dict[str, Any]:
+    """Attach pass/fail counts and timing summaries to a report."""
+    results = list(iter_report_results(report))
+    status_counts = {"pass": 0, "warn": 0, "fail": 0}
+    mode_counts: dict[str, int] = {}
+    timed_results = []
+
+    for case, result in results:
+        status = result.get("status", "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+        mode = result.get("mode", "unknown")
+        mode_counts[mode] = mode_counts.get(mode, 0) + 1
+
+        if "elapsed_seconds" in result:
+            timed_results.append({
+                "case": case.get("case"),
+                "mode": mode,
+                "status": status,
+                "elapsed_seconds": float(result["elapsed_seconds"]),
+            })
+
+    total_elapsed_seconds = round(
+        sum(result["elapsed_seconds"] for result in timed_results),
+        2,
+    )
+    average_elapsed_seconds = (
+        round(total_elapsed_seconds / len(timed_results), 2)
+        if timed_results
+        else 0
+    )
+    slowest_results = sorted(
+        timed_results,
+        key=lambda result: result["elapsed_seconds"],
+        reverse=True,
+    )[:3]
+
+    report["summary"] = {
+        "case_count": len(report.get("cases", [])),
+        "result_count": len(results),
+        "status_counts": status_counts,
+        "mode_counts": mode_counts,
+        "total_elapsed_seconds": total_elapsed_seconds,
+        "average_elapsed_seconds": average_elapsed_seconds,
+        "slowest_results": slowest_results,
+    }
+    return report
+
+
 def status_for_result(result: dict[str, Any]) -> str:
     """Return pass/warn status for a successful generation result."""
     status = "pass" if result.get("build_succeeded") and result.get("quality_passed") else "warn"
@@ -414,6 +470,7 @@ def rescore_report(
 
     report["rescored_from"] = str(report_path)
     report["api_call_budget"] = 0
+    attach_report_summary(report)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report
@@ -461,6 +518,7 @@ def compare_prompt_cases(
         preflight = check_openai_connection()
         report["preflight"] = preflight
         if not preflight["passed"]:
+            attach_report_summary(report)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
             return report
@@ -497,6 +555,7 @@ def compare_prompt_cases(
         }
         report["cases"].append(case_result)
 
+    attach_report_summary(report)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report
@@ -524,6 +583,7 @@ def compare_eval_cases(
         preflight = check_openai_connection()
         report["preflight"] = preflight
         if not preflight["passed"]:
+            attach_report_summary(report)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
             return report
@@ -553,6 +613,7 @@ def compare_eval_cases(
             "results": results,
         })
 
+    attach_report_summary(report)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report
@@ -569,6 +630,26 @@ def print_summary(report: dict[str, Any], output_path: Path) -> None:
         return
 
     print(f"API calls used: {report['api_call_budget']}")
+    summary = report.get("summary", {})
+    if summary:
+        status_counts = summary.get("status_counts", {})
+        print(
+            "RESULTS "
+            f"pass={status_counts.get('pass', 0)} "
+            f"warn={status_counts.get('warn', 0)} "
+            f"fail={status_counts.get('fail', 0)} "
+            f"avg={summary.get('average_elapsed_seconds', 0)}s "
+            f"total={summary.get('total_elapsed_seconds', 0)}s"
+        )
+        slowest_results = summary.get("slowest_results", [])
+        if slowest_results:
+            slowest = ", ".join(
+                f"{result['case']}:{result['mode']}="
+                f"{result['elapsed_seconds']}s"
+                for result in slowest_results
+            )
+            print(f"SLOWEST {slowest}")
+
     for case in report["cases"]:
         print(f"CASE {case['case']}: {case['prompt'][:90]}")
         for result in case["results"]:

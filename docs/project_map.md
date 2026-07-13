@@ -57,6 +57,19 @@ These folders are useful locally but should generally not be treated as source:
 - `.pytest-tmp/`
 - `__pycache__/`
 
+## Performance notes
+
+- The web backend keeps a small in-memory cache for exact successful prompt and
+  suggestion responses. This only avoids repeated identical work in the same
+  server session; it does not change first-run model output.
+- Web responses include timing metadata for API, build, export, quality, and
+  total time. Use this before guessing where speed problems are coming from.
+- API comparison reports include pass/warn/fail counts plus average, total, and
+  slowest-case timings.
+- Prefer safe speed wins: exact caching, targeted eval runs, and better timing
+  visibility. Avoid faster prompt/model paths unless they pass the same quality
+  and concept checks as the slower path.
+
 ## Common commands
 
 Run focused backend tests:
