@@ -1,0 +1,538 @@
+{
+  "description": "Second exploratory stress suite for testing prompt-to-intent robustness across nested features, side-face targets, edge treatments after cuts, revolved details, and ambiguous engineering relationships.",
+  "cases": [
+    {
+      "name": "boss_on_boss_cross_hole",
+      "prompt": "Create a rectangular base plate with a raised rectangular boss centered on top, a smaller circular boss centered on that boss, and a horizontal circular hole through the rectangular boss.",
+      "focus": "Nested feature targets and side-face cut through a previous feature",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "rectangle",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "extrusion",
+            "shape": "circle",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "cut",
+            "shape": "circle"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "min_operation_counts": {
+          "add_extrude": 2,
+          "cut": 1
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          },
+          {
+            "type": "add_extrude",
+            "profile": "circle"
+          },
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "obround_flange_tabs",
+      "prompt": "Create an obround mounting flange with rounded ends, two circular through holes along its long axis, and small rectangular tabs extending from the left and right sides.",
+      "focus": "Slot/rounded-obround base, centerline holes, additive side tabs",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": {
+            "one_of": [
+              "sketch",
+              "polyline"
+            ]
+          }
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          },
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "shaft_end_thread_grooves",
+      "prompt": "Create a cylindrical shaft with two narrow grooves near one end, a larger collar near the other end, and a chamfer on both shaft ends.",
+      "focus": "Multiple revolved cuts, revolved collar, chamfers on revolved end edges",
+      "expected_intent": {
+        "base": {
+          "profile": "cylinder"
+        },
+        "features": [
+          {
+            "operation": "revolved_cut",
+            "shape": "rectangle"
+          },
+          {
+            "operation": "revolved_extrusion",
+            "shape": "rectangle"
+          }
+        ],
+        "edge_treatments": [
+          {
+            "treatment": "chamfer"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "revolve",
+          "angle": 360
+        },
+        "min_operation_counts": {
+          "cut_revolve": 1,
+          "add_revolve": 1
+        },
+        "operations": [
+          {
+            "type": "chamfer"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "circular_plate_spokes",
+      "prompt": "Create a circular plate with a central raised hub and six rectangular spokes radiating outward from the hub.",
+      "focus": "Circular base, centered hub, circular pattern of rectangular/rib features",
+      "expected_intent": {
+        "base": {
+          "profile": "circle"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "circle",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "extrusion",
+            "shape": "rectangle",
+            "placement": {
+              "type": "circular_pattern"
+            }
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "circle"
+        },
+        "min_operation_counts": {
+          "add_extrude": 2
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "circle"
+          },
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "rectangular_plate_corner_fillets_slots",
+      "prompt": "Create a rectangular plate with rounded outside corners, two long rounded slots, and four small corner holes.",
+      "focus": "Rounded base or fillets, slot cuts, corner-hole placement",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "sketch"
+          },
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "u_bracket_side_holes",
+      "prompt": "Create a U-shaped bracket with a base plate and two vertical side walls, each wall having one circular hole through it.",
+      "focus": "Multiple wall extrusions and cuts targeting faces of previous features",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "rectangle"
+          },
+          {
+            "operation": "cut",
+            "shape": "circle"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "min_operation_counts": {
+          "add_extrude": 2,
+          "cut": 1
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "counterbored_corner_holes",
+      "prompt": "Create a rectangular mounting plate with four counterbored holes near the corners.",
+      "focus": "Compound holes represented as through holes plus shallow larger cuts",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle"
+        },
+        "features": [
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "placement": {
+              "type": "near_corners"
+            }
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "min_operation_counts": {
+          "cut": 2
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "countersunk_linear_holes",
+      "prompt": "Create a rectangular plate with three countersunk holes evenly spaced along the centerline.",
+      "focus": "Countersink vocabulary, repeated holes, revolved or compound cut representation",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "partial_cylinder_flat_mount",
+      "prompt": "Create a half-cylinder cradle with a flat bottom mounting plate, two holes through the flat plate, and a shallow groove along the curved cradle.",
+      "focus": "Half-cylinder/cradle base, attached flat plate, holes, groove vocabulary",
+      "expected_intent": {
+        "base": {
+          "profile": "half_cylinder"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "rectangle"
+          },
+          {
+            "operation": "cut"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "revolve",
+          "angle": 180
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          },
+          {
+            "type": "cut"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "triangular_plate_three_bosses",
+      "prompt": "Create a triangular plate with one circular boss near each corner and a small through hole in each boss.",
+      "focus": "Polygon base with repeated boss-hole pairs near vertices",
+      "expected_intent": {
+        "base": {
+          "profile": "polygon"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "circle"
+          },
+          {
+            "operation": "cut",
+            "shape": "circle"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "polygon"
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "circle"
+          },
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "stepped_block_pocket_side_cut",
+      "prompt": "Create a stepped rectangular block with a shallow rectangular pocket on the upper step and a circular hole through the right side of the lower step.",
+      "focus": "Multiple additive rectangular features, pocket cut, side-face cut",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "rectangle"
+          },
+          {
+            "operation": "cut",
+            "shape": "rectangle"
+          },
+          {
+            "operation": "cut",
+            "shape": "circle"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          },
+          {
+            "type": "cut",
+            "profile": "rectangle"
+          },
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "ring_with_key_slot",
+      "prompt": "Create a circular ring with a large center hole, four small bolt holes, and one rectangular key slot cut through the outer rim.",
+      "focus": "Ring-like plate, center cut, circular-pattern cuts, off-center rectangular slot",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "circle"
+        },
+        "min_operation_counts": {
+          "cut": 3
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          },
+          {
+            "type": "cut",
+            "profile": "rectangle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "rounded_square_cross_cutout",
+      "prompt": "Create a rounded square plate with a cross-shaped through cutout in the center and four small raised pads near the corners.",
+      "focus": "Rounded square/sketch base, custom polyline cut, mirrored or near-corner additive pads",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": {
+              "one_of": [
+                "polyline",
+                "sketch"
+              ]
+            }
+          },
+          {
+            "type": "add_extrude"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "flange_with_o_ring_groove",
+      "prompt": "Create a circular flange with eight bolt holes and a shallow circular O-ring groove around the center opening.",
+      "focus": "Circular-pattern holes plus annular/revolved groove concept",
+      "expected_intent": {
+        "base": {
+          "profile": "circle"
+        },
+        "features": [
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "placement": {
+              "type": "circular_pattern"
+            }
+          },
+          {
+            "operation": "revolved_cut"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "circle"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "rectangular_cover_with_rib_network",
+      "prompt": "Create a thin rectangular cover plate with a raised rectangular border and three internal ribs: one vertical rib and two horizontal ribs.",
+      "focus": "Multiple connected rectangular rib extrusions and border/lip representation",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "min_operation_counts": {
+          "add_extrude": 3
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    }
+  ]
+}
