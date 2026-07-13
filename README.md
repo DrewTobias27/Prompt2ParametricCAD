@@ -139,6 +139,19 @@ The API workflow requires an `OPENAI_API_KEY` environment variable in the
 terminal running the server. The manual-builder workflow can generate structured
 model data without relying as heavily on natural-language prompting.
 
+By default, API calls use `gpt-5-mini`. You can test another available OpenAI
+model without editing code by setting:
+
+```powershell
+$env:PROMPT2CAD_OPENAI_MODEL = "<model-name>"
+```
+
+You can also override one task at a time, such as repair attempts:
+
+```powershell
+$env:PROMPT2CAD_REPAIR_MODEL = "<model-name>"
+```
+
 When the API workflow needs a repair attempt or ends in an error, the app saves
 a local JSON log under `generated/repair_logs/`. These logs include the prompt,
 failed model data, quality report, repair suggestions, repaired model data, and
@@ -180,6 +193,16 @@ Run a single eval case:
 $env:PYTHONPATH = "src"
 python -m prompt2cad.eval_runner --models-dir generated\evals --cases-dir evals\cases --case rigorous_plate_holes_boss
 ```
+
+Promote a saved repair log into a fixture-backed eval:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m prompt2cad.repair_log_tools generated\repair_logs\example-log.json --name repaired_plate_example
+```
+
+This writes a fixture model to `evals/fixtures/` and a starter eval case to
+`evals/cases/`. Use `--fixture-only` if you only want the promoted model JSON.
 
 Some eval cases can use tracked fixture models from `evals/fixtures/`, so they
 can run deterministically without making API calls.

@@ -1,6 +1,7 @@
 """Convert natural language CAD requests into structured model data."""
 
 import json
+import os
 
 from openai import OpenAI
 
@@ -329,11 +330,22 @@ REPAIRABLE_QUALITY_WARNING_CODES = {
     "edge_operation_targets_face",
     "face_operation_targets_edge",
 }
+DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 
 
 def create_openai_client() -> OpenAI:
     """Create an OpenAI API client using the OPENAI_API_KEY environment variable."""
     return OpenAI()
+
+
+def openai_model(task: str = "generation") -> str:
+    """Return the configured OpenAI model for a prompt task."""
+    task_specific_env = f"PROMPT2CAD_{task.upper()}_MODEL"
+    return (
+        os.getenv(task_specific_env)
+        or os.getenv("PROMPT2CAD_OPENAI_MODEL")
+        or DEFAULT_OPENAI_MODEL
+    )
 
 
 def build_generation_input(user_prompt: str, max_examples: int = 3) -> str:
@@ -357,7 +369,7 @@ def prompt_to_model_data(user_prompt: str) -> dict:
     client = create_openai_client()
 
     response = client.responses.create(
-        model="gpt-5-mini",
+        model=openai_model("generation"),
         instructions=CAD_PROMPT_INSTRUCTIONS,
         input=build_generation_input(user_prompt),
         text={
@@ -378,7 +390,7 @@ def prompt_to_design_intent(user_prompt: str) -> dict:
     client = create_openai_client()
 
     response = client.responses.create(
-        model="gpt-5-mini",
+        model=openai_model("intent"),
         instructions=CAD_INTENT_INSTRUCTIONS,
         input=build_generation_input(user_prompt),
         text={
@@ -414,7 +426,7 @@ def repair_model_data(
     }
 
     response = client.responses.create(
-        model="gpt-5-mini",
+        model=openai_model("repair"),
         instructions=CAD_REPAIR_INSTRUCTIONS,
         input=json.dumps(repair_request),
         text={
@@ -544,7 +556,7 @@ def suggest_base_model_data(
     }
 
     response = client.responses.create(
-        model="gpt-5-mini",
+        model=openai_model("base_suggestion"),
         instructions=BASE_SUGGESTION_INSTRUCTIONS,
         input=json.dumps(request_data),
         text={
@@ -576,7 +588,7 @@ def suggest_feature_model_data(
     }
 
     response = client.responses.create(
-        model="gpt-5-mini",
+        model=openai_model("feature_suggestion"),
         instructions=FEATURE_SUGGESTION_INSTRUCTIONS,
         input=json.dumps(request_data),
         text={

@@ -5,6 +5,19 @@ import json
 from prompt2cad import prompting
 
 
+def test_openai_model_uses_task_specific_then_general_override(monkeypatch):
+    monkeypatch.delenv("PROMPT2CAD_OPENAI_MODEL", raising=False)
+    monkeypatch.delenv("PROMPT2CAD_REPAIR_MODEL", raising=False)
+
+    assert prompting.openai_model("repair") == "gpt-5-mini"
+
+    monkeypatch.setenv("PROMPT2CAD_OPENAI_MODEL", "gpt-5.5")
+    assert prompting.openai_model("repair") == "gpt-5.5"
+
+    monkeypatch.setenv("PROMPT2CAD_REPAIR_MODEL", "gpt-5.5-pro")
+    assert prompting.openai_model("repair") == "gpt-5.5-pro"
+
+
 def test_prompt_to_model_data_with_repair_repairs_once(monkeypatch):
     failed_model_data = {
         "operations": [
