@@ -31,6 +31,9 @@ you are deciding where new work belongs.
 - `evals/intent_cases/` contains expected design-intent eval fixtures.
 - `evals/intent_gap_tests.json` contains broader exploratory prompt cases with
   concept-level expectations.
+- `evals/intent_stress_cases.json` contains newer stretch prompt cases for
+  patterns, side-face features, edge treatments, revolved features, and
+  relationship-heavy parts.
 - `src/prompt2cad/evaluator.py` checks exact geometry fixture expectations.
 - `src/prompt2cad/intent_evaluator.py` checks high-level design intent.
 - `src/prompt2cad/concept_evaluator.py` checks whether generated CAD contains
@@ -91,6 +94,13 @@ Run only the design-intent path:
 ```powershell
 $env:PYTHONPATH = "src"
 & "C:\Users\Drew Tobias\Documents\Codex\2026-06-19\let\work\cadquery-env\Scripts\python.exe" -m prompt2cad.tiny_api_compare --prompt-file evals\intent_gap_tests.json --mode intent
+```
+
+Run the newer stress prompt cases:
+
+```powershell
+$env:PYTHONPATH = "src"
+& "C:\Users\Drew Tobias\Documents\Codex\2026-06-19\let\work\cadquery-env\Scripts\python.exe" -m prompt2cad.tiny_api_compare --prompt-file evals\intent_stress_cases.json --mode intent --output generated\tiny_api_compare\stress_report.json
 ```
 
 Re-score an existing API report without making new API calls:

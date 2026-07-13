@@ -1,0 +1,464 @@
+{
+  "description": "Additional exploratory prompt cases for exercising newer design-intent, relationship, pattern, edge-treatment, and geometry-checking work. These are broader than exact eval fixtures: they check whether the generated model contains the important CAD concepts without requiring one exact construction.",
+  "cases": [
+    {
+      "name": "rectangular_pattern_grid_holes",
+      "prompt": "Create a 120 mm by 80 mm rectangular plate, 8 mm thick, with a 3 by 2 rectangular grid of circular through holes centered on the top face.",
+      "focus": "Rectangular-pattern placement and repeated through cuts",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle"
+        },
+        "features": [
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "placement": {
+              "type": "rectangular_pattern"
+            }
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1,
+          "bounding_box": {
+            "xlen": {
+              "approx": 120,
+              "tolerance": 12
+            },
+            "ylen": {
+              "approx": 80,
+              "tolerance": 12
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "mirrored_corner_posts",
+      "prompt": "Create a rectangular base plate with one raised circular post near the front right corner, mirrored across both center axes so there are four matching posts.",
+      "focus": "Mirrored placement across both axes and additive repeated features",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "circle",
+            "placement": {
+              "type": "mirrored"
+            }
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "circle"
+          }
+        ],
+        "relationships": [
+          {
+            "type": "must_connect"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "offset_side_slot_and_top_boss",
+      "prompt": "Create a rectangular block with a raised rectangular boss centered on the top face and a horizontal rounded slot cut from the right side, offset upward from the lower edge.",
+      "focus": "Feature targeting, offset-from-edge placement, side-face slot cut",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "rectangle",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "cut",
+            "shape": "slot",
+            "placement": {
+              "type": "offset_from_edge"
+            }
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          },
+          {
+            "type": "cut",
+            "profile": "sketch"
+          }
+        ],
+        "relationships": [
+          {
+            "type": "centered_on"
+          },
+          {
+            "type": "must_connect"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "hex_plate_round_boss_and_holes",
+      "prompt": "Create a hexagonal plate with a centered raised circular boss and six small circular through holes evenly spaced around the boss.",
+      "focus": "Polygon base, circular-pattern cuts, centered boss",
+      "expected_intent": {
+        "base": {
+          "profile": "polygon"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "circle",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "placement": {
+              "type": "circular_pattern"
+            }
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "polygon"
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "circle"
+          },
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "rounded_pocket_with_center_hole",
+      "prompt": "Create a rectangular plate with a shallow rounded-rectangle pocket on the top face and a circular through hole centered inside the pocket.",
+      "focus": "Rounded-rectangle sketch cut, pocket depth, centered nested hole",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle"
+        },
+        "features": [
+          {
+            "operation": "cut",
+            "shape": "rounded_rectangle",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "placement": {
+              "type": "centered"
+            }
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "sketch"
+          },
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "relationships": [
+          {
+            "type": "centered_on"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "stepped_shaft_keyway",
+      "prompt": "Create a stepped shaft with two larger collars and a long rectangular keyway slot cut along the top of the middle section.",
+      "focus": "Revolved shaft features plus a non-revolved cut on a cylindrical/virtual top face",
+      "expected_intent": {
+        "base": {
+          "profile": "cylinder"
+        },
+        "features": [
+          {
+            "operation": "revolved_extrusion",
+            "shape": "rectangle"
+          },
+          {
+            "operation": "cut",
+            "shape": "rectangle"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "revolve",
+          "angle": 360
+        },
+        "operations": [
+          {
+            "type": "add_revolve",
+            "profile": "rectangle"
+          },
+          {
+            "type": "cut",
+            "profile": "rectangle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "flanged_tube_edge_treatments",
+      "prompt": "Create a circular flange with a centered through hole, four bolt holes, a raised tube around the center hole, filleted vertical tube edges, and a chamfer on the top outer flange edge.",
+      "focus": "Circle base, center hole, circular pattern, additive circular boss/tube, fillet and chamfer operations",
+      "expected_intent": {
+        "base": {
+          "profile": "circle"
+        },
+        "features": [
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "placement": {
+              "type": "circular_pattern"
+            }
+          },
+          {
+            "operation": "extrusion",
+            "shape": "circle",
+            "placement": {
+              "type": "centered"
+            }
+          }
+        ],
+        "edge_treatments": [
+          {
+            "treatment": "fillet"
+          },
+          {
+            "treatment": "chamfer"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "circle"
+        },
+        "min_operation_counts": {
+          "cut": 2
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "circle"
+          },
+          {
+            "type": "fillet"
+          },
+          {
+            "type": "chamfer"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "open_box_lip_and_drain",
+      "prompt": "Create an open-top rectangular tray with thin walls, a raised rim around the top, and a small circular drain hole centered in the bottom.",
+      "focus": "Shell-like hollowing, rim/lip feature, centered bottom cut",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle"
+        },
+        "features": [
+          {
+            "operation": "cut",
+            "shape": "rectangle",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "extrusion",
+            "shape": "rounded_rectangle"
+          },
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "placement": {
+              "type": "centered"
+            }
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "min_operation_counts": {
+          "cut": 2,
+          "add_extrude": 1
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "rectangle"
+          },
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "asymmetric_mounting_bracket",
+      "prompt": "Create an asymmetric mounting bracket: a rectangular base plate, a vertical rectangular wall along the back edge, two holes in the base, and one horizontal hole through the wall.",
+      "focus": "Back-edge wall, multi-face cuts, non-symmetric feature relationships",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "rectangle",
+            "placement": {
+              "type": "offset_from_edge"
+            }
+          },
+          {
+            "operation": "cut",
+            "shape": "circle"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          },
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "d_shaped_plate_tabs",
+      "prompt": "Create a D-shaped plate with a flat back edge and rounded front, two rectangular side tabs, and three circular through holes along the centerline.",
+      "focus": "Sketch/polyline base with arcs, side tabs, repeated aligned holes",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": {
+            "one_of": [
+              "sketch",
+              "polyline"
+            ]
+          }
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          },
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    }
+  ]
+}
