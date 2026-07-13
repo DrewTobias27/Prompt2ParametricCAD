@@ -880,6 +880,53 @@ def register_add_extrusion_references(
                 semantic_aliases=not use_instances,
             )
 
+    if use_instances:
+        register_multi_instance_edge_groups(
+            feature_graph,
+            operation["id"],
+            len(positions),
+        )
+
+
+def register_multi_instance_edge_groups(
+    feature_graph: FeatureGraph | None,
+    feature_id: str,
+    instance_count: int,
+) -> None:
+    """Register whole-feature edge groups spanning every patterned instance."""
+    if feature_graph is None:
+        return
+
+    group_labels = [
+        "top_outer_edges",
+        "bottom_outer_edges",
+        "vertical_edges",
+        "all_edges",
+    ]
+    for group_label in group_labels:
+        reference_names = []
+        for index in range(1, instance_count + 1):
+            instance_group = feature_graph.registry.get_reference_group(
+                f"{feature_id}.inst{index:03d}.{group_label}"
+            )
+            if instance_group is None:
+                reference_names = []
+                break
+
+            reference_names.extend(reference.name for reference in instance_group)
+
+        if not reference_names:
+            continue
+
+        feature_graph.registry.register_reference_group(
+            f"{feature_id}.edge_group.{group_label}",
+            reference_names,
+            aliases=[
+                f"{feature_id}.{group_label}",
+                f"{feature_id}.edge.{group_label}",
+            ],
+        )
+
 
 def apply_cut_operation(
     part: cq.Workplane,

@@ -572,6 +572,87 @@ def test_edge_treatment_intent_accepts_nulls_from_strict_api_schema():
     }
 
 
+def test_rectangular_base_all_edges_fillets_normalize_to_outside_corners():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "thickness": 6,
+        },
+        "features": [
+            {
+                "id": "center_cutout",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "rectangle",
+                "width": 20,
+                "height": 12,
+                "depth": "through",
+                "placement": {"type": "centered"},
+            }
+        ],
+        "edge_treatments": [
+            {
+                "id": "outside_corner_rounds",
+                "treatment": "fillet",
+                "target_feature": "base",
+                "edge_selector": "all_edges",
+                "radius": 2,
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][2]["target"] == "base.vertical_edges"
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_multi_instance_rounded_feature_edges_can_be_targeted_as_one_feature():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 100,
+            "thickness": 6,
+        },
+        "features": [
+            {
+                "id": "corner_pads",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "rounded_rectangle",
+                "width": 12,
+                "height": 12,
+                "radius": 2,
+                "distance": 2,
+                "placement": {
+                    "type": "near_corners",
+                    "count": 4,
+                    "margin": 10,
+                },
+            }
+        ],
+        "edge_treatments": [
+            {
+                "id": "pad_edge_fillets",
+                "treatment": "fillet",
+                "target_feature": "corner_pads",
+                "edge_selector": "top_outer_edges",
+                "radius": 1,
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][2]["target"] == "corner_pads.top_outer_edges"
+    assert check_model_data(model_data)["passed"] is True
+
+
 def test_edge_treatment_intent_maps_circle_vertical_edges_to_top_edges():
     intent = {
         "base": {
@@ -852,6 +933,35 @@ def test_intent_normalizes_half_cylinder_flat_face_alias():
     model_data = intent_to_model_data(intent)
 
     assert model_data["operations"][1]["target"] == "base.front"
+
+
+def test_intent_normalizes_half_cylinder_curved_face_alias():
+    intent = {
+        "base": {
+            "id": "half_round",
+            "profile": "half_cylinder",
+            "diameter": 30,
+            "length": 80,
+        },
+        "features": [
+            {
+                "id": "top_groove",
+                "operation": "cut",
+                "target": "half_round.curved",
+                "shape": "slot",
+                "width": 4,
+                "length": 50,
+                "depth": 2,
+                "placement": {"type": "centered"},
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["target"] == "base.top"
+    assert check_model_data(model_data)["passed"] is True
 
 
 def test_revolved_polyline_cut_intent_lowers_for_countersink_style_feature():

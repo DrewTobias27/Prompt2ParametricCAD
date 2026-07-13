@@ -645,6 +645,7 @@ def normalize_face_target(
 
     target_aliases = {
         "base.flat": "base.front",
+        "base.curved": "base.top",
         "base.side": "base.top",
         "base.outer_surface": "base.top",
     }
@@ -1028,6 +1029,13 @@ def normalize_edge_selector(
     target_feature: dict[str, Any] | None,
 ) -> str:
     """Normalize edge selectors that are invalid for curved feature geometry."""
+    if (
+        target_feature_id == "base"
+        and edge_selector == "all_edges"
+        and base.get("profile") in {"rectangle", "polygon"}
+    ):
+        return "vertical_edges"
+
     if target_feature_id == "base" and base.get("profile") in {
         "cylinder",
         "half_cylinder",
