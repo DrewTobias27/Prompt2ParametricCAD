@@ -1,0 +1,496 @@
+{
+  "description": "Exploratory prompt cases with concept-level expectations. These check whether generated CAD contains the main requested design ideas without requiring exact dimensions for underspecified prompts.",
+  "cases": [
+    {
+      "name": "shaft_collar_groove",
+      "prompt": "Create a 20 mm diameter shaft, 80 mm long, with a raised collar in the middle and a narrow groove near one end.",
+      "focus": "Revolved base, add_revolve collar, cut_revolve groove",
+      "expected_intent": {
+        "base": {
+          "profile": "cylinder"
+        },
+        "features": [
+          {
+            "operation": "revolved_extrusion",
+            "shape": "rectangle",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "revolved_cut",
+            "shape": "rectangle"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "revolve",
+          "angle": 360
+        },
+        "operations": [
+          {
+            "type": "add_revolve",
+            "profile": "rectangle"
+          },
+          {
+            "type": "cut_revolve",
+            "profile": "rectangle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1,
+          "bounding_box": {
+            "xlen": {
+              "approx": 20,
+              "tolerance": 12
+            },
+            "ylen": {
+              "approx": 80,
+              "tolerance": 12
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "half_cylinder_tab",
+      "prompt": "Create a half-cylinder base, 80 mm long and 30 mm diameter, with a rectangular mounting tab on the flat face.",
+      "focus": "Partial revolve or half-cylinder base with feature on flat face",
+      "expected_intent": {
+        "base": {
+          "profile": "half_cylinder"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "rectangle"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "revolve",
+          "angle": 180
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "capsule_cylinder",
+      "prompt": "Create a capsule-shaped cylinder with hemispherical ends, 20 mm diameter and 80 mm long.",
+      "focus": "Revolved sketch profile with true arcs",
+      "expected_intent": {
+        "base": {
+          "profile": "capsule"
+        },
+        "features": []
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "revolve",
+          "profile": "sketch",
+          "angle": 360
+        },
+        "geometry": {
+          "solid_count": 1,
+          "bounding_box": {
+            "xlen": {
+              "approx": 20,
+              "tolerance": 4
+            },
+            "ylen": {
+              "approx": 80,
+              "tolerance": 6
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "l_plate_long_arm_holes",
+      "prompt": "Create an L-shaped plate, 100 mm by 70 mm overall, 8 mm thick, with two circular holes on the long arm.",
+      "focus": "Arbitrary polyline or sketch base and holes placed on a named region",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1,
+          "bounding_box": {
+            "xlen": {
+              "approx": 100,
+              "tolerance": 20
+            },
+            "ylen": {
+              "approx": 70,
+              "tolerance": 20
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "rounded_rectangle_corner_holes",
+      "prompt": "Create a rounded rectangular plate, 100 mm by 60 mm by 8 mm, with 8 mm corner radii and four corner holes.",
+      "focus": "Rounded-rectangle base and corner-hole relationships",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": {
+            "one_of": [
+              "sketch",
+              "rectangle"
+            ]
+          }
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1,
+          "bounding_box": {
+            "xlen": {
+              "approx": 100,
+              "tolerance": 12
+            },
+            "ylen": {
+              "approx": 60,
+              "tolerance": 12
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "triangular_gusset_rib",
+      "prompt": "Create a rectangular plate with a triangular raised gusset rib connecting a center boss to one edge.",
+      "focus": "Triangular rib feature and feature-to-edge connection",
+      "expected_intent": {
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "circle",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "extrusion",
+            "shape": "polyline"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "min_operation_counts": {
+          "add_extrude": 2
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "circle"
+          },
+          {
+            "type": "add_extrude",
+            "profile": {
+              "one_of": [
+                "polygon",
+                "polyline",
+                "sketch"
+              ]
+            }
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "center_slot_end_holes",
+      "prompt": "Create a plate with a long rounded slot through the center and two circular holes near the ends.",
+      "focus": "Slot cuts, rounded slot geometry, relative placement near slot ends",
+      "expected_intent": {
+        "features": [
+          {
+            "operation": "cut",
+            "shape": "slot",
+            "placement": {
+              "type": "centered"
+            }
+          },
+          {
+            "operation": "cut",
+            "shape": "circle"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "sketch"
+          },
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "front_counterbore",
+      "prompt": "Create a rectangular block with a circular hole through the front face and a counterbore on the front face around that hole.",
+      "focus": "Counterbore as coaxial compound hole on a side face",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "min_operation_counts": {
+          "cut": 2
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "center_countersink",
+      "prompt": "Create a plate with a countersunk hole in the center.",
+      "focus": "Countersink or conical cut vocabulary",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "open_top_shell_box",
+      "prompt": "Create a hollow rectangular box with 4 mm wall thickness and an open top.",
+      "focus": "Shell/hollow operation and wall-thickness intent",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "rectangle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "flange_chamfer_hole_edges",
+      "prompt": "Create a circular flange with six bolt holes and chamfer the top outer edge and all bolt hole edges.",
+      "focus": "Edge-specific chamfers, hole-edge references, edge groups",
+      "expected_intent": {
+        "base": {
+          "profile": "circle"
+        },
+        "features": [
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "placement": {
+              "type": "circular_pattern"
+            }
+          }
+        ],
+        "edge_treatments": [
+          {
+            "treatment": "chamfer"
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "circle"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle"
+          },
+          {
+            "type": "chamfer"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "bracket_vertical_wall",
+      "prompt": "Create a rectangular bracket with one vertical wall extruded upward from the back edge of the base.",
+      "focus": "Wall feature from an edge/side relationship",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "rectangle"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "three_step_shaft",
+      "prompt": "Create a stepped shaft with three different diameters along its length.",
+      "focus": "Multi-section revolved profile",
+      "expected_concepts": {
+        "any_of": [
+          {
+            "base": {
+              "type": "revolve",
+              "profile": {
+                "one_of": [
+                  "sketch",
+                  "polyline"
+                ]
+              },
+              "angle": 360
+            },
+            "geometry": {
+              "solid_count": 1
+            }
+          },
+          {
+            "base": {
+              "type": "revolve",
+              "profile": "rectangle",
+              "angle": 360
+            },
+            "min_operation_counts": {
+              "cut_revolve": 2
+            },
+            "geometry": {
+              "solid_count": 1
+            }
+          },
+          {
+            "base": {
+              "type": "revolve",
+              "profile": "rectangle",
+              "angle": 360
+            },
+            "min_operation_counts": {
+              "add_revolve": 2
+            },
+            "geometry": {
+              "solid_count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "pocket_rounded_corners",
+      "prompt": "Create a rectangular plate with a rectangular pocket cut halfway through the top face and rounded internal pocket corners.",
+      "focus": "Pocket operation and internal fillet/rounded pocket corners",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle"
+        },
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "sketch"
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    },
+    {
+      "name": "radial_ribs_around_boss",
+      "prompt": "Create a base plate with a circular boss, then place four small ribs evenly spaced around the boss connecting it to the plate.",
+      "focus": "Radial ribs, circular pattern of non-circular features, boss-to-plate connections",
+      "expected_concepts": {
+        "base": {
+          "type": "extrude"
+        },
+        "min_operation_counts": {
+          "add_extrude": 2
+        },
+        "operations": [
+          {
+            "type": "add_extrude",
+            "profile": "circle"
+          },
+          {
+            "type": "add_extrude",
+            "profile": {
+              "one_of": [
+                "rectangle",
+                "polygon",
+                "polyline",
+                "sketch"
+              ]
+            }
+          }
+        ],
+        "geometry": {
+          "solid_count": 1
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,427 @@
+"""Tests for tiny API comparison utilities."""
+
+import json
+
+from prompt2cad import tiny_api_compare
+
+
+def test_load_prompt_cases_from_named_case_file(tmp_path):
+    prompt_file = tmp_path / "gap_tests.json"
+    prompt_file.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "name": "counterbore",
+                        "prompt": "Create a block with a counterbore.",
+                        "focus": "counterbore vocabulary",
+                    },
+                    "Create a hollow box.",
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert tiny_api_compare.load_prompt_cases(prompt_file) == [
+        {
+            "case": "counterbore",
+            "prompt": "Create a block with a counterbore.",
+            "focus": "counterbore vocabulary",
+        },
+        {
+            "case": "2",
+            "prompt": "Create a hollow box.",
+        },
+    ]
+
+
+def test_compare_prompt_cases_saves_direct_and_intent_outputs(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run_case(prompt, mode):
+        calls.append((prompt, mode))
+        return {
+            "mode": mode,
+            "status": "pass",
+            "elapsed_seconds": 0.01,
+            "model_data": {
+                "operations": [
+                    {
+                        "type": "extrude",
+                        "id": "base",
+                        "plane": "XY",
+                        "profile": "rectangle",
+                        "width": 10,
+                        "height": 10,
+                        "distance": 2,
+                    }
+                ],
+                "relationships": [],
+            },
+            "quality_passed": True,
+        }
+
+    monkeypatch.setattr(tiny_api_compare, "run_case", fake_run_case)
+    monkeypatch.setattr(
+        tiny_api_compare,
+        "check_openai_connection",
+        lambda: {"passed": True},
+    )
+
+    output_path = tmp_path / "report.json"
+    report = tiny_api_compare.compare_prompt_cases(
+        [
+            {
+                "case": "rounded box",
+                "prompt": "Create a rounded box.",
+                "focus": "rounded vocabulary",
+            }
+        ],
+        output_path=output_path,
+    )
+
+    assert calls == [
+        ("Create a rounded box.", "direct"),
+        ("Create a rounded box.", "intent"),
+    ]
+    assert report["api_call_budget"] == 2
+    assert output_path.exists()
+    assert (tmp_path / "models" / "direct" / "rounded_box.json").exists()
+    assert (tmp_path / "models" / "intent" / "rounded_box.json").exists()
+    assert report["cases"][0]["focus"] == "rounded vocabulary"
+
+
+def test_compare_prompt_cases_attaches_concept_expectations(tmp_path, monkeypatch):
+    def fake_run_case(prompt, mode):
+        return {
+            "mode": mode,
+            "status": "pass",
+            "elapsed_seconds": 0.01,
+            "model_data": {
+                "operations": [
+                    {
+                        "type": "extrude",
+                        "id": "base",
+                        "plane": "XY",
+                        "profile": "rectangle",
+                        "width": 10,
+                        "height": 10,
+                        "distance": 2,
+                    }
+                ],
+                "relationships": [],
+            },
+            "quality_passed": True,
+            "quality_report": {
+                "geometry_summary": {
+                    "solid_count": 1,
+                    "bounding_box": {
+                        "xlen": 10,
+                        "ylen": 10,
+                        "zlen": 2,
+                    },
+                },
+            },
+        }
+
+    monkeypatch.setattr(tiny_api_compare, "run_case", fake_run_case)
+    monkeypatch.setattr(
+        tiny_api_compare,
+        "check_openai_connection",
+        lambda: {"passed": True},
+    )
+
+    report = tiny_api_compare.compare_prompt_cases(
+        [
+            {
+                "case": "simple_plate",
+                "prompt": "Create a simple plate.",
+                "expected_concepts": {
+                    "base": {
+                        "type": "extrude",
+                        "profile": "rectangle",
+                    },
+                    "geometry": {
+                        "solid_count": 1,
+                        "bounding_box": {
+                            "xlen": {"approx": 10, "tolerance": 0.1},
+                        },
+                    },
+                },
+            }
+        ],
+        output_path=tmp_path / "report.json",
+    )
+
+    direct_result = report["cases"][0]["results"][0]
+    assert direct_result["concept_passed"] is True
+    assert direct_result["concept_failures"] == []
+
+
+def test_filter_prompt_cases_uses_requested_names():
+    cases = [
+        {"case": "shaft", "prompt": "Create a shaft."},
+        {"case": "box", "prompt": "Create a box."},
+        {"case": "slot", "prompt": "Create a slot."},
+    ]
+
+    assert tiny_api_compare.filter_prompt_cases(cases, ["box", "slot"]) == [
+        {"case": "box", "prompt": "Create a box."},
+        {"case": "slot", "prompt": "Create a slot."},
+    ]
+
+
+def test_compare_prompt_cases_can_run_intent_only(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run_case(prompt, mode):
+        calls.append((prompt, mode))
+        return {
+            "mode": mode,
+            "status": "pass",
+            "elapsed_seconds": 0.01,
+            "model_data": {
+                "operations": [
+                    {
+                        "type": "extrude",
+                        "id": "base",
+                        "plane": "XY",
+                        "profile": "rectangle",
+                        "width": 10,
+                        "height": 10,
+                        "distance": 2,
+                    }
+                ],
+                "relationships": [],
+            },
+            "quality_passed": True,
+        }
+
+    monkeypatch.setattr(tiny_api_compare, "run_case", fake_run_case)
+    monkeypatch.setattr(
+        tiny_api_compare,
+        "check_openai_connection",
+        lambda: {"passed": True},
+    )
+
+    report = tiny_api_compare.compare_prompt_cases(
+        [{"case": "box", "prompt": "Create a box."}],
+        output_path=tmp_path / "report.json",
+        modes=["intent"],
+    )
+
+    assert calls == [("Create a box.", "intent")]
+    assert report["api_call_budget"] == 1
+    assert report["modes"] == ["intent"]
+
+
+def test_rescore_report_adds_concept_results_without_api_calls(tmp_path):
+    report_path = tmp_path / "old_report.json"
+    output_path = tmp_path / "rescored_report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "api_call_budget": 2,
+                "cases": [
+                    {
+                        "case": "shaft",
+                        "prompt": "Create a shaft.",
+                        "results": [
+                            {
+                                "mode": "intent",
+                                "status": "warn",
+                                "model_data": {
+                                    "operations": [
+                                        {
+                                            "type": "revolve",
+                                            "id": "base",
+                                            "plane": "XY",
+                                            "profile": "rectangle",
+                                            "positions": [[5, 0]],
+                                            "width": 10,
+                                            "height": 80,
+                                            "axis_start": [0, -1],
+                                            "axis_end": [0, 1],
+                                            "angle": 360,
+                                        }
+                                    ],
+                                    "relationships": [],
+                                },
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = tiny_api_compare.rescore_report(
+        report_path,
+        output_path=output_path,
+        prompt_cases=[
+            {
+                "case": "shaft",
+                "expected_concepts": {
+                    "base": {
+                        "type": "revolve",
+                        "angle": 360,
+                    },
+                    "geometry": {
+                        "solid_count": 1,
+                    },
+                },
+            }
+        ],
+    )
+
+    result = report["cases"][0]["results"][0]
+    assert report["api_call_budget"] == 0
+    assert output_path.exists()
+    assert result["status"] == "pass"
+    assert result["quality_passed"] is True
+    assert result["concept_passed"] is True
+
+
+def test_rescore_report_uses_current_prompt_case_expectations(tmp_path):
+    report_path = tmp_path / "old_report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "case": "shaft",
+                        "prompt": "Create a stepped shaft.",
+                        "expected_concepts": {
+                            "base": {
+                                "type": "extrude",
+                            }
+                        },
+                        "results": [
+                            {
+                                "mode": "intent",
+                                "status": "warn",
+                                "model_data": {
+                                    "operations": [
+                                        {
+                                            "type": "revolve",
+                                            "id": "base",
+                                            "plane": "XY",
+                                            "profile": "rectangle",
+                                            "positions": [[3, 0]],
+                                            "width": 6,
+                                            "height": 120,
+                                            "axis_start": [0, -1],
+                                            "axis_end": [0, 1],
+                                            "angle": 360,
+                                        },
+                                        {
+                                            "type": "add_revolve",
+                                            "id": "step_1",
+                                            "plane": "XY",
+                                            "profile": "rectangle",
+                                            "positions": [[7, 30]],
+                                            "width": 2,
+                                            "height": 20,
+                                            "axis_start": [0, -1],
+                                            "axis_end": [0, 1],
+                                            "angle": 360,
+                                        },
+                                        {
+                                            "type": "add_revolve",
+                                            "id": "step_2",
+                                            "plane": "XY",
+                                            "profile": "rectangle",
+                                            "positions": [[8, -30]],
+                                            "width": 4,
+                                            "height": 20,
+                                            "axis_start": [0, -1],
+                                            "axis_end": [0, 1],
+                                            "angle": 360,
+                                        },
+                                    ],
+                                    "relationships": [],
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = tiny_api_compare.rescore_report(
+        report_path,
+        output_path=tmp_path / "rescored.json",
+        prompt_cases=[
+            {
+                "case": "shaft",
+                "expected_concepts": {
+                    "base": {
+                        "type": "revolve",
+                    },
+                    "min_operation_counts": {
+                        "add_revolve": 2,
+                    },
+                },
+            }
+        ],
+    )
+
+    assert report["cases"][0]["results"][0]["status"] == "pass"
+
+
+def test_rescore_report_can_relower_saved_design_intent(tmp_path):
+    report_path = tmp_path / "old_report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {
+                        "case": "countersink",
+                        "prompt": "Create a countersunk hole.",
+                        "results": [
+                            {
+                                "mode": "intent",
+                                "status": "fail",
+                                "message": "Old lowering error",
+                                "design_intent": {
+                                    "base": {
+                                        "id": "base",
+                                        "profile": "rectangle",
+                                        "width": 80,
+                                        "height": 40,
+                                        "thickness": 6,
+                                    },
+                                    "features": [
+                                        {
+                                            "id": "countersink",
+                                            "operation": "revolved_cut",
+                                            "target": "base.top",
+                                            "shape": "polyline",
+                                            "points": [[2.5, 0], [7.5, 0], [0, -2.5]],
+                                            "placement": {"type": "centered"},
+                                        }
+                                    ],
+                                    "edge_treatments": [],
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = tiny_api_compare.rescore_report(
+        report_path,
+        output_path=tmp_path / "rescored.json",
+    )
+
+    result = report["cases"][0]["results"][0]
+    assert "message" not in result
+    assert result["model_data"]["operations"][1]["type"] == "cut_revolve"
+    assert result["model_data"]["operations"][1]["profile"] == "polyline"
