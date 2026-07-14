@@ -264,7 +264,7 @@ function baseReviewGeometry(base) {
 }
 
 function featureLocalGeometry(feature) {
-  if (feature.reasonable || feature.profile === "polyline") {
+  if (feature.profile === "polyline") {
     return null;
   }
 

@@ -17,6 +17,33 @@ const SHAPE_OPTIONS = [
   ["polyline", "Polyline"],
 ];
 
+function minimumForNumberField(field) {
+  if (field === "x" || field === "y") {
+    return null;
+  }
+  if (field === "copies") {
+    return 2;
+  }
+  if (field === "sides") {
+    return 3;
+  }
+  return 0;
+}
+
+function clampNumberFieldValue(field, value) {
+  const minimum = minimumForNumberField(field);
+  if (minimum === null || value === "") {
+    return value;
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return value;
+  }
+
+  return numericValue < minimum ? String(minimum) : value;
+}
+
 export function ManualBuilder({
   base,
   setBase,
@@ -57,7 +84,7 @@ export function ManualBuilder({
   }, [base, features, setFeatures]);
 
   function updateBase(field, value) {
-    setBase((current) => ({ ...current, [field]: value }));
+    setBase((current) => ({ ...current, [field]: clampNumberFieldValue(field, value) }));
   }
 
   function updateFeature(index, field, value) {
@@ -66,7 +93,7 @@ export function ManualBuilder({
         return feature;
       }
 
-      const updatedFeature = { ...feature, [field]: value };
+      const updatedFeature = { ...feature, [field]: clampNumberFieldValue(field, value) };
       if (field === "operation") {
         const targetOptions = flattenOptionGroups(
           targetOptionGroupsForFeature({
@@ -193,17 +220,17 @@ export function ManualBuilder({
 
         {!base.reasonable && base.profile !== "polyline" && (
           <div className="field-grid">
-            <NumberField label="Thickness" value={base.thickness} onChange={(value) => updateBase("thickness", value)} />
+            <NumberField label="Thickness" field="thickness" value={base.thickness} onChange={(value) => updateBase("thickness", value)} />
             {base.profile === "rectangle" ? (
               <>
-                <NumberField label="Width" value={base.width} onChange={(value) => updateBase("width", value)} />
-                <NumberField label="Height" value={base.height} onChange={(value) => updateBase("height", value)} />
+                <NumberField label="Width" field="width" value={base.width} onChange={(value) => updateBase("width", value)} />
+                <NumberField label="Height" field="height" value={base.height} onChange={(value) => updateBase("height", value)} />
               </>
             ) : (
               <>
-                <NumberField label="Diameter" value={base.diameter} onChange={(value) => updateBase("diameter", value)} />
+                <NumberField label="Diameter" field="diameter" value={base.diameter} onChange={(value) => updateBase("diameter", value)} />
                 {base.profile === "polygon" && (
-                  <NumberField label="Sides" value={base.sides} onChange={(value) => updateBase("sides", value)} />
+                  <NumberField label="Sides" field="sides" value={base.sides} onChange={(value) => updateBase("sides", value)} />
                 )}
               </>
             )}
@@ -409,6 +436,9 @@ function FeatureEditor({
         <section className="feature-workflow-section">
           <div className="feature-workflow-heading">
             <span>Sketch dimensions</span>
+          </div>
+
+          <div className="feature-reasonable-row">
             <CheckboxField
               label="Use reasonable dimensions"
               checked={feature.reasonable}
@@ -432,14 +462,14 @@ function FeatureEditor({
             <div className="feature-dimension-grid">
               {feature.profile === "rectangle" ? (
                 <>
-                  <NumberField label="Width" value={feature.width} onChange={(value) => onChange(index, "width", value)} />
-                  <NumberField label="Height" value={feature.height} onChange={(value) => onChange(index, "height", value)} />
+                  <NumberField label="Width" field="width" value={feature.width} onChange={(value) => onChange(index, "width", value)} />
+                  <NumberField label="Height" field="height" value={feature.height} onChange={(value) => onChange(index, "height", value)} />
                 </>
               ) : (
                 <>
-                  <NumberField label="Diameter" value={feature.diameter} onChange={(value) => onChange(index, "diameter", value)} />
+                  <NumberField label="Diameter" field="diameter" value={feature.diameter} onChange={(value) => onChange(index, "diameter", value)} />
                   {feature.profile === "polygon" && (
-                    <NumberField label="Sides" value={feature.sides} onChange={(value) => onChange(index, "sides", value)} />
+                    <NumberField label="Sides" field="sides" value={feature.sides} onChange={(value) => onChange(index, "sides", value)} />
                   )}
                 </>
               )}
@@ -447,8 +477,8 @@ function FeatureEditor({
           )}
 
           <div className="feature-dimension-grid">
-            <NumberField label="Position X" value={feature.x} onChange={(value) => onChange(index, "x", value)} />
-            <NumberField label="Position Y" value={feature.y} onChange={(value) => onChange(index, "y", value)} />
+            <NumberField label="Position X" field="x" value={feature.x} onChange={(value) => onChange(index, "x", value)} />
+            <NumberField label="Position Y" field="y" value={feature.y} onChange={(value) => onChange(index, "y", value)} />
           </div>
         </section>
       )}
@@ -476,6 +506,7 @@ function FeatureEditor({
                   ? feature.operation === "chamfer" ? "Chamfer distance" : "Fillet radius"
                   : isCut ? "Cut depth" : "Extrusion distance"
               }
+              field="amount"
               value={feature.amount}
               onChange={(value) => onChange(index, "amount", value)}
             />
@@ -502,6 +533,7 @@ function FeatureEditor({
               <>
                 <NumberField
                   label="Circular copies"
+                  field="copies"
                   value={feature.copies}
                   onChange={(value) => onChange(index, "copies", value)}
                 />
@@ -528,12 +560,14 @@ function FeatureEditor({
   );
 }
 
-function NumberField({ label, value, onChange }) {
+function NumberField({ label, field, value, onChange }) {
+  const minimum = minimumForNumberField(field);
   return (
     <label>
       {label}
       <input
         type="number"
+        min={minimum ?? undefined}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
