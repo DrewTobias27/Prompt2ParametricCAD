@@ -439,6 +439,21 @@
       "name": "d_shaped_plate_tabs",
       "prompt": "Create a D-shaped plate with a flat back edge and rounded front, two rectangular side tabs, and three circular through holes along the centerline.",
       "focus": "Sketch/polyline base with arcs, side tabs, repeated aligned holes",
+      "expected_intent": {
+        "base": {
+          "profile": "d_shape"
+        },
+        "features": [
+          {
+            "operation": "extrusion",
+            "shape": "rectangle"
+          },
+          {
+            "operation": "cut",
+            "shape": "circle"
+          }
+        ]
+      },
       "expected_concepts": {
         "base": {
           "type": "extrude",

@@ -311,6 +311,8 @@ Supported placements:
 - rectangular_pattern: for row/column hole patterns
 - mirrored: for features mirrored across x and/or y axes
 - offset_from_edge: for features placed a set distance from a named edge
+  or described as offset upward/downward/inward from an edge. Prefer this over
+  explicit coordinates when the prompt describes an edge-relative position.
 
 Supported edge treatments:
 - chamfer: needs distance
