@@ -4,12 +4,14 @@ async function generateCAD() {
     const output = document.getElementById("output");
     const prompt = document.getElementById("prompt").value;
     const resultActions = document.getElementById("resultActions");
+    const resultSummary = document.getElementById("resultSummary");
     const status = document.getElementById("status");
 
     status.textContent = "Generating CAD model...";
     status.className = "status-message";
     output.textContent = "";
     resultActions.classList.add("hidden");
+    resultSummary.classList.add("hidden");
     downloadLink.classList.add("hidden");
 
     button.disabled = true;
@@ -100,6 +102,7 @@ async function buildSavedDemo() {
     const status = document.getElementById("status");
     const output = document.getElementById("output");
     const resultActions = document.getElementById("resultActions");
+    const resultSummary = document.getElementById("resultSummary");
 
     if (!example) {
         return;
@@ -109,6 +112,7 @@ async function buildSavedDemo() {
     status.className = "status-message";
     output.textContent = "";
     resultActions.classList.add("hidden");
+    resultSummary.classList.add("hidden");
     button.disabled = true;
     button.textContent = "Building...";
 
@@ -176,9 +180,11 @@ function showResult(data) {
     const downloadLink = document.getElementById("downloadLink");
     const output = document.getElementById("output");
     const resultActions = document.getElementById("resultActions");
+    const resultSummary = document.getElementById("resultSummary");
     const status = document.getElementById("status");
 
     lastResultJson = JSON.stringify(data, null, 2);
+    renderResultSummary(data);
 
     if (data.status === "success") {
         status.textContent = "Success";
@@ -195,6 +201,101 @@ function showResult(data) {
     }
 
     output.textContent = lastResultJson;
+}
+
+
+function formatSeconds(value) {
+    if (value === undefined || value === null) {
+        return null;
+    }
+
+    return `${Number(value).toFixed(2)}s`;
+}
+
+
+function readableGenerationMode(mode) {
+    if (mode === "design_intent") {
+        return "AI design-intent pipeline";
+    }
+    if (mode === "saved_demo") {
+        return "Saved demo fallback";
+    }
+    return "Direct CAD JSON pipeline";
+}
+
+
+function renderResultSummary(data) {
+    const resultSummary = document.getElementById("resultSummary");
+    const performance = data.performance || {};
+    const qualityReport = data.quality_report || {};
+    const issues = qualityReport.issues || [];
+    const summaryItems = [];
+
+    summaryItems.push([
+        "Mode",
+        readableGenerationMode(data.generation_mode),
+    ]);
+
+    const totalSeconds = formatSeconds(performance.total_seconds);
+    if (totalSeconds) {
+        summaryItems.push(["Total time", totalSeconds]);
+    }
+
+    const apiSeconds = formatSeconds(performance.api_seconds);
+    if (apiSeconds) {
+        summaryItems.push(["AI time", apiSeconds]);
+    }
+
+    const buildSeconds = formatSeconds(performance.build_seconds);
+    if (buildSeconds) {
+        summaryItems.push(["CAD build", buildSeconds]);
+    }
+
+    if (performance.cache_hit) {
+        summaryItems.push(["Cache", "served from previous successful result"]);
+    }
+
+    if (qualityReport.status) {
+        summaryItems.push(["Quality", qualityReport.status]);
+    }
+
+    resultSummary.innerHTML = "";
+    resultSummary.className = `result-summary ${data.status === "success" ? "success" : "error"}`;
+
+    const summaryGrid = document.createElement("div");
+    summaryGrid.className = "result-summary-grid";
+    for (const [label, value] of summaryItems) {
+        const item = document.createElement("div");
+        item.className = "result-summary-item";
+        item.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+        summaryGrid.appendChild(item);
+    }
+    resultSummary.appendChild(summaryGrid);
+
+    if (issues.length > 0) {
+        const issueList = document.createElement("ul");
+        issueList.className = "result-issue-list";
+        for (const issue of issues.slice(0, 4)) {
+            const item = document.createElement("li");
+            item.textContent = issue.message || issue.code || JSON.stringify(issue);
+            issueList.appendChild(item);
+        }
+        resultSummary.appendChild(issueList);
+    } else if (data.status === "success") {
+        const cleanMessage = document.createElement("p");
+        cleanMessage.className = "result-clean-message";
+        cleanMessage.textContent = "Generated one valid connected model and exported a STEP file.";
+        resultSummary.appendChild(cleanMessage);
+    }
+
+    if (data.status !== "success") {
+        const recovery = document.createElement("p");
+        recovery.className = "result-recovery-message";
+        recovery.textContent = "If this happens during a demo, use Build saved demo from the dropdown to prove the CAD export path without an API call.";
+        resultSummary.appendChild(recovery);
+    }
+
+    resultSummary.classList.remove("hidden");
 }
 
 
@@ -2522,6 +2623,7 @@ async function buildManualCAD() {
     status.className = "status-message";
     output.textContent = "";
     resultActions.classList.add("hidden");
+    resultSummary.classList.add("hidden");
     downloadLink.classList.add("hidden");
 
     button.disabled = true;
