@@ -123,6 +123,53 @@ def test_generate_cad_from_design_intent_caches_successful_responses(monkeypatch
     assert second_response["model_data"] == model_data
 
 
+def test_demo_examples_return_curated_prompt_list():
+    response = web_app.demo_examples()
+
+    assert response["examples"]
+    assert all(example["id"] for example in response["examples"])
+    assert all(example["prompt"] for example in response["examples"])
+    assert all(example["has_saved_fallback"] for example in response["examples"])
+
+
+def test_build_demo_uses_saved_model_without_api(monkeypatch):
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "circle",
+                "diameter": 80,
+                "distance": 8,
+            }
+        ]
+    }
+
+    monkeypatch.setattr(
+        web_app,
+        "load_demo_model_data",
+        lambda demo_id: (model_data, "demo flange"),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "export_model_data",
+        lambda generated_model_data, filename_hint: {
+            "status": "success",
+            "model_data": generated_model_data,
+            "step_file": "generated/web/demo.step",
+            "download_url": "/download/demo.step",
+            "performance": {"cache_hit": False},
+        },
+    )
+
+    response = web_app.build_demo(web_app.DemoBuildRequest(demo_id="flange"))
+
+    assert response["status"] == "success"
+    assert response["generation_mode"] == "saved_demo"
+    assert response["model_data"] == model_data
+
+
 def test_generate_cad_logs_repaired_prompt_generation(monkeypatch, tmp_path):
     web_app.SUCCESS_RESPONSE_CACHE.clear()
     model_data = {

@@ -110,6 +110,18 @@ http://127.0.0.1:8000/
 
 Leave that terminal running while using the web app. Press `Ctrl+C` to stop it.
 
+## 8. Run a laptop demo server
+
+To run the CAD backend on this computer and open the frontend from another
+laptop on the same network:
+
+```powershell
+.\scripts\run_demo_server.ps1
+```
+
+Then open `http://THIS-COMPUTER-IP:8000/` from the laptop. See
+`docs/demo_checklist.md` for the full demo runbook and fallback plan.
+
 ## Optional: set an OpenAI API key
 
 For the current PowerShell session:

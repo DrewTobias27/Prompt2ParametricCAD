@@ -16,7 +16,7 @@ async function generateCAD() {
     button.textContent = "Generating...";
 
     try {
-        const response = await fetch("/generate", {
+        const response = await fetch("/generate-intent", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -43,6 +43,97 @@ generateButton.addEventListener("click", generateCAD);
 
 
 let lastResultJson = "";
+let demoExamples = [];
+
+
+async function loadDemoExamples() {
+    const select = document.getElementById("demoExampleSelect");
+
+    try {
+        const response = await fetch("/demo-examples");
+        const data = await response.json();
+        demoExamples = data.examples || [];
+        select.innerHTML = "";
+
+        for (const example of demoExamples) {
+            const option = document.createElement("option");
+            option.value = example.id;
+            option.textContent = example.title;
+            select.appendChild(option);
+        }
+
+        if (demoExamples.length === 0) {
+            const option = document.createElement("option");
+            option.value = "";
+            option.textContent = "No demo examples found";
+            select.appendChild(option);
+        }
+    } catch (error) {
+        select.innerHTML = "";
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "Could not load demo examples";
+        select.appendChild(option);
+    }
+}
+
+
+function selectedDemoExample() {
+    const selectedId = document.getElementById("demoExampleSelect").value;
+    return demoExamples.find((example) => example.id === selectedId);
+}
+
+
+function useSelectedDemoPrompt() {
+    const example = selectedDemoExample();
+    if (!example) {
+        return;
+    }
+
+    document.getElementById("prompt").value = example.prompt;
+}
+
+
+async function buildSavedDemo() {
+    const button = document.getElementById("buildSavedDemoButton");
+    const example = selectedDemoExample();
+    const status = document.getElementById("status");
+    const output = document.getElementById("output");
+    const resultActions = document.getElementById("resultActions");
+
+    if (!example) {
+        return;
+    }
+
+    status.textContent = "Building saved demo model...";
+    status.className = "status-message";
+    output.textContent = "";
+    resultActions.classList.add("hidden");
+    button.disabled = true;
+    button.textContent = "Building...";
+
+    try {
+        const response = await fetch("/build-demo", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ demo_id: example.id }),
+        });
+
+        const data = await response.json();
+        showResult(data);
+    } catch (error) {
+        showResult({
+            status: "error",
+            message: String(error),
+            model_data: null,
+        });
+    } finally {
+        button.disabled = false;
+        button.textContent = "Build saved demo";
+    }
+}
 
 
 function setBuilderMode(mode) {
@@ -2482,6 +2573,12 @@ buildManualButton.addEventListener("click", buildManualCAD);
 const copyJsonButton = document.getElementById("copyJsonButton");
 copyJsonButton.addEventListener("click", copyResultJson);
 
+const useDemoPromptButton = document.getElementById("useDemoPromptButton");
+useDemoPromptButton.addEventListener("click", useSelectedDemoPrompt);
+
+const buildSavedDemoButton = document.getElementById("buildSavedDemoButton");
+buildSavedDemoButton.addEventListener("click", buildSavedDemo);
+
 const addFeatureButton = document.getElementById("addFeatureButton");
 addFeatureButton.addEventListener("click", addFeatureCard);
 
@@ -2500,6 +2597,7 @@ manualBuilder.addEventListener("change", updateManualPreview);
 updateManualBuilderFields();
 updateDesignReviewWarnings();
 updateManualPreview();
+loadDemoExamples();
 
 const promptModeButton = document.getElementById("promptModeButton");
 promptModeButton.addEventListener("click", () => setBuilderMode("prompt"));

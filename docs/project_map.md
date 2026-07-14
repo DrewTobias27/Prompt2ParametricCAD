@@ -48,6 +48,8 @@ you are deciding where new work belongs.
 - `src/prompt2cad/tiny_api_compare.py` compares direct JSON generation against
   design-intent generation. The intent path now also reports semantic coverage
   warnings when the JSON builds but omits a requested concept.
+- `docs/demo_checklist.md` contains the laptop-demo runbook, safe prompts, and
+  saved-demo fallback plan.
 
 ## Examples and training
 
@@ -132,4 +134,10 @@ Start the backend web app:
 ```powershell
 $env:PYTHONPATH = "src"
 & "C:\Users\Drew Tobias\Documents\Codex\2026-06-19\let\work\cadquery-env\Scripts\python.exe" -m uvicorn prompt2cad.web_app:app --host 127.0.0.1 --port 8000
+```
+
+Start the server for a laptop demo:
+
+```powershell
+.\scripts\run_demo_server.ps1
 ```

@@ -25,6 +25,28 @@
                         Describe the part in natural language and let the model create the CAD operations.
                     </p>
 
+                    <div class="demo-tools">
+                        <label for="demoExampleSelect">
+                            Demo examples
+                            <select id="demoExampleSelect">
+                                <option value="">Loading examples...</option>
+                            </select>
+                        </label>
+
+                        <div class="demo-tool-actions">
+                            <button id="useDemoPromptButton" class="secondary-button" type="button">
+                                Use prompt
+                            </button>
+                            <button id="buildSavedDemoButton" class="secondary-button" type="button">
+                                Build saved demo
+                            </button>
+                        </div>
+
+                        <p class="demo-note">
+                            Use prompt tests the AI path. Build saved demo exports a known-good STEP file without using the API.
+                        </p>
+                    </div>
+
                     <textarea id="prompt" rows="5" cols="60" placeholder="Describe the CAD model you want..."></textarea>
 
                     <div class="actions">

@@ -2,6 +2,7 @@
 
 from collections import OrderedDict
 from copy import deepcopy
+import json
 from pathlib import Path
 import re
 from time import perf_counter
@@ -46,19 +47,93 @@ class CADSuggestFeatureRequest(BaseModel):
     description: str = ""
 
 
+class DemoBuildRequest(BaseModel):
+    demo_id: str
+
+
 app = FastAPI()
 GENERATED_DIR = Path("generated/web")
 WEB_DIR = Path(__file__).parent / "web"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CACHE_MAX_ENTRIES = 64
 SUCCESS_RESPONSE_CACHE: OrderedDict[str, dict] = OrderedDict()
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 
+DEMO_EXAMPLES = [
+    {
+        "id": "flange",
+        "title": "Circular flange with bolt holes",
+        "prompt": (
+            "Create an 80 mm diameter circular flange, 8 mm thick, with six "
+            "6 mm circular through holes evenly spaced around the center."
+        ),
+        "fallback_model_path": REPO_ROOT
+        / "examples"
+        / "library"
+        / "circular_flange_six_bolt_holes.json",
+    },
+    {
+        "id": "block-side-hole-boss",
+        "title": "Block with side hole and top boss",
+        "prompt": (
+            "Create an 80 by 50 by 20 mm rectangular block. Add a centered "
+            "10 mm circular through hole on the front face and a raised "
+            "rectangular boss on the top face."
+        ),
+        "fallback_model_path": REPO_ROOT
+        / "examples"
+        / "library"
+        / "rectangular_block_front_hole_top_boss.json",
+    },
+    {
+        "id": "l-plate-cut",
+        "title": "L-shaped plate with rectangular cut",
+        "prompt": (
+            "Create an L-shaped plate with a rectangular through cut near "
+            "the inside corner."
+        ),
+        "fallback_model_path": REPO_ROOT
+        / "examples"
+        / "library"
+        / "l_shaped_plate_rectangular_cut.json",
+    },
+    {
+        "id": "capsule",
+        "title": "Capsule revolved from true arcs",
+        "prompt": (
+            "Create a capsule-shaped cylinder with hemispherical ends, "
+            "20 mm diameter and 80 mm long."
+        ),
+        "fallback_model_path": REPO_ROOT
+        / "examples"
+        / "library"
+        / "capsule_revolve_with_arc_sketch.json",
+    },
+]
+
+
 @app.get("/")
 def home():
     """Return the home page."""
     return FileResponse(WEB_DIR / "index.html")
+
+
+@app.get("/demo-examples")
+def demo_examples():
+    """Return curated demo prompts and saved fallback examples."""
+    return {
+        "examples": [
+            {
+                "id": example["id"],
+                "title": example["title"],
+                "prompt": example["prompt"],
+                "has_saved_fallback": example["fallback_model_path"].exists(),
+            }
+            for example in DEMO_EXAMPLES
+        ]
+    }
 
 
 def make_safe_filename(prompt: str) -> str:
@@ -167,6 +242,18 @@ def export_model_data(model_data: dict, filename_hint: str) -> dict:
             "cache_hit": False,
         },
     }
+
+
+def load_demo_model_data(demo_id: str) -> tuple[dict, str]:
+    """Load whitelisted saved demo model data."""
+    for example in DEMO_EXAMPLES:
+        if example["id"] == demo_id:
+            example_data = json.loads(
+                example["fallback_model_path"].read_text(encoding="utf-8")
+            )
+            return example_data.get("model_data", example_data), example["title"]
+
+    raise ValueError(f"Unknown demo example: {demo_id}")
 
 
 def with_repair_history(response_data: dict, repair_history: list[dict]) -> dict:
@@ -349,6 +436,31 @@ def build_cad(request: CADBuildRequest):
                 if "model_data" in locals()
                 else check_model_quality(None)
             ),
+            "performance": {
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
+        }
+
+
+@app.post("/build-demo")
+def build_demo(request: DemoBuildRequest):
+    """Build a saved demo model without making an API call."""
+    started_at = perf_counter()
+    try:
+        model_data, title = load_demo_model_data(request.demo_id)
+        response_data = export_model_data(model_data, f"demo {title}")
+        response_data["generation_mode"] = "saved_demo"
+        performance = dict(response_data.get("performance", {}))
+        performance["total_seconds"] = seconds_since(started_at)
+        response_data["performance"] = performance
+        return response_data
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error),
+            "model_data": None,
+            "generation_mode": "saved_demo",
             "performance": {
                 "total_seconds": seconds_since(started_at),
                 "cache_hit": False,
