@@ -308,6 +308,69 @@ function buildManualModelData() {
 let featureCount = 0;
 
 
+function allowsNegativeInput(input) {
+    return (
+        input.classList.contains("feature-position-x")
+        || input.classList.contains("feature-position-y")
+    );
+}
+
+
+function minimumValueForNumberInput(input) {
+    if (allowsNegativeInput(input)) {
+        return null;
+    }
+    if (input.classList.contains("feature-circular-count")) {
+        return 2;
+    }
+    if (
+        input.classList.contains("feature-polygon-sides")
+        || input.id === "polygonSides"
+    ) {
+        return 3;
+    }
+    return 0;
+}
+
+
+function configureNumberInputConstraints(root = document) {
+    const inputs = root.querySelectorAll("input[type='number']");
+    for (const input of inputs) {
+        const minimumValue = minimumValueForNumberInput(input);
+        if (minimumValue !== null) {
+            input.min = String(minimumValue);
+        } else {
+            input.removeAttribute("min");
+        }
+    }
+}
+
+
+function clampNumberInput(input) {
+    if (input.type !== "number") {
+        return;
+    }
+
+    const minimumValue = minimumValueForNumberInput(input);
+    if (minimumValue === null || input.value === "") {
+        return;
+    }
+
+    const numericValue = Number(input.value);
+    if (Number.isFinite(numericValue) && numericValue < minimumValue) {
+        input.value = String(minimumValue);
+    }
+}
+
+
+function clampNumberInputs(root = document) {
+    const inputs = root.querySelectorAll("input[type='number']");
+    for (const input of inputs) {
+        clampNumberInput(input);
+    }
+}
+
+
 function updateFeatureCardFields(featureCard) {
     const featureProfile = featureCard.querySelector(".feature-profile").value;
     const featureOperation = featureCard.querySelector(".feature-operation").value;
@@ -318,12 +381,14 @@ function updateFeatureCardFields(featureCard) {
     const polygonFields = featureCard.querySelector(".feature-polygon-fields");
     const polylineFields = featureCard.querySelector(".feature-polyline-fields");
     const positionFields = featureCard.querySelector(".feature-position-fields");
-    const mirrorFields = featureCard.querySelector(".feature-mirror-fields");
+    const mirrorXLabel = featureCard.querySelector(".feature-mirror-x").closest("label");
+    const mirrorYLabel = featureCard.querySelector(".feature-mirror-y").closest("label");
     const circularPatternFields = featureCard.querySelector(".feature-circular-pattern-fields");
     const cutDepthModeFields = featureCard.querySelector(".feature-cut-depth-mode-fields");
     const amountFields = featureCard.querySelector(".feature-amount-fields");
     const amountLabel = featureCard.querySelector(".feature-amount-label");
     const pattern = featureCard.querySelector(".feature-pattern").value;
+    const hasCircularPattern = pattern === "circular";
     const usesApiAssistance = useReasonableDimensions;
 
     rectangleFields.classList.toggle(
@@ -339,11 +404,12 @@ function updateFeatureCardFields(featureCard) {
         usesApiAssistance || featureProfile !== "polygon",
     );
     polylineFields.classList.toggle("hidden", featureProfile !== "polyline");
-    positionFields.classList.toggle("hidden", usesApiAssistance);
-    mirrorFields.classList.toggle("hidden", pattern === "circular");
+    positionFields.classList.toggle("hidden", usesApiAssistance && !hasCircularPattern);
+    mirrorXLabel.classList.toggle("hidden", hasCircularPattern);
+    mirrorYLabel.classList.toggle("hidden", hasCircularPattern);
     circularPatternFields.classList.toggle(
         "hidden",
-        pattern !== "circular",
+        !hasCircularPattern,
     );
     cutDepthModeFields.classList.toggle(
         "hidden",
@@ -637,6 +703,7 @@ function addFeatureCard() {
     featureCard.addEventListener("change", updateManualPreview);
 
     featureList.appendChild(featureCard);
+    configureNumberInputConstraints(featureCard);
     renumberFeatureCards();
     updateFeatureCardFields(featureCard);
     updateDesignReviewWarnings();
@@ -709,9 +776,8 @@ function getManualBaseReviewGeometry() {
 
 function featureLocalBounds(featureCard) {
     const profile = featureCard.querySelector(".feature-profile").value;
-    const useReasonableDimensions = featureCard.querySelector(".feature-reasonable").checked;
 
-    if (useReasonableDimensions || profile === "polyline") {
+    if (profile === "polyline") {
         return null;
     }
 
@@ -2492,6 +2558,23 @@ function applyExactFeaturePlacement(featureCard, operation) {
 }
 
 
+function applyReasonableFeaturePattern(featureCard, operation) {
+    const pattern = featureCard.querySelector(".feature-pattern").value;
+    if (pattern !== "circular") {
+        return operation;
+    }
+
+    operation.positions = transformFeaturePositions(
+        featureCard,
+        [[
+            Number(featureCard.querySelector(".feature-position-x").value),
+            Number(featureCard.querySelector(".feature-position-y").value),
+        ]],
+    );
+    return operation;
+}
+
+
 function applyFeatureId(featureCard, operation) {
     const featureNumber = featureCard.dataset.featureNumber;
 
@@ -2523,7 +2606,12 @@ async function buildFeatureOperations() {
                     ),
                 );
             } else {
-                operations.push(applyFeatureId(featureCard, suggestedOperation));
+                operations.push(
+                    applyFeatureId(
+                        featureCard,
+                        applyReasonableFeaturePattern(featureCard, suggestedOperation),
+                    ),
+                );
             }
         } else {
             operations.push(applyFeatureId(featureCard, buildExactFeatureOperation(featureCard)));
@@ -2586,6 +2674,7 @@ async function buildManualCAD() {
     button.textContent = "Building...";
 
     try {
+        clampNumberInputs(manualBuilder);
         const baseProfile = document.getElementById("baseProfile").value;
         const useReasonableDefaults = document.getElementById("useReasonableDefaults").checked;
         let modelData;
@@ -2644,12 +2733,15 @@ const useReasonableDefaultsCheckbox = document.getElementById("useReasonableDefa
 useReasonableDefaultsCheckbox.addEventListener("change", updateManualBuilderFields);
 
 const manualBuilder = document.getElementById("manualBuilder");
+manualBuilder.addEventListener("input", (event) => clampNumberInput(event.target));
+manualBuilder.addEventListener("change", (event) => clampNumberInput(event.target));
 manualBuilder.addEventListener("input", updateDesignReviewWarnings);
 manualBuilder.addEventListener("change", updateDesignReviewWarnings);
 manualBuilder.addEventListener("input", updateManualPreview);
 manualBuilder.addEventListener("change", updateManualPreview);
 
 updateManualBuilderFields();
+configureNumberInputConstraints();
 updateDesignReviewWarnings();
 updateManualPreview();
 loadDemoExamples();
