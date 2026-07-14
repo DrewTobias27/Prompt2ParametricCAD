@@ -272,10 +272,21 @@ Supported base profiles:
 - rectangle: flat rectangular plates/blocks
 - circle: flat circular plates/flanges
 - polygon: flat polygon plates
+- d_shape: flat D-shaped plates with one straight back edge and one rounded
+  front edge
 - cylinder: shaft-like round parts described by diameter and length
 - half_cylinder: half-round bases described by diameter and length
 - capsule: shaft-like bodies with hemispherical/rounded ends, described by
   diameter and total length
+
+Important base-profile choices:
+- Use base profile "circle" for a circular flange, circular plate, disk, or
+  ring unless the prompt clearly describes a shaft-like part with length.
+  Do not use "cylinder" for a flat flange.
+- Use base profile "d_shape" for a D-shaped plate with a flat back and rounded
+  front. Do not use "half_cylinder" for a flat D-shaped plate.
+- Use "half_cylinder" only for a 3D half-round cradle/body, not a flat plate
+  outline.
 
 Supported feature operations:
 - extrusion: add material from a face target
@@ -331,6 +342,18 @@ For shaft-like parts:
   rectangle width is radial cut depth; height is axial groove width.
 - For centered collars/grooves, use centered placement. For features near one
   end, use offset_from_edge with edge "front" or "back".
+- Do not include counterbore or countersink in required_concepts unless the
+  prompt explicitly asks for a counterbore, countersink, recessed screw seat,
+  or chamfered/conical hole.
+
+For compound holes:
+- A counterbore should be represented as a normal circular through-hole plus a
+  larger, shallow, concentric circular cut with role "counterbore".
+- A countersink should be represented as a normal circular through-hole plus a
+  conical/revolved cut with role "countersink".
+- An O-ring groove on a flat circular flange should usually be a shallow
+  revolved_cut with role "o_ring_groove" on a circle base, not a shaft-like
+  cylinder base. Include radius to locate the groove ring from the center.
 
 For strict schema compatibility, fill unrelated numeric/string fields with
 null. Examples:

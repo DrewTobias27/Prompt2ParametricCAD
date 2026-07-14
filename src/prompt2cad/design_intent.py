@@ -150,6 +150,7 @@ BASE_INTENT_SCHEMA = {
                 "rectangle",
                 "circle",
                 "polygon",
+                "d_shape",
                 "cylinder",
                 "half_cylinder",
                 "capsule",
@@ -381,6 +382,7 @@ OPENAI_BASE_INTENT_SCHEMA = {
                 "rectangle",
                 "circle",
                 "polygon",
+                "d_shape",
                 "cylinder",
                 "half_cylinder",
                 "capsule",
@@ -781,6 +783,9 @@ def base_operation(base: dict[str, Any]) -> dict[str, Any]:
             return flat_capsule_base_operation(base)
         return capsule_base_operation(base)
 
+    if base["profile"] == "d_shape":
+        return d_shape_base_operation(base)
+
     operation = {
         "type": "extrude",
         "id": base["id"],
@@ -799,6 +804,41 @@ def base_operation(base: dict[str, Any]) -> dict[str, Any]:
         operation["sides"] = int(base["sides"])
 
     return operation
+
+
+def d_shape_base_operation(base: dict[str, Any]) -> dict[str, Any]:
+    """Return a flat D-shaped plate using a straight back and arc front."""
+    width = number_value(base["width"])
+    height = number_value(base["height"])
+    radius = height / 2
+    flat_back_x = -width / 2
+    arc_center_x = width / 2 - radius
+    rounded_front_x = width / 2
+
+    return {
+        "type": "extrude",
+        "id": base["id"],
+        "plane": "XY",
+        "profile": "sketch",
+        "distance": number_value(base["thickness"]),
+        "start": rounded_points([[flat_back_x, -radius]])[0],
+        "segments": [
+            {
+                "type": "line",
+                "to": rounded_points([[arc_center_x, -radius]])[0],
+            },
+            {
+                "type": "arc",
+                "through": rounded_points([[rounded_front_x, 0]])[0],
+                "to": rounded_points([[arc_center_x, radius]])[0],
+            },
+            {
+                "type": "line",
+                "to": rounded_points([[flat_back_x, radius]])[0],
+            },
+        ],
+        "close": True,
+    }
 
 
 def axial_cylinder_base_operation(base: dict[str, Any]) -> dict[str, Any]:
@@ -915,11 +955,14 @@ def revolved_feature_operation(
     axial_size = number_value(feature["height"])
     base_radius = number_value(base["diameter"]) / 2
     center_y = revolved_feature_center_y(base, feature)
-    center_x = (
-        base_radius + radial_size / 2
-        if feature["operation"] == "revolved_extrusion"
-        else base_radius - radial_size / 2
-    )
+    if "radius" in feature:
+        center_x = number_value(feature["radius"])
+    else:
+        center_x = (
+            base_radius + radial_size / 2
+            if feature["operation"] == "revolved_extrusion"
+            else base_radius - radial_size / 2
+        )
 
     return {
         "type": (
@@ -1451,7 +1494,7 @@ def feature_relationships(base: dict[str, Any], feature: dict[str, Any]) -> list
 
 def base_plan_size(base: dict[str, Any]) -> tuple[float, float]:
     """Return approximate top-view size for base placement math."""
-    if base["profile"] == "rectangle":
+    if base["profile"] in {"rectangle", "d_shape"}:
         return number_value(base["width"]), number_value(base["height"])
 
     if base["profile"] == "capsule" and "thickness" in base:
@@ -1509,7 +1552,7 @@ def point_bounds_size(points: list[list[float]]) -> tuple[float, float]:
 
 def validate_base_dimensions(base: dict[str, Any]) -> None:
     """Check profile-specific base dimensions."""
-    if base["profile"] == "rectangle":
+    if base["profile"] in {"rectangle", "d_shape"}:
         require_keys(base, ["width", "height", "thickness"])
     elif base["profile"] == "circle":
         require_keys(base, ["diameter", "thickness"])
@@ -1595,7 +1638,7 @@ def missing_required_intent_dimensions(intent: dict[str, Any]) -> list[dict[str,
 
 def missing_base_dimension_fields(base: dict[str, Any]) -> list[str]:
     """Return missing base dimensions required by its profile."""
-    if base["profile"] == "rectangle":
+    if base["profile"] in {"rectangle", "d_shape"}:
         return missing_keys(base, ["width", "height", "thickness"])
     if base["profile"] == "circle":
         return missing_keys(base, ["diameter", "thickness"])

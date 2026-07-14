@@ -11,7 +11,8 @@ you are deciding where new work belongs.
 - `src/prompt2cad/prompting.py` calls the OpenAI API and contains prompting
   instructions.
 - `src/prompt2cad/design_intent.py` lowers high-level design intent into
-  executable CAD JSON.
+  executable CAD JSON, including reusable base profiles such as rectangles,
+  circles, polygons, D-shaped plates, cylinders, half-cylinders, and capsules.
 - `src/prompt2cad/web_app.py` exposes the FastAPI backend.
 - `frontend/` contains the React/Vite web UI.
 

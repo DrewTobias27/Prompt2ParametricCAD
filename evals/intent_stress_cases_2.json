@@ -462,7 +462,7 @@
           "type": "extrude"
         },
         "min_operation_counts": {
-          "cut": 2,
+          "cut": 1,
           "add_extrude": 1
         },
         "geometry": {

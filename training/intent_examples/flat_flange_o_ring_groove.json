@@ -1,0 +1,76 @@
+{
+  "name": "flat_flange_o_ring_groove",
+  "prompt": "Create a circular flange with eight bolt holes and a shallow circular O-ring groove around the center opening.",
+  "source_name": "Prompt2ParametricCAD internal flange groove concept example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "flange",
+    "circle",
+    "bolt_holes",
+    "o_ring_groove",
+    "concept_coverage"
+  ],
+  "design_intent": {
+    "required_concepts": [
+      "plate",
+      "hole",
+      "bolt_hole",
+      "o_ring_groove"
+    ],
+    "base": {
+      "id": "flange",
+      "role": "plate",
+      "profile": "circle",
+      "diameter": 110,
+      "thickness": 8
+    },
+    "features": [
+      {
+        "id": "center_hole",
+        "role": "hole",
+        "operation": "cut",
+        "target": "flange.top",
+        "shape": "circle",
+        "placement": {
+          "type": "centered"
+        },
+        "diameter": 36,
+        "depth": "through"
+      },
+      {
+        "id": "bolt_holes",
+        "role": "bolt_hole",
+        "operation": "cut",
+        "target": "flange.top",
+        "shape": "circle",
+        "placement": {
+          "type": "circular_pattern",
+          "count": 8,
+          "radius": 42
+        },
+        "diameter": 7,
+        "depth": "through"
+      },
+      {
+        "id": "o_ring_groove",
+        "role": "o_ring_groove",
+        "operation": "revolved_cut",
+        "target": "flange.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [
+              0,
+              0
+            ]
+          ]
+        },
+        "width": 1.5,
+        "height": 2,
+        "radius": 30
+      }
+    ],
+    "edge_treatments": []
+  }
+}

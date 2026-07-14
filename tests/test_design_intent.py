@@ -506,6 +506,48 @@ def test_capsule_with_thickness_lowers_to_flat_obround_plate():
     assert check_model_data(model_data)["passed"] is True
 
 
+def test_d_shape_base_lowers_to_flat_arc_sketch_plate():
+    intent = {
+        "base": {
+            "id": "d_plate",
+            "role": "plate",
+            "profile": "d_shape",
+            "width": 100,
+            "height": 60,
+            "thickness": 6,
+        },
+        "features": [
+            {
+                "id": "centerline_holes",
+                "role": "hole",
+                "operation": "cut",
+                "target": "d_plate.top",
+                "shape": "circle",
+                "diameter": 6,
+                "depth": "through",
+                "placement": {
+                    "type": "rectangular_pattern",
+                    "rows": 1,
+                    "columns": 3,
+                    "row_spacing": 0,
+                    "column_spacing": 25,
+                    "center": [0, 0],
+                },
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][0]["profile"] == "sketch"
+    assert any(
+        segment["type"] == "arc"
+        for segment in model_data["operations"][0]["segments"]
+    )
+    assert check_model_data(model_data)["passed"] is True
+
+
 def test_edge_treatment_intent_lowers_to_real_chamfer_operation_and_builds():
     intent = {
         "base": {
@@ -535,6 +577,72 @@ def test_edge_treatment_intent_lowers_to_real_chamfer_operation_and_builds():
         "target": "base.top_outer_edges",
         "distance": 1.0,
     }
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_flat_flange_o_ring_groove_uses_circle_base_and_revolved_cut():
+    intent = {
+        "required_concepts": [
+            "plate",
+            "hole",
+            "bolt_hole",
+            "o_ring_groove",
+        ],
+        "base": {
+            "id": "flange",
+            "role": "plate",
+            "profile": "circle",
+            "diameter": 100,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "center_hole",
+                "role": "hole",
+                "operation": "cut",
+                "target": "flange.top",
+                "shape": "circle",
+                "diameter": 35,
+                "depth": "through",
+                "placement": {"type": "centered"},
+            },
+            {
+                "id": "bolt_holes",
+                "role": "bolt_hole",
+                "operation": "cut",
+                "target": "flange.top",
+                "shape": "circle",
+                "diameter": 6,
+                "depth": "through",
+                "placement": {
+                    "type": "circular_pattern",
+                    "count": 8,
+                    "radius": 38,
+                },
+            },
+            {
+                "id": "o_ring_groove",
+                "role": "o_ring_groove",
+                "operation": "revolved_cut",
+                "target": "flange.top",
+                "shape": "rectangle",
+                "width": 1.5,
+                "height": 2,
+                "radius": 32,
+                "placement": {
+                    "type": "explicit",
+                    "positions": [[0, 0]],
+                },
+            },
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][0]["profile"] == "circle"
+    assert model_data["operations"][3]["type"] == "cut_revolve"
+    assert model_data["operations"][3]["positions"] == [[32, 0]]
     assert check_model_data(model_data)["passed"] is True
 
 

@@ -79,7 +79,7 @@ def base_profile_concepts(base: dict[str, Any]) -> set[str]:
     profile = base.get("profile")
     if profile == "half_cylinder":
         return {"cradle", "base_body"}
-    if profile in {"rectangle", "circle", "polygon", "capsule", "cylinder"}:
+    if profile in {"rectangle", "circle", "polygon", "d_shape", "capsule", "cylinder"}:
         return {"base_body"}
     return set()
 

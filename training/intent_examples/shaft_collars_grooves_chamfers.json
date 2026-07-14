@@ -1,0 +1,93 @@
+{
+  "name": "shaft_collars_grooves_chamfers",
+  "prompt": "Create a cylindrical shaft with two narrow grooves near one end, a larger collar near the other end, and a chamfer on both shaft ends.",
+  "source_name": "Prompt2ParametricCAD internal shaft feature concept example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "shaft",
+    "grooves",
+    "collar",
+    "chamfer",
+    "concept_coverage"
+  ],
+  "design_intent": {
+    "required_concepts": [
+      "base_body",
+      "groove",
+      "collar",
+      "chamfer"
+    ],
+    "base": {
+      "id": "shaft",
+      "role": "base_body",
+      "profile": "cylinder",
+      "diameter": 20,
+      "length": 90
+    },
+    "features": [
+      {
+        "id": "front_groove_1",
+        "role": "groove",
+        "operation": "revolved_cut",
+        "target": "shaft",
+        "shape": "rectangle",
+        "placement": {
+          "type": "offset_from_edge",
+          "edge": "front",
+          "offset": 8,
+          "along": 0
+        },
+        "width": 1,
+        "height": 3
+      },
+      {
+        "id": "front_groove_2",
+        "role": "groove",
+        "operation": "revolved_cut",
+        "target": "shaft",
+        "shape": "rectangle",
+        "placement": {
+          "type": "offset_from_edge",
+          "edge": "front",
+          "offset": 14,
+          "along": 0
+        },
+        "width": 1,
+        "height": 3
+      },
+      {
+        "id": "rear_collar",
+        "role": "collar",
+        "operation": "revolved_extrusion",
+        "target": "shaft",
+        "shape": "rectangle",
+        "placement": {
+          "type": "offset_from_edge",
+          "edge": "back",
+          "offset": 10,
+          "along": 0
+        },
+        "width": 3,
+        "height": 12
+      }
+    ],
+    "edge_treatments": [
+      {
+        "id": "front_end_chamfer",
+        "role": "chamfer",
+        "treatment": "chamfer",
+        "target_feature": "shaft",
+        "edge_selector": "top_outer_edges",
+        "distance": 1
+      },
+      {
+        "id": "back_end_chamfer",
+        "role": "chamfer",
+        "treatment": "chamfer",
+        "target_feature": "shaft",
+        "edge_selector": "bottom_outer_edges",
+        "distance": 1
+      }
+    ]
+  }
+}

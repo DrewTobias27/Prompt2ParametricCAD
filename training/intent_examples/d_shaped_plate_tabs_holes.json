@@ -1,0 +1,74 @@
+{
+  "name": "d_shaped_plate_tabs_holes",
+  "prompt": "Create a D-shaped plate with a flat back edge and rounded front, two rectangular side tabs, and three circular through holes along the centerline.",
+  "source_name": "Prompt2ParametricCAD internal D-shaped plate concept example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "d_shape",
+    "plate",
+    "tabs",
+    "holes",
+    "concept_coverage"
+  ],
+  "design_intent": {
+    "required_concepts": [
+      "plate",
+      "tab",
+      "hole"
+    ],
+    "base": {
+      "id": "d_plate",
+      "role": "plate",
+      "profile": "d_shape",
+      "width": 100,
+      "height": 60,
+      "thickness": 6
+    },
+    "features": [
+      {
+        "id": "side_tabs",
+        "role": "tab",
+        "operation": "extrusion",
+        "target": "d_plate.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [
+              -20,
+              35
+            ],
+            [
+              -20,
+              -35
+            ]
+          ]
+        },
+        "width": 28,
+        "height": 12,
+        "distance": 4
+      },
+      {
+        "id": "centerline_holes",
+        "role": "hole",
+        "operation": "cut",
+        "target": "d_plate.top",
+        "shape": "circle",
+        "placement": {
+          "type": "rectangular_pattern",
+          "rows": 1,
+          "columns": 3,
+          "row_spacing": 0,
+          "column_spacing": 25,
+          "center": [
+            -5,
+            0
+          ]
+        },
+        "diameter": 6,
+        "depth": "through"
+      }
+    ],
+    "edge_treatments": []
+  }
+}
