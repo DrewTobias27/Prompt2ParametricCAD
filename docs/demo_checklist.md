@@ -38,12 +38,13 @@ Python on private networks.
 In the web app:
 
 1. Select **Circular flange with bolt holes**.
-2. Click **Build saved demo**.
-3. Confirm a **Download STEP file** link appears.
-4. Click **Use prompt**.
-5. Click **Generate CAD** to test the API-backed design-intent path.
+2. Click **Use prompt**.
+3. Click **Generate CAD**.
+4. Confirm a **Download STEP file** link appears.
+5. Copy JSON or download the STEP file if useful for the demo.
 
-If step 5 fails, the saved demo path still works and does not require the API.
+This runs the full prompt → API → design intent → CAD JSON → CadQuery → STEP
+pipeline.
 
 ## 4. Safe demo prompts
 
@@ -62,11 +63,18 @@ These prompts are good first choices:
 
 If prompt generation fails:
 
-- Use **Build saved demo** from the demo dropdown.
-- Explain that the saved demo proves the CAD execution/export pipeline without
-  depending on the live model call.
-- Copy JSON to show the operation sequence.
-- Download the STEP file.
+- Try one of the known-good demo prompts.
+- Simplify the prompt and generate again.
+- Use the output JSON/error summary to explain what part of the intent failed.
+- Switch to the manual builder if you need to demonstrate controlled CAD
+  construction without relying on a freeform prompt.
+
+There is also a backend-only saved demo route for emergency debugging, but it is
+not part of the normal demo flow because it bypasses the live AI generation
+pipeline.
+
+If you need it during a private dry run, call `/build-demo` with a whitelisted
+demo id from developer tools or a script.
 
 If the laptop cannot connect:
 
@@ -78,5 +86,5 @@ If the laptop cannot connect:
 If the generated geometry is valid but not what was intended:
 
 - Use the output JSON to discuss the current intent gap.
-- Switch to a saved demo or manual builder example.
+- Switch to another known-good prompt or manual builder example.
 - Do not keep regenerating the same prompt repeatedly during the demo.

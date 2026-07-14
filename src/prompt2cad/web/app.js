@@ -96,50 +96,6 @@ function useSelectedDemoPrompt() {
 }
 
 
-async function buildSavedDemo() {
-    const button = document.getElementById("buildSavedDemoButton");
-    const example = selectedDemoExample();
-    const status = document.getElementById("status");
-    const output = document.getElementById("output");
-    const resultActions = document.getElementById("resultActions");
-    const resultSummary = document.getElementById("resultSummary");
-
-    if (!example) {
-        return;
-    }
-
-    status.textContent = "Building saved demo model...";
-    status.className = "status-message";
-    output.textContent = "";
-    resultActions.classList.add("hidden");
-    resultSummary.classList.add("hidden");
-    button.disabled = true;
-    button.textContent = "Building...";
-
-    try {
-        const response = await fetch("/build-demo", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ demo_id: example.id }),
-        });
-
-        const data = await response.json();
-        showResult(data);
-    } catch (error) {
-        showResult({
-            status: "error",
-            message: String(error),
-            model_data: null,
-        });
-    } finally {
-        button.disabled = false;
-        button.textContent = "Build saved demo";
-    }
-}
-
-
 function setBuilderMode(mode) {
     const promptBuilder = document.getElementById("promptBuilder");
     const manualBuilder = document.getElementById("manualBuilder");
@@ -291,7 +247,7 @@ function renderResultSummary(data) {
     if (data.status !== "success") {
         const recovery = document.createElement("p");
         recovery.className = "result-recovery-message";
-        recovery.textContent = "If this happens during a demo, use Build saved demo from the dropdown to prove the CAD export path without an API call.";
+        recovery.textContent = "Try one of the known-good demo prompts or simplify the request, then generate again.";
         resultSummary.appendChild(recovery);
     }
 
@@ -2677,9 +2633,6 @@ copyJsonButton.addEventListener("click", copyResultJson);
 
 const useDemoPromptButton = document.getElementById("useDemoPromptButton");
 useDemoPromptButton.addEventListener("click", useSelectedDemoPrompt);
-
-const buildSavedDemoButton = document.getElementById("buildSavedDemoButton");
-buildSavedDemoButton.addEventListener("click", buildSavedDemo);
 
 const addFeatureButton = document.getElementById("addFeatureButton");
 addFeatureButton.addEventListener("click", addFeatureCard);
