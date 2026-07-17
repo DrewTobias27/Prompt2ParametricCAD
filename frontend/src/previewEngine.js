@@ -38,9 +38,9 @@ export function buildPreviewModel({ base, features }) {
   if (features.length === 0) {
     warnings.push(
       reviewWarning(
-        "info",
-        "No feature warnings yet",
-        "Add a cut or extrusion to see live spacing, boundary, and manufacturability warnings.",
+        "success",
+        "No warnings",
+        "",
       ),
     );
   }

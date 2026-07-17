@@ -12,21 +12,11 @@ export function DrawingPreview({ base, features, usesApiAssistance }) {
     () => buildDimensionPlan(previewModel),
     [previewModel],
   );
-  const primaryFeatureCount = previewModel.primaryCount;
-  const featureSummary = primaryFeatureCount === 1
-    ? "1 feature instance"
-    : `${primaryFeatureCount} feature instances`;
-
   return (
     <section className="preview-card">
       <div className="section-heading">
         <div>
           <h2>Drawing preview</h2>
-          <p>
-            {previewModel.baseGeometry === null
-              ? "Preview is waiting for exact base dimensions."
-              : `Previewing ${featureSummary} across top/front/right views${previewModel.skippedCount > 0 ? `; ${previewModel.skippedCount} API-assisted or unsupported feature(s) are hidden.` : "."}`}
-          </p>
         </div>
         <PreviewLegend />
       </div>
@@ -45,9 +35,6 @@ export function DrawingPreview({ base, features, usesApiAssistance }) {
           sharedScale={sharedScale}
           dimensionPlan={dimensionPlan.top}
         />
-        <div className="ansi-note">
-          ANSI third-angle layout: top view above front, right-side view to the right.
-        </div>
         <DrawingView
           title="Front view"
           viewData={previewModel.views.front}
@@ -132,11 +119,6 @@ function DrawingView({ title, viewData, view, sharedScale, dimensionPlan }) {
           />
         ))}
 
-        {baseGeometry !== null && features.length === 0 && (
-          <text className="preview-note-text" x={preview.PREVIEW_WIDTH / 2} y={preview.PREVIEW_HEIGHT - 16} textAnchor="middle">
-            No exact features in this view
-          </text>
-        )}
       </svg>
     </div>
   );

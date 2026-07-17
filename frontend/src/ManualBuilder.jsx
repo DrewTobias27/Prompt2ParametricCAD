@@ -163,18 +163,10 @@ export function ManualBuilder({
     <form className="panel" onSubmit={onSubmit}>
       <div>
         <h2>Manual builder</h2>
-        <p>
-          Build the part by choosing a base shape and adding feature cards. Exact
-          dimensions build directly; reasonable dimensions and polyline descriptions
-          ask the API to fill in the CAD JSON.
-        </p>
       </div>
 
       <section className="form-section compact-section">
-        <div>
-          <h3>Start from an example</h3>
-          <p className="muted">Optional: load a simple engineering-style part, then edit the dimensions and features.</p>
-        </div>
+        <h3>Examples</h3>
         <div className="preset-grid">
           {MANUAL_PRESETS.map((preset) => (
             <button
@@ -184,7 +176,6 @@ export function ManualBuilder({
               onClick={() => applyPreset(preset)}
             >
               <strong>{preset.name}</strong>
-              <span>{preset.description}</span>
             </button>
           ))}
         </div>
@@ -240,14 +231,11 @@ export function ManualBuilder({
 
       <section className="form-section">
         <div className="section-heading">
-          <div>
-            <h3>Features</h3>
-            <p>Add cuts or extrusions after the base shape.</p>
-          </div>
+          <h3>Features</h3>
         </div>
 
         {features.length === 0 && (
-          <p className="muted">No features yet. Add an extrusion or cut to the base.</p>
+          <p className="muted">No features added.</p>
         )}
 
         {features.map((feature, index) => (
@@ -284,10 +272,7 @@ export function ManualBuilder({
       </section>
 
       <details className="form-section advanced-output">
-        <summary>
-          <span>Advanced output</span>
-          <small>{usesApiAssistance ? "API-assisted manual prompt" : "Generated CAD JSON"}</small>
-        </summary>
+        <summary>Advanced output</summary>
         <pre className="model-preview">
           {usesApiAssistance
             ? manualPrompt
@@ -418,9 +403,6 @@ function FeatureEditor({
           value={feature.target}
           onChange={(value) => onChange(index, "target", value)}
           groups={targetOptionGroups}
-          helpText={edgeTreatment
-            ? "Choose which saved edge group should receive this chamfer or fillet."
-            : "Choose the face where this feature starts."}
         />
         {!edgeTreatment && (
           <SelectField

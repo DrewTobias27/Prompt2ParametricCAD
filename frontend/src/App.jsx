@@ -135,15 +135,7 @@ export default function App() {
       <header className="hero">
         <div>
           <p className="eyebrow">Prompt2ParametricCAD</p>
-          <h1>Build parametric CAD from prompts or guided features.</h1>
-          <p className="hero-copy">
-            A cleaner React frontend for the CadQuery/FastAPI backend, with a guided
-            manual builder, drawing preview, and live design-review scaffolding.
-          </p>
-        </div>
-        <div className="hero-card">
-          <span>Frontend migration</span>
-          <strong>React + Vite</strong>
+          <h1>Build parametric CAD.</h1>
         </div>
       </header>
 
@@ -210,8 +202,6 @@ export default function App() {
                 base={generatedTreeView.base}
                 features={generatedTreeView.features}
                 title="Generated feature tree"
-                description="How the API-generated CAD JSON is structured before CadQuery builds the part."
-                hint="Read-only for now. Use this to inspect feature order, parent targets, and available references."
               />
               <GeneratedModelReview
                 modelData={result?.model_data}
@@ -253,10 +243,6 @@ function PromptBuilder({
     <form className="panel" onSubmit={onSubmit}>
       <div>
         <h2>Description builder</h2>
-        <p>
-          Describe the part in normal language. The backend converts the prompt into
-          validated CAD JSON and exports a STEP file.
-        </p>
       </div>
       <fieldset className="mode-choice">
         <legend>Generation mode</legend>
@@ -269,7 +255,6 @@ function PromptBuilder({
           />
           <span>
             Direct CAD JSON
-            <small>Current production path. Best for general compatibility.</small>
           </span>
         </label>
         <label>
@@ -281,7 +266,6 @@ function PromptBuilder({
           />
           <span>
             Design intent beta
-            <small>Experimental path for relationships like centered, near corners, and bolt circles.</small>
           </span>
         </label>
       </fieldset>

@@ -11,8 +11,8 @@ export function FeatureTreePanel({
   features,
   onTargetReferenceClick,
   title = "Feature tree",
-  description = "Build order, parent faces, edge groups, and major dimensions.",
-  hint = "Click a chip to retarget the active compatible feature, or add a new feature there.",
+  description = "",
+  hint = "",
 }) {
   const tree = buildFeatureTree(features);
 
@@ -21,7 +21,7 @@ export function FeatureTreePanel({
       <div className="section-heading">
         <div>
           <h2>{title}</h2>
-          <p>{description}</p>
+          {description && <p>{description}</p>}
           {hint && <p className="tree-hint">{hint}</p>}
         </div>
       </div>
@@ -30,7 +30,6 @@ export function FeatureTreePanel({
         <TreeNode
           title="Base"
           summary={baseSummary(base)}
-          meta="Root solid"
           references={baseReferences(base)}
           childrenNodes={tree}
           onTargetReferenceClick={onTargetReferenceClick}

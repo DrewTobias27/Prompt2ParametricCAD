@@ -20,7 +20,6 @@ export function DesignReview({ base, features, usesApiAssistance }) {
       )}
       <div className={isClear ? "review-message ok" : "review-message warn"}>
         <strong>{isClear ? warnings[0].title : `${warnings.length} review item${warnings.length > 1 ? "s" : ""}`}</strong>
-        {isClear && <p>{warnings[0].message}</p>}
         {!isClear && (
           <div className="review-list">
             {warnings.map((warning) => (
@@ -42,7 +41,7 @@ export function OutputPanel({ status, result, downloadUrl }) {
     <section className="result-card">
       <h2>Output</h2>
       <p className={result?.status === "error" ? "status error" : "status"}>
-        {status || "Run a prompt or manual model to see output."}
+        {status || "No output yet."}
       </p>
 
       {downloadUrl && (
@@ -53,7 +52,7 @@ export function OutputPanel({ status, result, downloadUrl }) {
 
       {result?.performance && <PerformanceSummary performance={result.performance} />}
 
-      <pre>{result ? JSON.stringify(result, null, 2) : "No result yet."}</pre>
+      {result && <pre>{JSON.stringify(result, null, 2)}</pre>}
     </section>
   );
 }
@@ -99,10 +98,6 @@ export function RepairHistoryPanel({ repairHistory }) {
   return (
     <section className="review-card">
       <h2>Repair history</h2>
-      <p>
-        The API generated CAD JSON, the backend checked it, and at least one
-        repair attempt was made using the structured diagnostics below.
-      </p>
       <div className="repair-history-list">
         {repairHistory.map((repair, index) => (
           <RepairHistoryItem
@@ -177,19 +172,12 @@ export function GeneratedModelReview({ modelData, qualityReport }) {
   const clearTitle = isBackendClear
     ? "Generated model quality gate passed"
     : warnings[0]?.title;
-  const clearMessage = isBackendClear
-    ? "The backend quality report found no schema or structural issues."
-    : warnings[0]?.message;
 
   return (
     <section className="review-card">
       <h2>Generated model review</h2>
-      <p>
-        Deterministic checks on the API-generated CAD JSON before deeper geometry validation.
-      </p>
       <div className={isClear ? "review-message ok" : "review-message warn"}>
         <strong>{isClear ? clearTitle : `${warnings.length} generated review item${warnings.length > 1 ? "s" : ""}`}</strong>
-        {isClear && <p>{clearMessage}</p>}
         {!isClear && (
           <div className="review-list">
             {warnings.map((warning) => (
