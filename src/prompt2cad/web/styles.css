@@ -218,14 +218,20 @@ button:disabled {
 }
 
 #downloadLink {
-    display: inline-block;
-    color: #2563eb;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #1d4ed8;
+    border-radius: 8px;
+    padding: 10px 14px;
+    background: #2563eb;
+    color: white;
     font-weight: bold;
     text-decoration: none;
+    box-shadow: 0 5px 12px rgba(37, 99, 235, 0.2);
 }
 
 #downloadLink:hover {
-    text-decoration: underline;
+    background: #1d4ed8;
 }
 
 pre {

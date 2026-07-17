@@ -46,6 +46,9 @@ export function OutputPanel({ status, result, downloadUrl }) {
 
       {downloadUrl && (
         <a className="download-link" href={downloadUrl}>
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" />
+          </svg>
           Download STEP file
         </a>
       )}

@@ -969,13 +969,38 @@ textarea {
 .download-link {
   display: inline-flex;
   width: fit-content;
+  gap: 0.55rem;
   align-items: center;
+  border: 1px solid #1d4ed8;
   border-radius: 12px;
   padding: 0.75rem 1rem;
-  background: #dcfce7;
-  color: #047857;
+  background: #2563eb;
+  color: white;
   font-weight: 700;
   text-decoration: none;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.2);
+  transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.download-link svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.download-link:hover {
+  background: #1d4ed8;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
+  transform: translateY(-1px);
+}
+
+.download-link:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 3px;
 }
 
 .performance-summary {
