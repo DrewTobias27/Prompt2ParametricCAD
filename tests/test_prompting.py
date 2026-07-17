@@ -2,8 +2,47 @@
 
 import json
 
+import httpx
+from openai import APIStatusError
+
 from prompt2cad import prompting
 from prompt2cad.design_intent import missing_required_intent_dimensions
+
+
+def test_create_json_response_retries_any_http_400_without_schema():
+    request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    response = httpx.Response(400, request=request)
+    bad_request = APIStatusError(
+        "Error code: 400",
+        response=response,
+        body={"error": {"message": "Invalid schema"}},
+    )
+
+    class Responses:
+        def __init__(self):
+            self.calls = []
+
+        def create(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                raise bad_request
+            return type("Response", (), {"output_text": '{"operations": []}'})()
+
+    responses = Responses()
+    client = type("Client", (), {"responses": responses})()
+
+    result = prompting.create_json_response(
+        client,
+        model="test-model",
+        instructions="Return CAD JSON.",
+        input_text="make a plate",
+        schema={"type": "object"},
+        schema_name="cad_model",
+    )
+
+    assert result == {"operations": []}
+    assert "text" in responses.calls[0]
+    assert "text" not in responses.calls[1]
 
 
 def test_openai_model_uses_task_specific_then_general_override(monkeypatch):

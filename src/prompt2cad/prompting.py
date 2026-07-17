@@ -3,7 +3,7 @@
 import json
 import os
 
-from openai import BadRequestError
+from openai import APIStatusError
 from openai import OpenAI
 
 from prompt2cad.design_intent import OPENAI_DESIGN_INTENT_SCHEMA
@@ -450,6 +450,11 @@ def parse_json_response_text(response_text: str) -> dict:
         return json.loads(text[start : end + 1])
 
 
+def is_bad_request(error: Exception) -> bool:
+    """Return whether an OpenAI SDK exception represents HTTP status 400."""
+    return isinstance(error, APIStatusError) and error.status_code == 400
+
+
 def create_json_response(
     client: OpenAI,
     *,
@@ -480,17 +485,26 @@ def create_json_response(
                 }
             },
         )
-    except BadRequestError:
+    except APIStatusError as error:
+        if not is_bad_request(error):
+            raise
         fallback_instructions = (
             instructions
             + "\n\nThe strict JSON schema request was rejected. Return only one "
             + "valid JSON object. Do not include Markdown, explanations, or code fences."
         )
-        response = client.responses.create(
-            model=model,
-            instructions=fallback_instructions,
-            input=input_text,
-        )
+        try:
+            response = client.responses.create(
+                model=model,
+                instructions=fallback_instructions,
+                input=input_text,
+            )
+        except APIStatusError as fallback_error:
+            detail = fallback_error.body or str(fallback_error)
+            raise RuntimeError(
+                "OpenAI JSON fallback failed "
+                f"(HTTP {fallback_error.status_code}): {detail}"
+            ) from fallback_error
 
     return parse_json_response_text(response.output_text)
 
