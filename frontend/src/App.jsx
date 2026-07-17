@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import {
   buildFromModelData,
   generateFromPrompt,
-  generateFromPromptIntent,
   getDownloadUrl,
 } from "./api.js";
 import { DrawingPreview } from "./DrawingPreview.jsx";
@@ -26,7 +25,6 @@ import {
 
 export default function App() {
   const [mode, setMode] = useState("manual");
-  const [promptGenerationMode, setPromptGenerationMode] = useState("direct");
   const [prompt, setPrompt] = useState("Create an 80 mm by 50 mm rectangular plate that is 6 mm thick.");
   const [base, setBase] = useState(defaultBase);
   const [features, setFeatures] = useState([]);
@@ -68,11 +66,6 @@ export default function App() {
 
   function handlePromptSubmit(event) {
     event.preventDefault();
-    if (promptGenerationMode === "intent") {
-      runRequest(() => generateFromPromptIntent(prompt));
-      return;
-    }
-
     runRequest(() => generateFromPrompt(prompt));
   }
 
@@ -176,8 +169,6 @@ export default function App() {
             <PromptBuilder
               prompt={prompt}
               setPrompt={setPrompt}
-              generationMode={promptGenerationMode}
-              setGenerationMode={setPromptGenerationMode}
               onSubmit={handlePromptSubmit}
               isLoading={isLoading}
             />
@@ -234,8 +225,6 @@ function referenceCanTargetFeature(reference, featureIndex) {
 function PromptBuilder({
   prompt,
   setPrompt,
-  generationMode,
-  setGenerationMode,
   onSubmit,
   isLoading,
 }) {
@@ -244,31 +233,6 @@ function PromptBuilder({
       <div>
         <h2>Description builder</h2>
       </div>
-      <fieldset className="mode-choice">
-        <legend>Generation mode</legend>
-        <label>
-          <input
-            type="radio"
-            name="prompt-generation-mode"
-            checked={generationMode === "direct"}
-            onChange={() => setGenerationMode("direct")}
-          />
-          <span>
-            Direct CAD JSON
-          </span>
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="prompt-generation-mode"
-            checked={generationMode === "intent"}
-            onChange={() => setGenerationMode("intent")}
-          />
-          <span>
-            Design intent beta
-          </span>
-        </label>
-      </fieldset>
       <label>
         CAD prompt
         <textarea
@@ -279,7 +243,7 @@ function PromptBuilder({
         />
       </label>
       <button type="submit" disabled={isLoading}>
-        {isLoading ? "Generating..." : generationMode === "intent" ? "Generate with intent beta" : "Generate CAD"}
+        {isLoading ? "Generating..." : "Generate CAD"}
       </button>
     </form>
   );

@@ -289,6 +289,31 @@ def attach_generation_log(
     return response_data
 
 
+def should_try_direct_fallback(error: Exception) -> bool:
+    """Return whether a failed intent attempt merits a direct-generation retry."""
+    status_code = getattr(error, "status_code", None)
+    if status_code is not None and status_code != 400:
+        return False
+
+    message = str(error).lower()
+    nonrecoverable_phrases = (
+        "missing credentials",
+        "invalid api key",
+        "incorrect api key",
+        "insufficient_quota",
+        "rate limit",
+        "connection error",
+        "timed out",
+        "timeout",
+    )
+    return not any(phrase in message for phrase in nonrecoverable_phrases)
+
+
+def combined_seconds(*values: float) -> float:
+    """Return rounded combined timing values."""
+    return round(sum(values), 3)
+
+
 @app.get("/download/{filename}")
 def download_step_file(filename: str):
     """Download a generated STEP file."""
@@ -302,7 +327,7 @@ def download_step_file(filename: str):
 
 @app.post("/generate")
 def generate_cad(request: CADRequest):
-    """Generate CAD model data from a natural language prompt."""
+    """Generate CAD through one intent-first pipeline with direct fallback."""
     started_at = perf_counter()
     key = cache_key("generate", {"prompt": request.prompt})
     cached_response = get_cached_success_response(key)
@@ -310,20 +335,112 @@ def generate_cad(request: CADRequest):
         cached_response["performance"]["total_seconds"] = seconds_since(started_at)
         return cached_response
 
+    design_intent = None
+    intent_model_data = None
+    intent_api_started_at = perf_counter()
+    intent_api_seconds = 0.0
+
     try:
-        api_started_at = perf_counter()
-        model_data, repair_history = prompt_to_model_data_with_repair(
+        design_intent = prompt_to_design_intent(request.prompt)
+        intent_api_seconds = seconds_since(intent_api_started_at)
+
+        lowering_started_at = perf_counter()
+        intent_model_data = intent_to_model_data(design_intent)
+        lowering_seconds = seconds_since(lowering_started_at)
+
+        response_data = export_model_data(intent_model_data, request.prompt)
+        if response_data.get("quality_report", {}).get("status") == "fail":
+            raise ValueError("Design-intent model failed the geometry quality gate")
+
+        response_data["design_intent"] = design_intent
+        response_data["generation_mode"] = "automatic"
+        response_data["generation_path"] = "design_intent"
+        response_data["pipeline_attempts"] = [
+            {"path": "design_intent", "status": "success"}
+        ]
+        performance = dict(response_data.get("performance", {}))
+        performance.update({
+            "api_seconds": intent_api_seconds,
+            "intent_api_seconds": intent_api_seconds,
+            "lowering_seconds": lowering_seconds,
+            "total_seconds": seconds_since(started_at),
+            "cache_hit": False,
+        })
+        response_data["performance"] = performance
+        cache_success_response(key, response_data)
+        return response_data
+
+    except Exception as intent_error:
+        intent_failure = intent_error
+        if intent_api_seconds == 0.0:
+            intent_api_seconds = seconds_since(intent_api_started_at)
+
+    intent_attempt = {
+        "path": "design_intent",
+        "status": "failed",
+        "message": str(intent_failure),
+    }
+
+    if not should_try_direct_fallback(intent_failure):
+        response_data = {
+            "status": "error",
+            "message": str(intent_failure),
+            "design_intent": design_intent,
+            "model_data": intent_model_data,
+            "quality_report": (
+                check_model_quality(intent_model_data, build_error=str(intent_failure))
+                if intent_model_data is not None
+                else check_model_quality(None)
+            ),
+            "generation_mode": "automatic",
+            "generation_path": "design_intent",
+            "pipeline_attempts": [intent_attempt],
+            "performance": {
+                "api_seconds": intent_api_seconds,
+                "intent_api_seconds": intent_api_seconds,
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
+        }
+        return attach_generation_log(
+            response_data,
+            prompt=request.prompt,
+            repair_history=[],
+            error_message=str(intent_failure),
+            generation_mode="automatic",
+        )
+
+    repair_history = []
+    direct_model_data = None
+    direct_api_started_at = perf_counter()
+    try:
+        direct_model_data, repair_history = prompt_to_model_data_with_repair(
             request.prompt,
             max_repairs=1,
         )
-        api_seconds = seconds_since(api_started_at)
+        direct_api_seconds = seconds_since(direct_api_started_at)
         response_data = with_repair_history(
-            export_model_data(model_data, request.prompt),
+            export_model_data(direct_model_data, request.prompt),
             repair_history,
         )
+        response_data["generation_mode"] = "automatic"
+        response_data["generation_path"] = "direct_fallback"
+        response_data["fallback_reason"] = str(intent_failure)
+        response_data["pipeline_attempts"] = [
+            intent_attempt,
+            {"path": "direct", "status": "success"},
+        ]
+        if design_intent is not None:
+            response_data["design_intent"] = design_intent
+
         performance = dict(response_data.get("performance", {}))
         performance.update({
-            "api_seconds": api_seconds,
+            "api_seconds": combined_seconds(
+                intent_api_seconds,
+                direct_api_seconds,
+            ),
+            "intent_api_seconds": intent_api_seconds,
+            "direct_api_seconds": direct_api_seconds,
             "total_seconds": seconds_since(started_at),
             "cache_hit": False,
         })
@@ -332,22 +449,49 @@ def generate_cad(request: CADRequest):
             response_data,
             prompt=request.prompt,
             repair_history=repair_history,
+            error_message=f"Design-intent path failed: {intent_failure}",
+            generation_mode="automatic_direct_fallback",
         )
         cache_success_response(key, response_data)
         return response_data
-    except Exception as error:
-        repair_history = repair_history if "repair_history" in locals() else []
+
+    except Exception as direct_error:
+        direct_api_seconds = seconds_since(direct_api_started_at)
+        combined_error = (
+            f"Design-intent path failed: {intent_failure}. "
+            f"Direct fallback failed: {direct_error}"
+        )
         response_data = {
             "status": "error",
-            "message": str(error),
-            "model_data": model_data if "model_data" in locals() else None,
+            "message": combined_error,
+            "design_intent": design_intent,
+            "model_data": direct_model_data or intent_model_data,
             "quality_report": (
-                check_model_quality(model_data, build_error=str(error))
-                if "model_data" in locals()
+                check_model_quality(
+                    direct_model_data or intent_model_data,
+                    build_error=str(direct_error),
+                )
+                if direct_model_data is not None or intent_model_data is not None
                 else check_model_quality(None)
             ),
             "repair_history": repair_history,
+            "generation_mode": "automatic",
+            "generation_path": "failed",
+            "pipeline_attempts": [
+                intent_attempt,
+                {
+                    "path": "direct",
+                    "status": "failed",
+                    "message": str(direct_error),
+                },
+            ],
             "performance": {
+                "api_seconds": combined_seconds(
+                    intent_api_seconds,
+                    direct_api_seconds,
+                ),
+                "intent_api_seconds": intent_api_seconds,
+                "direct_api_seconds": direct_api_seconds,
                 "total_seconds": seconds_since(started_at),
                 "cache_hit": False,
             },
@@ -356,62 +500,15 @@ def generate_cad(request: CADRequest):
             response_data,
             prompt=request.prompt,
             repair_history=repair_history,
-            error_message=str(error),
+            error_message=combined_error,
+            generation_mode="automatic",
         )
 
 
 @app.post("/generate-intent")
 def generate_cad_from_design_intent(request: CADRequest):
-    """Generate CAD through the experimental design-intent pipeline."""
-    started_at = perf_counter()
-    key = cache_key("generate-intent", {"prompt": request.prompt})
-    cached_response = get_cached_success_response(key)
-    if cached_response is not None:
-        cached_response["performance"]["total_seconds"] = seconds_since(started_at)
-        return cached_response
-
-    try:
-        api_started_at = perf_counter()
-        design_intent = prompt_to_design_intent(request.prompt)
-        api_seconds = seconds_since(api_started_at)
-
-        lowering_started_at = perf_counter()
-        model_data = intent_to_model_data(design_intent)
-        lowering_seconds = seconds_since(lowering_started_at)
-
-        response_data = export_model_data(
-            model_data,
-            f"intent {request.prompt}",
-        )
-        response_data["design_intent"] = design_intent
-        response_data["generation_mode"] = "design_intent"
-        performance = dict(response_data.get("performance", {}))
-        performance.update({
-            "api_seconds": api_seconds,
-            "lowering_seconds": lowering_seconds,
-            "total_seconds": seconds_since(started_at),
-            "cache_hit": False,
-        })
-        response_data["performance"] = performance
-        cache_success_response(key, response_data)
-        return response_data
-    except Exception as error:
-        return {
-            "status": "error",
-            "message": str(error),
-            "design_intent": design_intent if "design_intent" in locals() else None,
-            "model_data": model_data if "model_data" in locals() else None,
-            "quality_report": (
-                check_model_quality(model_data, build_error=str(error))
-                if "model_data" in locals()
-                else check_model_quality(None)
-            ),
-            "generation_mode": "design_intent",
-            "performance": {
-                "total_seconds": seconds_since(started_at),
-                "cache_hit": False,
-            },
-        }
+    """Preserve the former endpoint as an alias of automatic generation."""
+    return generate_cad(request)
 
 
 @app.post("/build")

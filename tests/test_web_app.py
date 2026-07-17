@@ -5,7 +5,7 @@ import cadquery as cq
 from prompt2cad import web_app
 
 
-def test_generate_cad_from_design_intent_returns_intent_and_model(monkeypatch):
+def test_generate_cad_prefers_design_intent_and_returns_model(monkeypatch):
     web_app.SUCCESS_RESPONSE_CACHE.clear()
     design_intent = {
         "base": {
@@ -52,19 +52,30 @@ def test_generate_cad_from_design_intent_returns_intent_and_model(monkeypatch):
             "download_url": "/download/test.step",
         },
     )
+    monkeypatch.setattr(
+        web_app,
+        "prompt_to_model_data_with_repair",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("Direct fallback should not run")
+        ),
+    )
 
-    response = web_app.generate_cad_from_design_intent(
+    response = web_app.generate_cad(
         web_app.CADRequest(prompt="make a simple plate")
     )
 
     assert response["status"] == "success"
-    assert response["generation_mode"] == "design_intent"
+    assert response["generation_mode"] == "automatic"
+    assert response["generation_path"] == "design_intent"
     assert response["design_intent"] == design_intent
     assert response["model_data"] == model_data
+    assert response["pipeline_attempts"] == [
+        {"path": "design_intent", "status": "success"}
+    ]
     assert response["performance"]["cache_hit"] is False
 
 
-def test_generate_cad_from_design_intent_caches_successful_responses(monkeypatch):
+def test_generate_cad_caches_successful_automatic_responses(monkeypatch):
     web_app.SUCCESS_RESPONSE_CACHE.clear()
     design_intent = {
         "base": {
@@ -110,10 +121,10 @@ def test_generate_cad_from_design_intent_caches_successful_responses(monkeypatch
     monkeypatch.setattr(web_app, "intent_to_model_data", lambda intent: model_data)
     monkeypatch.setattr(web_app, "export_model_data", fake_export_model_data)
 
-    first_response = web_app.generate_cad_from_design_intent(
+    first_response = web_app.generate_cad(
         web_app.CADRequest(prompt="make a cached plate")
     )
-    second_response = web_app.generate_cad_from_design_intent(
+    second_response = web_app.generate_cad(
         web_app.CADRequest(prompt="make a cached plate")
     )
 
@@ -121,6 +132,116 @@ def test_generate_cad_from_design_intent_caches_successful_responses(monkeypatch
     assert second_response["performance"]["cache_hit"] is True
     assert calls == {"api": 1, "export": 1}
     assert second_response["model_data"] == model_data
+
+
+def test_generate_cad_uses_direct_fallback_after_intent_failure(monkeypatch):
+    web_app.SUCCESS_RESPONSE_CACHE.clear()
+    design_intent = {
+        "base": {"id": "base", "profile": "rectangle"},
+        "features": [],
+    }
+    direct_model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            }
+        ]
+    }
+
+    monkeypatch.setattr(
+        web_app,
+        "prompt_to_design_intent",
+        lambda prompt: design_intent,
+    )
+    monkeypatch.setattr(
+        web_app,
+        "intent_to_model_data",
+        lambda intent: (_ for _ in ()).throw(ValueError("unsupported relationship")),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "prompt_to_model_data_with_repair",
+        lambda prompt, max_repairs: (direct_model_data, []),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "export_model_data",
+        lambda generated_model_data, filename_hint: {
+            "status": "success",
+            "model_data": generated_model_data,
+            "quality_report": {"status": "pass"},
+            "step_file": "generated/web/test.step",
+            "download_url": "/download/test.step",
+        },
+    )
+    monkeypatch.setattr(
+        web_app,
+        "save_generation_log",
+        lambda **kwargs: web_app.Path("generated/log.json"),
+    )
+
+    response = web_app.generate_cad(
+        web_app.CADRequest(prompt="make a compatibility case")
+    )
+
+    assert response["status"] == "success"
+    assert response["generation_mode"] == "automatic"
+    assert response["generation_path"] == "direct_fallback"
+    assert response["design_intent"] == design_intent
+    assert response["model_data"] == direct_model_data
+    assert response["pipeline_attempts"][0]["status"] == "failed"
+    assert response["pipeline_attempts"][1] == {
+        "path": "direct",
+        "status": "success",
+    }
+
+
+def test_generate_cad_does_not_retry_missing_credentials(monkeypatch):
+    web_app.SUCCESS_RESPONSE_CACHE.clear()
+    direct_calls = []
+
+    monkeypatch.setattr(
+        web_app,
+        "prompt_to_design_intent",
+        lambda prompt: (_ for _ in ()).throw(
+            RuntimeError("Missing credentials. Set OPENAI_API_KEY.")
+        ),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "prompt_to_model_data_with_repair",
+        lambda *args, **kwargs: direct_calls.append(True),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "save_generation_log",
+        lambda **kwargs: web_app.Path("generated/log.json"),
+    )
+
+    response = web_app.generate_cad(
+        web_app.CADRequest(prompt="make a plate")
+    )
+
+    assert response["status"] == "error"
+    assert response["generation_path"] == "design_intent"
+    assert direct_calls == []
+
+
+def test_legacy_intent_endpoint_uses_automatic_pipeline(monkeypatch):
+    expected = {"status": "success", "generation_mode": "automatic"}
+    monkeypatch.setattr(web_app, "generate_cad", lambda request: expected)
+
+    response = web_app.generate_cad_from_design_intent(
+        web_app.CADRequest(prompt="make a plate")
+    )
+
+    assert response == expected
 
 
 def test_demo_examples_return_curated_prompt_list():
@@ -193,6 +314,19 @@ def test_generate_cad_logs_repaired_prompt_generation(monkeypatch, tmp_path):
         }
     ]
     log_calls = []
+
+    monkeypatch.setattr(
+        web_app,
+        "prompt_to_design_intent",
+        lambda prompt: {"base": {"id": "base"}, "features": []},
+    )
+    monkeypatch.setattr(
+        web_app,
+        "intent_to_model_data",
+        lambda intent: (_ for _ in ()).throw(
+            ValueError("intent lowering needs compatibility fallback")
+        ),
+    )
 
     monkeypatch.setattr(
         web_app,

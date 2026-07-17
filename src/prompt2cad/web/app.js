@@ -18,7 +18,7 @@ async function generateCAD() {
     button.textContent = "Generating...";
 
     try {
-        const response = await fetch("/generate-intent", {
+        const response = await fetch("/generate", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -170,13 +170,13 @@ function formatSeconds(value) {
 
 
 function readableGenerationMode(mode) {
-    if (mode === "design_intent") {
-        return "AI design-intent pipeline";
+    if (mode === "automatic") {
+        return "Automatic generation";
     }
     if (mode === "saved_demo") {
         return "Saved demo fallback";
     }
-    return "Direct CAD JSON pipeline";
+    return "Automatic generation";
 }
 
 

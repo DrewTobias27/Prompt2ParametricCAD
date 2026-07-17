@@ -146,51 +146,6 @@ h4 {
   box-shadow: 0 5px 16px rgba(15, 23, 42, 0.12);
 }
 
-.mode-choice {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  border: 1px solid #dbe3ef;
-  border-radius: 18px;
-  padding: 14px;
-  background: #f8fafc;
-}
-
-.mode-choice legend {
-  padding: 0 6px;
-  color: #0f172a;
-  font-weight: 750;
-}
-
-.mode-choice label {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 12px;
-  background: white;
-  cursor: pointer;
-}
-
-.mode-choice input {
-  width: 18px;
-  min-width: 18px;
-  height: 18px;
-  margin-top: 3px;
-}
-
-.mode-choice span {
-  display: grid;
-  gap: 3px;
-}
-
-.mode-choice small {
-  color: #64748b;
-  font-weight: 450;
-  line-height: 1.35;
-}
-
 .panel,
 .form-section {
   display: grid;

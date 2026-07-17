@@ -20,10 +20,6 @@ export function generateFromPrompt(prompt) {
   return postJson("/generate", { prompt });
 }
 
-export function generateFromPromptIntent(prompt) {
-  return postJson("/generate-intent", { prompt });
-}
-
 export function buildFromModelData(modelData, filenameHint) {
   return postJson("/build", {
     model_data: modelData,
