@@ -3,6 +3,7 @@
 import json
 import os
 
+from openai import BadRequestError
 from openai import OpenAI
 
 from prompt2cad.design_intent import OPENAI_DESIGN_INTENT_SCHEMA
@@ -428,6 +429,72 @@ REPAIRABLE_QUALITY_WARNING_CODES = {
 DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 
 
+def parse_json_response_text(response_text: str) -> dict:
+    """Parse JSON from an API response that may include Markdown fences."""
+    text = response_text.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise
+        return json.loads(text[start : end + 1])
+
+
+def create_json_response(
+    client: OpenAI,
+    *,
+    model: str,
+    instructions: str,
+    input_text: str,
+    schema: dict,
+    schema_name: str,
+) -> dict:
+    """Create a structured JSON response, with a JSON-only fallback for demos.
+
+    Structured Outputs are the preferred path because they constrain the model
+    tightly. If the OpenAI API rejects the schema request with a 400, retry with
+    plain JSON instructions so prompt mode can still run instead of failing
+    completely.
+    """
+    try:
+        response = client.responses.create(
+            model=model,
+            instructions=instructions,
+            input=input_text,
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": schema_name,
+                    "schema": schema,
+                    "strict": True,
+                }
+            },
+        )
+    except BadRequestError:
+        fallback_instructions = (
+            instructions
+            + "\n\nThe strict JSON schema request was rejected. Return only one "
+            + "valid JSON object. Do not include Markdown, explanations, or code fences."
+        )
+        response = client.responses.create(
+            model=model,
+            instructions=fallback_instructions,
+            input=input_text,
+        )
+
+    return parse_json_response_text(response.output_text)
+
+
 def create_openai_client() -> OpenAI:
     """Create an OpenAI API client using the OPENAI_API_KEY environment variable."""
     api_key = os.getenv("OPENAI_API_KEY")
@@ -467,42 +534,28 @@ def prompt_to_model_data(user_prompt: str) -> dict:
     """Convert a natural language CAD request into structured model data."""
     client = create_openai_client()
 
-    response = client.responses.create(
+    return create_json_response(
+        client,
         model=openai_model("generation"),
         instructions=CAD_PROMPT_INSTRUCTIONS,
-        input=build_generation_input(user_prompt),
-        text={
-            "format": {
-                "type": "json_schema",
-                "name": "cad_model",
-                "schema": OPENAI_RELATIONAL_CAD_MODEL_SCHEMA,
-                "strict": True,
-            }
-        },
+        input_text=build_generation_input(user_prompt),
+        schema=OPENAI_RELATIONAL_CAD_MODEL_SCHEMA,
+        schema_name="cad_model",
     )
-
-    return json.loads(response.output_text)
 
 
 def prompt_to_design_intent(user_prompt: str) -> dict:
     """Convert a natural language CAD request into high-level design intent."""
     client = create_openai_client()
 
-    response = client.responses.create(
+    return create_json_response(
+        client,
         model=openai_model("intent"),
         instructions=CAD_INTENT_INSTRUCTIONS,
-        input=build_generation_input(user_prompt),
-        text={
-            "format": {
-                "type": "json_schema",
-                "name": "cad_design_intent",
-                "schema": OPENAI_DESIGN_INTENT_SCHEMA,
-                "strict": True,
-            }
-        },
+        input_text=build_generation_input(user_prompt),
+        schema=OPENAI_DESIGN_INTENT_SCHEMA,
+        schema_name="cad_design_intent",
     )
-
-    return json.loads(response.output_text)
 
 
 def prompt_to_model_data_via_intent(user_prompt: str) -> dict:
@@ -524,21 +577,14 @@ def repair_model_data(
         "failure_analysis": failure_analysis,
     }
 
-    response = client.responses.create(
+    return create_json_response(
+        client,
         model=openai_model("repair"),
         instructions=CAD_REPAIR_INSTRUCTIONS,
-        input=json.dumps(repair_request),
-        text={
-            "format": {
-                "type": "json_schema",
-                "name": "cad_repaired_model",
-                "schema": OPENAI_RELATIONAL_CAD_MODEL_SCHEMA,
-                "strict": True,
-            }
-        },
+        input_text=json.dumps(repair_request),
+        schema=OPENAI_RELATIONAL_CAD_MODEL_SCHEMA,
+        schema_name="cad_repaired_model",
     )
-
-    return json.loads(response.output_text)
 
 
 def quality_report_needs_repair(quality_report: dict) -> bool:
@@ -654,21 +700,14 @@ def suggest_base_model_data(
         "distance": distance,
     }
 
-    response = client.responses.create(
+    return create_json_response(
+        client,
         model=openai_model("base_suggestion"),
         instructions=BASE_SUGGESTION_INSTRUCTIONS,
-        input=json.dumps(request_data),
-        text={
-            "format": {
-                "type": "json_schema",
-                "name": "cad_base_model",
-                "schema": OPENAI_CAD_MODEL_SCHEMA,
-                "strict": True,
-            }
-        },
+        input_text=json.dumps(request_data),
+        schema=OPENAI_CAD_MODEL_SCHEMA,
+        schema_name="cad_base_model",
     )
-
-    return json.loads(response.output_text)
 
 
 def suggest_feature_model_data(
@@ -686,21 +725,14 @@ def suggest_feature_model_data(
         "description": description,
     }
 
-    response = client.responses.create(
+    return create_json_response(
+        client,
         model=openai_model("feature_suggestion"),
         instructions=FEATURE_SUGGESTION_INSTRUCTIONS,
-        input=json.dumps(request_data),
-        text={
-            "format": {
-                "type": "json_schema",
-                "name": "cad_feature_model",
-                "schema": OPENAI_CAD_MODEL_SCHEMA,
-                "strict": True,
-            }
-        },
+        input_text=json.dumps(request_data),
+        schema=OPENAI_CAD_MODEL_SCHEMA,
+        schema_name="cad_feature_model",
     )
-
-    return json.loads(response.output_text)
 
 
 def read_prompt_file(prompt_path: str) -> str:
