@@ -345,7 +345,10 @@ Parent-child feature rules:
   the child inherits exact positions instead of independently recomputing a
   similar near-corner, mirrored, or circular pattern.
 - For a raised rim made as an outer extrusion followed by an inner cut, make
-  the inner cut target the rim extrusion's top face.
+  the inner cut target the rim extrusion's top face. Give that inner cut a
+  numeric depth equal to the rim extrusion distance so it removes only the
+  raised material. Do not use "through" unless the request explicitly asks
+  for the opening to continue through the body below the rim.
 - A single through cut may pass through multiple aligned, parallel walls.
   When one straight bore creates the requested hole in every aligned wall,
   output one cut from the nearest wall rather than duplicate cuts at the same
@@ -488,6 +491,7 @@ def create_json_response(
     input_text: str,
     schema: dict,
     schema_name: str,
+    telemetry: dict | None = None,
 ) -> dict:
     """Create a structured JSON response, with a JSON-only fallback for demos.
 
@@ -496,6 +500,8 @@ def create_json_response(
     plain JSON instructions so prompt mode can still run instead of failing
     completely.
     """
+    api_attempts = 1
+    used_structured_outputs = True
     try:
         response = client.responses.create(
             model=model,
@@ -513,6 +519,8 @@ def create_json_response(
     except APIStatusError as error:
         if not is_bad_request(error):
             raise
+        api_attempts = 2
+        used_structured_outputs = False
         fallback_instructions = (
             instructions
             + "\n\nThe strict JSON schema request was rejected. Return only one "
@@ -531,7 +539,47 @@ def create_json_response(
                 f"(HTTP {fallback_error.status_code}): {detail}"
             ) from fallback_error
 
+    if telemetry is not None:
+        telemetry.update(
+            response_usage_telemetry(
+                response,
+                requested_model=model,
+                api_attempts=api_attempts,
+                used_structured_outputs=used_structured_outputs,
+            )
+        )
+
     return parse_json_response_text(response.output_text)
+
+
+def response_usage_telemetry(
+    response,
+    *,
+    requested_model: str,
+    api_attempts: int,
+    used_structured_outputs: bool,
+) -> dict:
+    """Return non-secret model and token metadata from an API response."""
+    usage = getattr(response, "usage", None)
+    input_details = getattr(usage, "input_tokens_details", None)
+    output_details = getattr(usage, "output_tokens_details", None)
+
+    telemetry = {
+        "requested_model": requested_model,
+        "response_model": getattr(response, "model", None),
+        "api_attempts": api_attempts,
+        "structured_outputs": used_structured_outputs,
+        "input_tokens": getattr(usage, "input_tokens", None),
+        "output_tokens": getattr(usage, "output_tokens", None),
+        "total_tokens": getattr(usage, "total_tokens", None),
+        "cached_input_tokens": getattr(input_details, "cached_tokens", None),
+        "reasoning_tokens": getattr(output_details, "reasoning_tokens", None),
+    }
+    return {
+        key: value
+        for key, value in telemetry.items()
+        if value is not None
+    }
 
 
 def create_openai_client() -> OpenAI:
@@ -569,7 +617,11 @@ def build_generation_input(user_prompt: str, max_examples: int = 3) -> str:
     return json.dumps(generation_input, indent=2)
 
 
-def prompt_to_model_data(user_prompt: str) -> dict:
+def prompt_to_model_data(
+    user_prompt: str,
+    *,
+    telemetry: dict | None = None,
+) -> dict:
     """Convert a natural language CAD request into structured model data."""
     client = create_openai_client()
 
@@ -580,10 +632,15 @@ def prompt_to_model_data(user_prompt: str) -> dict:
         input_text=build_generation_input(user_prompt),
         schema=OPENAI_RELATIONAL_CAD_MODEL_SCHEMA,
         schema_name="cad_model",
+        telemetry=telemetry,
     )
 
 
-def prompt_to_design_intent(user_prompt: str) -> dict:
+def prompt_to_design_intent(
+    user_prompt: str,
+    *,
+    telemetry: dict | None = None,
+) -> dict:
     """Convert a natural language CAD request into high-level design intent."""
     client = create_openai_client()
 
@@ -594,6 +651,7 @@ def prompt_to_design_intent(user_prompt: str) -> dict:
         input_text=build_generation_input(user_prompt),
         schema=OPENAI_DESIGN_INTENT_SCHEMA,
         schema_name="cad_design_intent",
+        telemetry=telemetry,
     )
 
 

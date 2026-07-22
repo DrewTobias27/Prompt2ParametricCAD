@@ -1,6 +1,7 @@
 """Tests for prompt generation and repair control flow."""
 
 import json
+from types import SimpleNamespace
 
 import httpx
 from openai import APIStatusError
@@ -43,6 +44,50 @@ def test_create_json_response_retries_any_http_400_without_schema():
     assert result == {"operations": []}
     assert "text" in responses.calls[0]
     assert "text" not in responses.calls[1]
+
+
+def test_create_json_response_collects_non_secret_usage_telemetry():
+    response = SimpleNamespace(
+        output_text='{"operations": []}',
+        model="gpt-test-snapshot",
+        usage=SimpleNamespace(
+            input_tokens=120,
+            output_tokens=45,
+            total_tokens=165,
+            input_tokens_details=SimpleNamespace(cached_tokens=80),
+            output_tokens_details=SimpleNamespace(reasoning_tokens=30),
+        ),
+    )
+
+    class Responses:
+        def create(self, **kwargs):
+            return response
+
+    client = SimpleNamespace(responses=Responses())
+    telemetry = {}
+
+    result = prompting.create_json_response(
+        client,
+        model="gpt-test",
+        instructions="Return CAD JSON.",
+        input_text="make a plate",
+        schema={"type": "object"},
+        schema_name="cad_model",
+        telemetry=telemetry,
+    )
+
+    assert result == {"operations": []}
+    assert telemetry == {
+        "requested_model": "gpt-test",
+        "response_model": "gpt-test-snapshot",
+        "api_attempts": 1,
+        "structured_outputs": True,
+        "input_tokens": 120,
+        "output_tokens": 45,
+        "total_tokens": 165,
+        "cached_input_tokens": 80,
+        "reasoning_tokens": 30,
+    }
 
 
 def test_openai_model_uses_task_specific_then_general_override(monkeypatch):

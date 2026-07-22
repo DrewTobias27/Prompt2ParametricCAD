@@ -273,7 +273,7 @@ def test_run_intent_reports_generation_lowering_and_evaluation_timings(monkeypat
     monkeypatch.setattr(
         tiny_api_compare,
         "prompt_to_design_intent",
-        lambda prompt: {
+        lambda prompt, telemetry=None: {
             "required_concepts": ["plate"],
             "base": {
                 "id": "base",
@@ -295,6 +295,64 @@ def test_run_intent_reports_generation_lowering_and_evaluation_timings(monkeypat
         result["performance"]
     )
     assert result["performance"]["total_seconds"] >= 0
+
+
+def test_attach_report_summary_aggregates_api_usage():
+    report = {
+        "cases": [
+            {
+                "case": "one",
+                "results": [
+                    {
+                        "mode": "intent",
+                        "status": "pass",
+                        "elapsed_seconds": 1.0,
+                        "api_telemetry": {
+                            "input_tokens": 100,
+                            "cached_input_tokens": 40,
+                            "output_tokens": 20,
+                            "reasoning_tokens": 10,
+                            "total_tokens": 120,
+                        },
+                    }
+                ],
+            },
+            {
+                "case": "two",
+                "results": [
+                    {
+                        "mode": "intent",
+                        "status": "pass",
+                        "elapsed_seconds": 2.0,
+                        "api_telemetry": {
+                            "input_tokens": 200,
+                            "cached_input_tokens": 80,
+                            "output_tokens": 40,
+                            "reasoning_tokens": 20,
+                            "total_tokens": 240,
+                        },
+                    }
+                ],
+            },
+        ]
+    }
+
+    tiny_api_compare.attach_report_summary(report)
+
+    assert report["summary"]["api_usage_totals"] == {
+        "input_tokens": 300,
+        "cached_input_tokens": 120,
+        "output_tokens": 60,
+        "reasoning_tokens": 30,
+        "total_tokens": 360,
+    }
+    assert report["summary"]["api_usage_averages"] == {
+        "input_tokens": 150.0,
+        "cached_input_tokens": 60.0,
+        "output_tokens": 30.0,
+        "reasoning_tokens": 15.0,
+        "total_tokens": 180.0,
+    }
 
 
 def test_filter_prompt_cases_uses_requested_names():

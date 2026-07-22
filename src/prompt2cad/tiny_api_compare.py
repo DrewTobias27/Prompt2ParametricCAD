@@ -69,6 +69,14 @@ CANONICAL_TIMING_STAGES = [
     "pipeline_overhead_seconds",
 ]
 
+API_USAGE_FIELDS = [
+    "input_tokens",
+    "cached_input_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "total_tokens",
+]
+
 
 def elapsed_seconds(started_at: float) -> float:
     """Return a stable, report-friendly elapsed time."""
@@ -313,14 +321,16 @@ def run_direct(prompt: str) -> dict[str, Any]:
     """Generate final model JSON directly from the prompt."""
     started_at = time.perf_counter()
     performance: dict[str, float] = {}
+    api_telemetry: dict[str, Any] = {}
     try:
         with record_timing(performance, "api_seconds"):
-            model_data = prompt_to_model_data(prompt)
+            model_data = prompt_to_model_data(prompt, telemetry=api_telemetry)
         evaluation = evaluate_model_data(model_data)
         performance.update(evaluation.pop("performance", {}))
         performance["total_seconds"] = elapsed_seconds(started_at)
         return {
             "model_data": model_data,
+            "api_telemetry": api_telemetry,
             **evaluation,
             "performance": performance,
         }
@@ -333,9 +343,13 @@ def run_intent(prompt: str) -> dict[str, Any]:
     """Generate design intent, then lower it deterministically to model JSON."""
     started_at = time.perf_counter()
     performance: dict[str, float] = {}
+    api_telemetry: dict[str, Any] = {}
     try:
         with record_timing(performance, "api_seconds"):
-            design_intent = prompt_to_design_intent(prompt)
+            design_intent = prompt_to_design_intent(
+                prompt,
+                telemetry=api_telemetry,
+            )
         with record_timing(performance, "intent_checks_seconds"):
             coverage_failures = intent_coverage_failures(design_intent)
             missing_dimensions = missing_required_intent_dimensions(design_intent)
@@ -357,6 +371,7 @@ def run_intent(prompt: str) -> dict[str, Any]:
         raise
     return {
         "design_intent": design_intent,
+        "api_telemetry": api_telemetry,
         "intent_coverage_passed": not coverage_failures,
         "intent_coverage_failures": coverage_failures,
         "intent_missing_required_dimensions": missing_dimensions,
@@ -422,6 +437,9 @@ def attach_report_summary(report: dict[str, Any]) -> dict[str, Any]:
     stage_samples: dict[str, list[float]] = {
         stage: [] for stage in CANONICAL_TIMING_STAGES
     }
+    usage_samples: dict[str, list[int]] = {
+        field: [] for field in API_USAGE_FIELDS
+    }
 
     for case, result in results:
         status = result.get("status", "unknown")
@@ -443,6 +461,12 @@ def attach_report_summary(report: dict[str, Any]) -> dict[str, Any]:
             value = performance.get(stage)
             if isinstance(value, (int, float)):
                 stage_samples[stage].append(float(value))
+
+        api_telemetry = result.get("api_telemetry", {})
+        for field in API_USAGE_FIELDS:
+            value = api_telemetry.get(field)
+            if isinstance(value, (int, float)):
+                usage_samples[field].append(int(value))
 
     total_elapsed_seconds = round(
         sum(result["elapsed_seconds"] for result in timed_results),
@@ -490,6 +514,16 @@ def attach_report_summary(report: dict[str, Any]) -> dict[str, Any]:
             if samples
         },
         "dominant_stage": dominant_stage,
+        "api_usage_totals": {
+            field: sum(samples)
+            for field, samples in usage_samples.items()
+            if samples
+        },
+        "api_usage_averages": {
+            field: round(sum(samples) / len(samples), 1)
+            for field, samples in usage_samples.items()
+            if samples
+        },
     }
     return report
 
@@ -879,6 +913,13 @@ def print_summary(report: dict[str, Any], output_path: Path) -> None:
                 for stage, value in performance_averages.items()
             )
             print(f"AVERAGE STAGES {stage_text}")
+        usage_averages = summary.get("api_usage_averages", {})
+        if usage_averages:
+            usage_text = " ".join(
+                f"{api_usage_label(field)}={value}"
+                for field, value in usage_averages.items()
+            )
+            print(f"AVERAGE API TOKENS {usage_text}")
 
     for case in report["cases"]:
         print(f"CASE {case['case']}: {case['prompt'][:90]}")
@@ -939,6 +980,18 @@ def print_summary(report: dict[str, Any], output_path: Path) -> None:
             )
             if stage_text:
                 print(f"    TIMING {stage_text}")
+            api_telemetry = result.get("api_telemetry", {})
+            if api_telemetry:
+                model = api_telemetry.get("response_model") or api_telemetry.get(
+                    "requested_model",
+                    "unknown",
+                )
+                usage_text = " ".join(
+                    f"{api_usage_label(field)}={api_telemetry[field]}"
+                    for field in API_USAGE_FIELDS
+                    if field in api_telemetry
+                )
+                print(f"    API model={model} {usage_text}".rstrip())
 
 
 def timing_stage_label(stage: str) -> str:
@@ -954,6 +1007,17 @@ def timing_stage_label(stage: str) -> str:
         "operation_effects_seconds": "op_effects",
         "pipeline_overhead_seconds": "overhead",
     }.get(stage, stage.removesuffix("_seconds"))
+
+
+def api_usage_label(field: str) -> str:
+    """Return compact terminal labels for API usage fields."""
+    return {
+        "input_tokens": "input",
+        "cached_input_tokens": "cached",
+        "output_tokens": "output",
+        "reasoning_tokens": "reasoning",
+        "total_tokens": "total",
+    }[field]
 
 
 def parse_args() -> argparse.Namespace:
