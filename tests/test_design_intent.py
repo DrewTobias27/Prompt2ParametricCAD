@@ -3,6 +3,7 @@
 import pytest
 
 from prompt2cad.design_intent import intent_to_model_data
+from prompt2cad.design_intent import offset_from_edge_position
 from prompt2cad.design_intent import validate_design_intent
 from prompt2cad.diagnostics import check_model_data
 from prompt2cad.schema import validate_model_data
@@ -299,6 +300,31 @@ def test_offset_from_edge_intent_places_feature_inward_from_named_edge():
     model_data = intent_to_model_data(intent)
 
     assert model_data["operations"][1]["positions"] == [[0, 25]]
+
+
+def test_offset_from_edge_clamps_along_coordinate_inside_target_face():
+    base = {
+        "profile": "rectangle",
+        "width": 90,
+        "height": 55,
+    }
+    wall = {
+        "shape": "rectangle",
+        "width": 90,
+        "height": 8,
+    }
+
+    positions = offset_from_edge_position(
+        base,
+        wall,
+        {
+            "edge": "front",
+            "offset": 0,
+            "along": 90,
+        },
+    )
+
+    assert positions == [[0, 23.5]]
 
 
 def test_rounded_rectangle_intent_lowers_to_arc_sketch_and_builds():

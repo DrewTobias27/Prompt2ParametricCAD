@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from prompt2cad import tiny_api_compare
 
 
@@ -295,6 +297,23 @@ def test_run_intent_reports_generation_lowering_and_evaluation_timings(monkeypat
         result["performance"]
     )
     assert result["performance"]["total_seconds"] >= 0
+
+
+def test_run_intent_preserves_api_telemetry_when_local_lowering_fails(monkeypatch):
+    def fake_prompt(prompt, telemetry=None):
+        telemetry.update({"reasoning_tokens": 123})
+        return {}
+
+    monkeypatch.setattr(
+        tiny_api_compare,
+        "prompt_to_design_intent",
+        fake_prompt,
+    )
+
+    with pytest.raises(Exception) as caught:
+        tiny_api_compare.run_intent("Create an invalid test part.")
+
+    assert caught.value.api_telemetry == {"reasoning_tokens": 123}
 
 
 def test_attach_report_summary_aggregates_api_usage():

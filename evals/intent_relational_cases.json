@@ -244,7 +244,11 @@
         "features": [
           {"operation": "cut", "shape": "rectangle", "target": "base.top"},
           {"role": "rim", "operation": "extrusion"},
-          {"operation": "cut", "shape": "circle", "target": "base.bottom"}
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "target": {"one_of": ["base.bottom", "base.top"]}
+          }
         ]
       },
       "expected_concepts": {

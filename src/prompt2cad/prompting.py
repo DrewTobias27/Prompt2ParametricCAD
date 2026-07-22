@@ -314,6 +314,10 @@ Supported placements:
 - offset_from_edge: for features placed a set distance from a named edge
   or described as offset upward/downward/inward from an edge. Prefer this over
   explicit coordinates when the prompt describes an edge-relative position.
+  offset is the inward distance perpendicular to the edge. along is the
+  feature-center coordinate parallel to the edge, measured from the target
+  center; use along 0 for a centered wall or feature. Never put the feature's
+  width, height, span, or length in along.
 - same_as_feature: for child features that must reuse every instance position
   of an earlier feature. Include source_feature with that earlier feature's id.
   Use this for requests such as "one hole in each boss", "a hole in every
@@ -344,6 +348,9 @@ Parent-child feature rules:
 - When there is one child for every repeated parent, use same_as_feature so
   the child inherits exact positions instead of independently recomputing a
   similar near-corner, mirrored, or circular pattern.
+- A hole through a vertical wall must target the appropriate vertical side
+  face of that wall. Do not target the wall's top face, which is its horizontal
+  cap and produces a cut in the wrong direction.
 - For a raised rim made as an outer extrusion followed by an inner cut, make
   the inner cut target the rim extrusion's top face. Give that inner cut a
   numeric depth equal to the rim extrusion distance so it removes only the
@@ -455,6 +462,7 @@ REPAIRABLE_QUALITY_WARNING_CODES = {
     "face_operation_targets_edge",
 }
 DEFAULT_OPENAI_MODEL = "gpt-5-mini"
+SUPPORTED_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high"}
 
 
 def parse_json_response_text(response_text: str) -> dict:
@@ -492,6 +500,7 @@ def create_json_response(
     schema: dict,
     schema_name: str,
     telemetry: dict | None = None,
+    reasoning_effort: str | None = None,
 ) -> dict:
     """Create a structured JSON response, with a JSON-only fallback for demos.
 
@@ -500,13 +509,19 @@ def create_json_response(
     plain JSON instructions so prompt mode can still run instead of failing
     completely.
     """
+    request_options = {
+        "model": model,
+        "input": input_text,
+    }
+    if reasoning_effort is not None:
+        request_options["reasoning"] = {"effort": reasoning_effort}
+
     api_attempts = 1
     used_structured_outputs = True
     try:
         response = client.responses.create(
-            model=model,
+            **request_options,
             instructions=instructions,
-            input=input_text,
             text={
                 "format": {
                     "type": "json_schema",
@@ -528,9 +543,8 @@ def create_json_response(
         )
         try:
             response = client.responses.create(
-                model=model,
+                **request_options,
                 instructions=fallback_instructions,
-                input=input_text,
             )
         except APIStatusError as fallback_error:
             detail = fallback_error.body or str(fallback_error)
@@ -546,6 +560,7 @@ def create_json_response(
                 requested_model=model,
                 api_attempts=api_attempts,
                 used_structured_outputs=used_structured_outputs,
+                requested_reasoning_effort=reasoning_effort,
             )
         )
 
@@ -558,6 +573,7 @@ def response_usage_telemetry(
     requested_model: str,
     api_attempts: int,
     used_structured_outputs: bool,
+    requested_reasoning_effort: str | None,
 ) -> dict:
     """Return non-secret model and token metadata from an API response."""
     usage = getattr(response, "usage", None)
@@ -569,6 +585,7 @@ def response_usage_telemetry(
         "response_model": getattr(response, "model", None),
         "api_attempts": api_attempts,
         "structured_outputs": used_structured_outputs,
+        "requested_reasoning_effort": requested_reasoning_effort,
         "input_tokens": getattr(usage, "input_tokens", None),
         "output_tokens": getattr(usage, "output_tokens", None),
         "total_tokens": getattr(usage, "total_tokens", None),
@@ -599,6 +616,25 @@ def openai_model(task: str = "generation") -> str:
         or os.getenv("PROMPT2CAD_OPENAI_MODEL")
         or DEFAULT_OPENAI_MODEL
     )
+
+
+def openai_reasoning_effort(task: str = "generation") -> str | None:
+    """Return an optional configured reasoning effort for one API task."""
+    task_specific_env = f"PROMPT2CAD_{task.upper()}_REASONING_EFFORT"
+    value = (
+        os.getenv(task_specific_env)
+        or os.getenv("PROMPT2CAD_REASONING_EFFORT")
+    )
+    if value is None or not value.strip():
+        return None
+
+    effort = value.strip().lower()
+    if effort not in SUPPORTED_REASONING_EFFORTS:
+        supported = ", ".join(sorted(SUPPORTED_REASONING_EFFORTS))
+        raise ValueError(
+            f"Unsupported reasoning effort '{effort}'. Supported values: {supported}."
+        )
+    return effort
 
 
 def build_generation_input(user_prompt: str, max_examples: int = 3) -> str:
@@ -633,6 +669,7 @@ def prompt_to_model_data(
         schema=OPENAI_RELATIONAL_CAD_MODEL_SCHEMA,
         schema_name="cad_model",
         telemetry=telemetry,
+        reasoning_effort=openai_reasoning_effort("generation"),
     )
 
 
@@ -652,6 +689,7 @@ def prompt_to_design_intent(
         schema=OPENAI_DESIGN_INTENT_SCHEMA,
         schema_name="cad_design_intent",
         telemetry=telemetry,
+        reasoning_effort=openai_reasoning_effort("intent"),
     )
 
 

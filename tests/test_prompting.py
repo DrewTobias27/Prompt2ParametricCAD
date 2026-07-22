@@ -90,6 +90,27 @@ def test_create_json_response_collects_non_secret_usage_telemetry():
     }
 
 
+def test_create_json_response_passes_optional_reasoning_effort():
+    calls = []
+
+    class Responses:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(output_text='{"operations": []}')
+
+    prompting.create_json_response(
+        SimpleNamespace(responses=Responses()),
+        model="gpt-test",
+        instructions="Return CAD JSON.",
+        input_text="make a plate",
+        schema={"type": "object"},
+        schema_name="cad_model",
+        reasoning_effort="low",
+    )
+
+    assert calls[0]["reasoning"] == {"effort": "low"}
+
+
 def test_openai_model_uses_task_specific_then_general_override(monkeypatch):
     monkeypatch.delenv("PROMPT2CAD_OPENAI_MODEL", raising=False)
     monkeypatch.delenv("PROMPT2CAD_REPAIR_MODEL", raising=False)
@@ -101,6 +122,21 @@ def test_openai_model_uses_task_specific_then_general_override(monkeypatch):
 
     monkeypatch.setenv("PROMPT2CAD_REPAIR_MODEL", "gpt-5.5-pro")
     assert prompting.openai_model("repair") == "gpt-5.5-pro"
+
+
+def test_openai_reasoning_effort_uses_task_specific_then_general_override(
+    monkeypatch,
+):
+    monkeypatch.delenv("PROMPT2CAD_REASONING_EFFORT", raising=False)
+    monkeypatch.delenv("PROMPT2CAD_INTENT_REASONING_EFFORT", raising=False)
+
+    assert prompting.openai_reasoning_effort("intent") is None
+
+    monkeypatch.setenv("PROMPT2CAD_REASONING_EFFORT", "medium")
+    assert prompting.openai_reasoning_effort("intent") == "medium"
+
+    monkeypatch.setenv("PROMPT2CAD_INTENT_REASONING_EFFORT", "LOW")
+    assert prompting.openai_reasoning_effort("intent") == "low"
 
 
 def test_prompt_to_model_data_with_repair_repairs_once(monkeypatch):

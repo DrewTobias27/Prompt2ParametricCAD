@@ -149,6 +149,7 @@ def error_details(error: Exception) -> dict[str, Any]:
         "intent_missing_required_dimensions",
         "model_data",
         "performance",
+        "api_telemetry",
     ]:
         if hasattr(error, attribute):
             details[attribute] = getattr(error, attribute)
@@ -335,6 +336,7 @@ def run_direct(prompt: str) -> dict[str, Any]:
             "performance": performance,
         }
     except Exception as error:
+        error.api_telemetry = api_telemetry
         attach_error_performance(error, performance, started_at)
         raise
 
@@ -367,6 +369,7 @@ def run_intent(prompt: str) -> dict[str, Any]:
             error.intent_missing_required_dimensions = missing_dimensions
         if "model_data" in locals():
             error.model_data = model_data
+        error.api_telemetry = api_telemetry
         attach_error_performance(error, performance, started_at)
         raise
     return {
@@ -1083,6 +1086,14 @@ def parse_args() -> argparse.Namespace:
         help="Skip the no-token API reachability check before generation.",
     )
     parser.add_argument(
+        "--reasoning-effort",
+        choices=["none", "minimal", "low", "medium", "high"],
+        help=(
+            "Optional reasoning effort for this benchmark. Omit to preserve "
+            "the production default. Start with low for a latency comparison."
+        ),
+    )
+    parser.add_argument(
         "--mode",
         action="append",
         choices=["direct", "intent"],
@@ -1105,6 +1116,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Run the tiny comparison from the command line."""
     args = parse_args()
+    if args.reasoning_effort is not None:
+        os.environ["PROMPT2CAD_REASONING_EFFORT"] = args.reasoning_effort
     if args.rescore_report is not None:
         prompt_cases = (
             filter_prompt_cases(load_prompt_cases(args.prompt_file), args.prompt_case)

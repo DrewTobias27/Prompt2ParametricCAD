@@ -1551,18 +1551,30 @@ def offset_from_edge_position(
     along = number_value(placement["along"])
 
     if edge == "front":
+        along_limit = max(0.0, (base_width - feature_width) / 2)
+        along = max(-along_limit, min(along, along_limit))
+        offset = max(0.0, min(offset, max(0.0, base_height - feature_height)))
         return rounded_points(
             [[along, base_height / 2 - offset - feature_height / 2]]
         )
     if edge == "back":
+        along_limit = max(0.0, (base_width - feature_width) / 2)
+        along = max(-along_limit, min(along, along_limit))
+        offset = max(0.0, min(offset, max(0.0, base_height - feature_height)))
         return rounded_points(
             [[along, -base_height / 2 + offset + feature_height / 2]]
         )
     if edge == "right":
+        along_limit = max(0.0, (base_height - feature_height) / 2)
+        along = max(-along_limit, min(along, along_limit))
+        offset = max(0.0, min(offset, max(0.0, base_width - feature_width)))
         return rounded_points(
             [[base_width / 2 - offset - feature_width / 2, along]]
         )
     if edge == "left":
+        along_limit = max(0.0, (base_height - feature_height) / 2)
+        along = max(-along_limit, min(along, along_limit))
+        offset = max(0.0, min(offset, max(0.0, base_width - feature_width)))
         return rounded_points(
             [[-base_width / 2 + offset + feature_width / 2, along]]
         )
