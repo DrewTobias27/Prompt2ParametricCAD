@@ -63,9 +63,11 @@ export function OutputPanel({ status, result, downloadUrl }) {
 function PerformanceSummary({ performance }) {
   const rows = [
     ["Total", performance.total_seconds],
-    ["API", performance.api_seconds],
-    ["Build", performance.build_seconds],
-    ["Export", performance.export_seconds],
+    ["AI generation", performance.api_seconds],
+    ["Intent lowering", performance.lowering_seconds],
+    ["Validation", performance.validation_seconds],
+    ["CAD build", performance.build_seconds],
+    ["STEP export", performance.export_seconds],
     ["Quality", performance.quality_seconds],
   ].filter(([, value]) => value !== undefined);
 

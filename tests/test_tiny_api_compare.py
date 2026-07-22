@@ -172,6 +172,10 @@ def test_attach_report_summary_counts_statuses_and_slowest_results():
                         "mode": "intent",
                         "status": "pass",
                         "elapsed_seconds": 1.0,
+                        "performance": {
+                            "api_seconds": 0.8,
+                            "build_seconds": 0.1,
+                        },
                     }
                 ],
             },
@@ -182,6 +186,10 @@ def test_attach_report_summary_counts_statuses_and_slowest_results():
                         "mode": "intent",
                         "status": "warn",
                         "elapsed_seconds": 3.0,
+                        "performance": {
+                            "api_seconds": 2.4,
+                            "build_seconds": 0.2,
+                        },
                     }
                 ],
             },
@@ -192,6 +200,9 @@ def test_attach_report_summary_counts_statuses_and_slowest_results():
                         "mode": "direct",
                         "status": "fail",
                         "elapsed_seconds": 2.0,
+                        "performance": {
+                            "api_seconds": 1.5,
+                        },
                     }
                 ],
             },
@@ -214,6 +225,76 @@ def test_attach_report_summary_counts_statuses_and_slowest_results():
     assert report["summary"]["average_elapsed_seconds"] == 2.0
     assert report["summary"]["total_elapsed_seconds"] == 6.0
     assert report["summary"]["slowest_results"][0]["case"] == "slow"
+    assert report["summary"]["performance_totals"] == {
+        "api_seconds": 4.7,
+        "build_seconds": 0.3,
+    }
+    assert report["summary"]["performance_averages"] == {
+        "api_seconds": 1.567,
+        "build_seconds": 0.15,
+    }
+    assert report["summary"]["performance_sample_counts"] == {
+        "api_seconds": 3,
+        "build_seconds": 2,
+    }
+    assert report["summary"]["dominant_stage"] == "api_seconds"
+
+
+def test_evaluate_model_data_reports_local_stage_timings():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 20,
+                "height": 12,
+                "distance": 3,
+            }
+        ]
+    }
+
+    result = tiny_api_compare.evaluate_model_data(model_data)
+
+    assert result["build_succeeded"] is True
+    assert result["operation_effects_passed"] is True
+    assert set(result["performance"]) == {
+        "validation_seconds",
+        "build_seconds",
+        "quality_seconds",
+        "operation_effects_seconds",
+        "evaluation_total_seconds",
+    }
+    assert all(value >= 0 for value in result["performance"].values())
+
+
+def test_run_intent_reports_generation_lowering_and_evaluation_timings(monkeypatch):
+    monkeypatch.setattr(
+        tiny_api_compare,
+        "prompt_to_design_intent",
+        lambda prompt: {
+            "required_concepts": ["plate"],
+            "base": {
+                "id": "base",
+                "role": "plate",
+                "profile": "rectangle",
+                "width": 20,
+                "height": 12,
+                "thickness": 3,
+            },
+            "features": [],
+            "edge_treatments": [],
+        },
+    )
+
+    result = tiny_api_compare.run_intent("Create a small plate.")
+
+    assert result["build_succeeded"] is True
+    assert set(tiny_api_compare.CANONICAL_TIMING_STAGES[:-1]).issubset(
+        result["performance"]
+    )
+    assert result["performance"]["total_seconds"] >= 0
 
 
 def test_filter_prompt_cases_uses_requested_names():
@@ -288,6 +369,7 @@ def test_rescore_report_adds_concept_results_without_api_calls(tmp_path):
                             {
                                 "mode": "intent",
                                 "status": "warn",
+                                "elapsed_seconds": 9.5,
                                 "model_data": {
                                     "operations": [
                                         {
@@ -340,6 +422,9 @@ def test_rescore_report_adds_concept_results_without_api_calls(tmp_path):
     assert result["status"] == "pass"
     assert result["quality_passed"] is True
     assert result["concept_passed"] is True
+    assert result["original_elapsed_seconds"] == 9.5
+    assert result["elapsed_seconds"] >= 0
+    assert result["performance"]["total_seconds"] >= 0
 
 
 def test_rescore_report_uses_current_prompt_case_expectations(tmp_path):

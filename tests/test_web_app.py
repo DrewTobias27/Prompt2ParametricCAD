@@ -73,6 +73,10 @@ def test_generate_cad_prefers_design_intent_and_returns_model(monkeypatch):
         {"path": "design_intent", "status": "success"}
     ]
     assert response["performance"]["cache_hit"] is False
+    assert response["performance"]["api_seconds"] >= 0
+    assert response["performance"]["lowering_seconds"] >= 0
+    assert response["performance"]["local_processing_seconds"] >= 0
+    assert response["performance"]["total_seconds"] >= 0
 
 
 def test_generate_cad_caches_successful_automatic_responses(monkeypatch):
@@ -200,6 +204,9 @@ def test_generate_cad_uses_direct_fallback_after_intent_failure(monkeypatch):
         "path": "direct",
         "status": "success",
     }
+    assert response["performance"]["intent_api_seconds"] >= 0
+    assert response["performance"]["direct_api_seconds"] >= 0
+    assert response["performance"]["lowering_seconds"] >= 0
 
 
 def test_generate_cad_does_not_retry_missing_credentials(monkeypatch):
@@ -404,6 +411,7 @@ def test_export_model_data_returns_quality_report(monkeypatch, tmp_path):
     assert response["quality_report"]["issues"] == []
     assert response["performance"]["build_seconds"] >= 0
     assert response["performance"]["export_model_total_seconds"] >= 0
+    assert response["performance"]["local_processing_seconds"] >= 0
 
 
 def test_build_cad_error_response_localizes_build_failure(monkeypatch):

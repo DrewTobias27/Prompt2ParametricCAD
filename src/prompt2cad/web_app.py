@@ -226,6 +226,7 @@ def export_model_data(model_data: dict, filename_hint: str) -> dict:
         exported_path=step_path,
     )
     quality_seconds = seconds_since(quality_started_at)
+    export_model_total_seconds = seconds_since(started_at)
 
     return {
         "status": "success",
@@ -238,7 +239,8 @@ def export_model_data(model_data: dict, filename_hint: str) -> dict:
             "build_seconds": build_seconds,
             "export_seconds": export_seconds,
             "quality_seconds": quality_seconds,
-            "export_model_total_seconds": seconds_since(started_at),
+            "export_model_total_seconds": export_model_total_seconds,
+            "local_processing_seconds": export_model_total_seconds,
             "cache_hit": False,
         },
     }
@@ -339,6 +341,7 @@ def generate_cad(request: CADRequest):
     intent_model_data = None
     intent_api_started_at = perf_counter()
     intent_api_seconds = 0.0
+    lowering_seconds = 0.0
 
     try:
         design_intent = prompt_to_design_intent(request.prompt)
@@ -363,6 +366,10 @@ def generate_cad(request: CADRequest):
             "api_seconds": intent_api_seconds,
             "intent_api_seconds": intent_api_seconds,
             "lowering_seconds": lowering_seconds,
+            "local_processing_seconds": combined_seconds(
+                lowering_seconds,
+                performance.get("export_model_total_seconds", 0.0),
+            ),
             "total_seconds": seconds_since(started_at),
             "cache_hit": False,
         })
@@ -374,6 +381,8 @@ def generate_cad(request: CADRequest):
         intent_failure = intent_error
         if intent_api_seconds == 0.0:
             intent_api_seconds = seconds_since(intent_api_started_at)
+        if "lowering_started_at" in locals() and lowering_seconds == 0.0:
+            lowering_seconds = seconds_since(lowering_started_at)
 
     intent_attempt = {
         "path": "design_intent",
@@ -398,6 +407,7 @@ def generate_cad(request: CADRequest):
             "performance": {
                 "api_seconds": intent_api_seconds,
                 "intent_api_seconds": intent_api_seconds,
+                "lowering_seconds": lowering_seconds,
                 "total_seconds": seconds_since(started_at),
                 "cache_hit": False,
             },
@@ -441,6 +451,11 @@ def generate_cad(request: CADRequest):
             ),
             "intent_api_seconds": intent_api_seconds,
             "direct_api_seconds": direct_api_seconds,
+            "lowering_seconds": lowering_seconds,
+            "local_processing_seconds": combined_seconds(
+                lowering_seconds,
+                performance.get("export_model_total_seconds", 0.0),
+            ),
             "total_seconds": seconds_since(started_at),
             "cache_hit": False,
         })
@@ -492,6 +507,7 @@ def generate_cad(request: CADRequest):
                 ),
                 "intent_api_seconds": intent_api_seconds,
                 "direct_api_seconds": direct_api_seconds,
+                "lowering_seconds": lowering_seconds,
                 "total_seconds": seconds_since(started_at),
                 "cache_hit": False,
             },

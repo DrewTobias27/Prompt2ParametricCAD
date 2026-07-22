@@ -11,6 +11,7 @@ That means 4 API calls total unless extra prompts are supplied.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -56,6 +57,66 @@ DEFAULT_EVAL_CASES = [
     "rigorous_plate_holes_boss",
 ]
 
+CANONICAL_TIMING_STAGES = [
+    "api_seconds",
+    "intent_checks_seconds",
+    "lowering_seconds",
+    "alignment_seconds",
+    "validation_seconds",
+    "build_seconds",
+    "quality_seconds",
+    "operation_effects_seconds",
+    "pipeline_overhead_seconds",
+]
+
+
+def elapsed_seconds(started_at: float) -> float:
+    """Return a stable, report-friendly elapsed time."""
+    return round(time.perf_counter() - started_at, 3)
+
+
+@contextmanager
+def record_timing(performance: dict[str, float], stage: str):
+    """Record one stage even when the measured operation raises."""
+    started_at = time.perf_counter()
+    try:
+        yield
+    finally:
+        performance[stage] = elapsed_seconds(started_at)
+
+
+def attach_error_performance(
+    error: Exception,
+    performance: dict[str, float],
+    started_at: float,
+) -> None:
+    """Preserve completed stage timings on a failed generation attempt."""
+    existing = getattr(error, "performance", {})
+    error.performance = {
+        **existing,
+        **performance,
+        "total_seconds": elapsed_seconds(started_at),
+    }
+
+
+def finalize_performance(
+    performance: dict[str, float],
+    total_seconds: float,
+) -> dict[str, float]:
+    """Attach total and otherwise-unmeasured orchestration time."""
+    result = dict(performance)
+    measured_seconds = sum(
+        float(result.get(stage, 0.0))
+        for stage in CANONICAL_TIMING_STAGES
+        if stage != "pipeline_overhead_seconds"
+    )
+    result["total_seconds"] = total_seconds
+    result["pipeline_overhead_seconds"] = round(
+        max(0.0, total_seconds - measured_seconds),
+        3,
+    )
+    return result
+
 
 def safe_case_name(value: Any) -> str:
     """Return a stable filesystem-friendly case name."""
@@ -79,6 +140,7 @@ def error_details(error: Exception) -> dict[str, Any]:
         "design_intent",
         "intent_missing_required_dimensions",
         "model_data",
+        "performance",
     ]:
         if hasattr(error, attribute):
             details[attribute] = getattr(error, attribute)
@@ -130,27 +192,39 @@ def evaluate_model_data(
     include_operation_effects: bool = True,
 ) -> dict[str, Any]:
     """Validate, build, and quality-check generated model data."""
-    validate_model_data(model_data)
-    part = build_model(model_data)
-    quality_report = check_model_quality(
-        model_data,
-        build_succeeded=True,
-        built_part=part,
-    )
-    result = {
-        "build_succeeded": True,
-        "quality_passed": quality_report.get("passed", False),
-        "quality_report": quality_report,
-    }
-    if include_operation_effects:
-        operation_effects = evaluate_operation_effects(model_data)
-        result.update({
-            "operation_effects_passed": operation_effects["passed"],
-            "operation_effect_failures": operation_effects["failures"],
-            "operation_effect_warnings": operation_effects["warnings"],
-            "operation_trace": operation_effects["trace"],
-        })
-    return result
+    started_at = time.perf_counter()
+    performance: dict[str, float] = {}
+    try:
+        with record_timing(performance, "validation_seconds"):
+            validate_model_data(model_data)
+        with record_timing(performance, "build_seconds"):
+            part = build_model(model_data)
+        with record_timing(performance, "quality_seconds"):
+            quality_report = check_model_quality(
+                model_data,
+                build_succeeded=True,
+                built_part=part,
+            )
+        result = {
+            "build_succeeded": True,
+            "quality_passed": quality_report.get("passed", False),
+            "quality_report": quality_report,
+        }
+        if include_operation_effects:
+            with record_timing(performance, "operation_effects_seconds"):
+                operation_effects = evaluate_operation_effects(model_data)
+            result.update({
+                "operation_effects_passed": operation_effects["passed"],
+                "operation_effect_failures": operation_effects["failures"],
+                "operation_effect_warnings": operation_effects["warnings"],
+                "operation_trace": operation_effects["trace"],
+            })
+        performance["evaluation_total_seconds"] = elapsed_seconds(started_at)
+        result["performance"] = performance
+        return result
+    except Exception as error:
+        attach_error_performance(error, performance, started_at)
+        raise
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -237,31 +311,49 @@ def evaluate_model_against_case(
 
 def run_direct(prompt: str) -> dict[str, Any]:
     """Generate final model JSON directly from the prompt."""
-    model_data = prompt_to_model_data(prompt)
-    return {
-        "model_data": model_data,
-        **evaluate_model_data(model_data),
-    }
+    started_at = time.perf_counter()
+    performance: dict[str, float] = {}
+    try:
+        with record_timing(performance, "api_seconds"):
+            model_data = prompt_to_model_data(prompt)
+        evaluation = evaluate_model_data(model_data)
+        performance.update(evaluation.pop("performance", {}))
+        performance["total_seconds"] = elapsed_seconds(started_at)
+        return {
+            "model_data": model_data,
+            **evaluation,
+            "performance": performance,
+        }
+    except Exception as error:
+        attach_error_performance(error, performance, started_at)
+        raise
 
 
 def run_intent(prompt: str) -> dict[str, Any]:
     """Generate design intent, then lower it deterministically to model JSON."""
-    design_intent = prompt_to_design_intent(prompt)
-    coverage_failures = intent_coverage_failures(design_intent)
-    missing_dimensions = missing_required_intent_dimensions(design_intent)
+    started_at = time.perf_counter()
+    performance: dict[str, float] = {}
     try:
-        model_data = intent_to_model_data(design_intent)
-    except Exception as error:
-        error.design_intent = design_intent
-        error.intent_missing_required_dimensions = missing_dimensions
-        raise
-    intent_alignment = evaluate_intent_alignment(design_intent, model_data)
-    try:
+        with record_timing(performance, "api_seconds"):
+            design_intent = prompt_to_design_intent(prompt)
+        with record_timing(performance, "intent_checks_seconds"):
+            coverage_failures = intent_coverage_failures(design_intent)
+            missing_dimensions = missing_required_intent_dimensions(design_intent)
+        with record_timing(performance, "lowering_seconds"):
+            model_data = intent_to_model_data(design_intent)
+        with record_timing(performance, "alignment_seconds"):
+            intent_alignment = evaluate_intent_alignment(design_intent, model_data)
         evaluation = evaluate_model_data(model_data)
+        performance.update(evaluation.pop("performance", {}))
+        performance["total_seconds"] = elapsed_seconds(started_at)
     except Exception as error:
-        error.design_intent = design_intent
-        error.intent_missing_required_dimensions = missing_dimensions
-        error.model_data = model_data
+        if "design_intent" in locals():
+            error.design_intent = design_intent
+        if "missing_dimensions" in locals():
+            error.intent_missing_required_dimensions = missing_dimensions
+        if "model_data" in locals():
+            error.model_data = model_data
+        attach_error_performance(error, performance, started_at)
         raise
     return {
         "design_intent": design_intent,
@@ -272,6 +364,7 @@ def run_intent(prompt: str) -> dict[str, Any]:
         "intent_alignment_failures": intent_alignment["failures"],
         "model_data": model_data,
         **evaluation,
+        "performance": performance,
     }
 
 
@@ -285,18 +378,31 @@ def run_case(prompt: str, mode: str) -> dict[str, Any]:
             result = run_intent(prompt)
         else:
             raise ValueError(f"Unsupported mode: {mode}")
+        total_seconds = elapsed_seconds(started_at)
+        performance = finalize_performance(
+            result.get("performance", {}),
+            total_seconds,
+        )
         return {
             "mode": mode,
             "status": status_for_result(result),
-            "elapsed_seconds": round(time.perf_counter() - started_at, 2),
+            "elapsed_seconds": round(total_seconds, 2),
             **result,
+            "performance": performance,
         }
     except Exception as error:  # noqa: BLE001 - command-line report should capture any failure.
+        total_seconds = elapsed_seconds(started_at)
+        details = error_details(error)
+        performance = finalize_performance(
+            details.get("performance", {}),
+            total_seconds,
+        )
         return {
             "mode": mode,
             "status": "fail",
-            "elapsed_seconds": round(time.perf_counter() - started_at, 2),
-            **error_details(error),
+            "elapsed_seconds": round(total_seconds, 2),
+            **details,
+            "performance": performance,
         }
 
 
@@ -313,6 +419,9 @@ def attach_report_summary(report: dict[str, Any]) -> dict[str, Any]:
     status_counts = {"pass": 0, "warn": 0, "fail": 0}
     mode_counts: dict[str, int] = {}
     timed_results = []
+    stage_samples: dict[str, list[float]] = {
+        stage: [] for stage in CANONICAL_TIMING_STAGES
+    }
 
     for case, result in results:
         status = result.get("status", "unknown")
@@ -329,6 +438,12 @@ def attach_report_summary(report: dict[str, Any]) -> dict[str, Any]:
                 "elapsed_seconds": float(result["elapsed_seconds"]),
             })
 
+        performance = result.get("performance", {})
+        for stage in CANONICAL_TIMING_STAGES:
+            value = performance.get(stage)
+            if isinstance(value, (int, float)):
+                stage_samples[stage].append(float(value))
+
     total_elapsed_seconds = round(
         sum(result["elapsed_seconds"] for result in timed_results),
         2,
@@ -343,6 +458,21 @@ def attach_report_summary(report: dict[str, Any]) -> dict[str, Any]:
         key=lambda result: result["elapsed_seconds"],
         reverse=True,
     )[:3]
+    performance_totals = {
+        stage: round(sum(samples), 3)
+        for stage, samples in stage_samples.items()
+        if samples
+    }
+    performance_averages = {
+        stage: round(sum(samples) / len(samples), 3)
+        for stage, samples in stage_samples.items()
+        if samples
+    }
+    dominant_stage = (
+        max(performance_totals, key=performance_totals.get)
+        if performance_totals
+        else None
+    )
 
     report["summary"] = {
         "case_count": len(report.get("cases", [])),
@@ -352,6 +482,14 @@ def attach_report_summary(report: dict[str, Any]) -> dict[str, Any]:
         "total_elapsed_seconds": total_elapsed_seconds,
         "average_elapsed_seconds": average_elapsed_seconds,
         "slowest_results": slowest_results,
+        "performance_totals": performance_totals,
+        "performance_averages": performance_averages,
+        "performance_sample_counts": {
+            stage: len(samples)
+            for stage, samples in stage_samples.items()
+            if samples
+        },
+        "dominant_stage": dominant_stage,
     }
     return report
 
@@ -484,6 +622,7 @@ def rescore_report(
             **prompt_case_lookup.get(str(case.get("case")), {}),
         }
         for result in case.get("results", []):
+            rescore_started_at = time.perf_counter()
             model_data = result.get("model_data")
             if result.get("design_intent") is not None:
                 try:
@@ -505,6 +644,7 @@ def rescore_report(
                 except Exception as error:  # noqa: BLE001 - report should capture failures.
                     result.update(error_details(error))
                     result["status"] = "fail"
+                    attach_rescore_performance(result, rescore_started_at)
                     continue
 
             if model_data is not None:
@@ -515,11 +655,13 @@ def rescore_report(
                 except Exception as error:  # noqa: BLE001 - report should capture failures.
                     result.update(error_details(error))
                     result["status"] = "fail"
+                    attach_rescore_performance(result, rescore_started_at)
                     continue
 
             attach_prompt_case_expectations(result, prompt_case)
             if model_data is not None:
                 result["status"] = status_for_result(result)
+            attach_rescore_performance(result, rescore_started_at)
 
     report["rescored_from"] = str(report_path)
     report["api_call_budget"] = 0
@@ -527,6 +669,22 @@ def rescore_report(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report
+
+
+def attach_rescore_performance(
+    result: dict[str, Any],
+    started_at: float,
+) -> None:
+    """Keep original API duration separate from new local rescore timing."""
+    if "elapsed_seconds" in result and "original_elapsed_seconds" not in result:
+        result["original_elapsed_seconds"] = result["elapsed_seconds"]
+
+    total_seconds = elapsed_seconds(started_at)
+    result["elapsed_seconds"] = round(total_seconds, 2)
+    result["performance"] = finalize_performance(
+        result.get("performance", {}),
+        total_seconds,
+    )
 
 
 def clear_error_details(result: dict[str, Any]) -> None:
@@ -714,6 +872,13 @@ def print_summary(report: dict[str, Any], output_path: Path) -> None:
                 for result in slowest_results
             )
             print(f"SLOWEST {slowest}")
+        performance_averages = summary.get("performance_averages", {})
+        if performance_averages:
+            stage_text = " ".join(
+                f"{timing_stage_label(stage)}={value}s"
+                for stage, value in performance_averages.items()
+            )
+            print(f"AVERAGE STAGES {stage_text}")
 
     for case in report["cases"]:
         print(f"CASE {case['case']}: {case['prompt'][:90]}")
@@ -766,6 +931,29 @@ def print_summary(report: dict[str, Any], output_path: Path) -> None:
                 f"  {result['status'].upper()} {result['mode']} "
                 f"{result['elapsed_seconds']}s {detail}"
             )
+            performance = result.get("performance", {})
+            stage_text = " ".join(
+                f"{timing_stage_label(stage)}={performance[stage]}s"
+                for stage in CANONICAL_TIMING_STAGES
+                if stage in performance
+            )
+            if stage_text:
+                print(f"    TIMING {stage_text}")
+
+
+def timing_stage_label(stage: str) -> str:
+    """Return compact terminal labels for timing-stage keys."""
+    return {
+        "api_seconds": "api",
+        "intent_checks_seconds": "intent_checks",
+        "lowering_seconds": "lowering",
+        "alignment_seconds": "alignment",
+        "validation_seconds": "validation",
+        "build_seconds": "build",
+        "quality_seconds": "quality",
+        "operation_effects_seconds": "op_effects",
+        "pipeline_overhead_seconds": "overhead",
+    }.get(stage, stage.removesuffix("_seconds"))
 
 
 def parse_args() -> argparse.Namespace:
