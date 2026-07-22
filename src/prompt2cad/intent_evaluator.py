@@ -14,6 +14,7 @@ from prompt2cad.design_intent import remove_null_values
 from prompt2cad.design_intent import validate_design_intent
 from prompt2cad.diagnostics import check_model_data
 from prompt2cad.intent_coverage import intent_coverage_failures
+from prompt2cad.concept_evaluator import value_matches
 
 
 DEFAULT_CASES_DIR = Path("evals/intent_cases")
@@ -35,7 +36,7 @@ def load_json(path: Path) -> dict[str, Any]:
 
 def values_match(actual_value: object, expected_value: object) -> bool:
     """Return whether an actual intent value matches an expected value."""
-    return actual_value == expected_value
+    return value_matches(actual_value, expected_value)
 
 
 def find_matching_feature(

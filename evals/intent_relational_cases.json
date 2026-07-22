@@ -1,0 +1,306 @@
+{
+  "description": "Focused relational CAD suite. Each case checks requested feature vocabulary, target ownership, pattern preservation, cross-feature alignment, final geometry, and per-operation physical effects.",
+  "cases": [
+    {
+      "name": "corner_bosses_with_concentric_holes",
+      "prompt": "Create a 100 mm by 70 mm rectangular plate, 8 mm thick. Add four 16 mm diameter circular bosses near the corners, each 6 mm tall, and put one concentric 5 mm through hole through each boss.",
+      "focus": "A child hole must inherit every parent-boss position and target the bosses.",
+      "expected_intent": {
+        "base": {"profile": "rectangle"},
+        "features": [
+          {"operation": "extrusion", "shape": "circle", "placement": {"type": "near_corners"}},
+          {"operation": "cut", "shape": "circle", "placement": {"type": "same_as_feature", "source_feature": "corner_bosses"}}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "rectangle"},
+        "operations": [
+          {"type": "add_extrude", "profile": "circle", "positions": {"length": 4, "unique_length": 4}},
+          {"type": "cut", "profile": "circle", "positions": {"length": 4, "unique_length": 4}}
+        ],
+        "operation_relationships": [
+          {
+            "type": "same_positions",
+            "features": [
+              {"type": "add_extrude", "profile": "circle"},
+              {"type": "cut", "profile": "circle"}
+            ]
+          },
+          {
+            "type": "same_instance_count",
+            "features": [
+              {"type": "add_extrude", "profile": "circle"},
+              {"type": "cut", "profile": "circle"}
+            ]
+          },
+          {
+            "type": "targets_parent",
+            "feature": {"type": "cut", "profile": "circle"},
+            "parent": {"type": "add_extrude", "profile": "circle"}
+          },
+          {
+            "type": "dimension_order",
+            "smaller": {"type": "cut", "profile": "circle"},
+            "larger": {"type": "add_extrude", "profile": "circle"},
+            "field": "diameter"
+          }
+        ],
+        "geometry": {"solid_count": 1}
+      }
+    },
+    {
+      "name": "counterbored_bolt_circle",
+      "prompt": "Create a 110 mm diameter circular flange, 12 mm thick, with six equally spaced counterbored bolt holes on a 78 mm bolt circle. Each through hole is 6 mm diameter and each counterbore is 12 mm diameter by 4 mm deep.",
+      "focus": "Two concentric circular patterns must share six exact centers and preserve diameter order.",
+      "expected_intent": {
+        "base": {"profile": {"one_of": ["circle", "cylinder"]}},
+        "features": [
+          {"operation": "cut", "shape": "circle", "placement": {"type": "circular_pattern"}},
+          {"operation": "cut", "shape": "circle", "placement": {"type": "circular_pattern"}}
+        ]
+      },
+      "expected_concepts": {
+        "operation_counts": {"cut": 2},
+        "operations": [
+          {
+            "type": "cut",
+            "profile": "circle",
+            "diameter": {"approx": 6, "tolerance": 0.1},
+            "depth": "through",
+            "positions": {"length": 6, "unique_length": 6, "circular_pattern": {"count": 6, "radius": 39, "tolerance": 0.2}}
+          },
+          {
+            "type": "cut",
+            "profile": "circle",
+            "diameter": {"approx": 12, "tolerance": 0.1},
+            "depth": {"approx": 4, "tolerance": 0.1},
+            "positions": {"length": 6, "unique_length": 6, "circular_pattern": {"count": 6, "radius": 39, "tolerance": 0.2}}
+          }
+        ],
+        "operation_relationships": [
+          {
+            "type": "same_positions",
+            "features": [
+              {"type": "cut", "diameter": {"approx": 6, "tolerance": 0.1}},
+              {"type": "cut", "diameter": {"approx": 12, "tolerance": 0.1}}
+            ]
+          },
+          {
+            "type": "dimension_order",
+            "smaller": {"type": "cut", "diameter": {"approx": 6, "tolerance": 0.1}},
+            "larger": {"type": "cut", "diameter": {"approx": 12, "tolerance": 0.1}},
+            "field": "diameter"
+          }
+        ],
+        "geometry": {"solid_count": 1}
+      }
+    },
+    {
+      "name": "u_bracket_one_hole_per_wall",
+      "prompt": "Create a U bracket from a 90 mm by 55 mm by 8 mm base plate with two 8 mm thick vertical side walls, each 45 mm tall. Put one 8 mm through hole through the center of each wall.",
+      "focus": "Two wall holes must target wall faces rather than the base.",
+      "expected_intent": {
+        "base": {"profile": "rectangle"},
+        "features": [
+          {"role": "wall", "operation": "extrusion", "shape": "rectangle"},
+          {"role": "hole", "operation": "cut", "shape": "circle"}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "rectangle"},
+        "min_operation_counts": {"add_extrude": 2, "cut": 1},
+        "operations": [
+          {"type": "cut", "profile": "circle", "target": {"contains": "wall"}}
+        ],
+        "geometry": {"solid_count": 1}
+      }
+    },
+    {
+      "name": "nested_boss_side_cross_hole",
+      "prompt": "Create a 90 mm by 60 mm by 10 mm rectangular base. Add a centered 42 mm by 28 mm rectangular boss 14 mm tall, add a centered 22 mm diameter circular boss 10 mm tall on top of it, then cut an 8 mm horizontal through hole through the side of the rectangular boss.",
+      "focus": "Nested parent-child targets and a side-face cross hole.",
+      "expected_intent": {
+        "base": {"profile": "rectangle"},
+        "features": [
+          {"operation": "extrusion", "shape": "rectangle", "placement": {"type": "centered"}},
+          {"operation": "extrusion", "shape": "circle", "placement": {"type": "centered"}},
+          {"operation": "cut", "shape": "circle"}
+        ]
+      },
+      "expected_concepts": {
+        "min_operation_counts": {"add_extrude": 2, "cut": 1},
+        "operations": [
+          {"type": "add_extrude", "profile": "rectangle"},
+          {"type": "add_extrude", "profile": "circle"},
+          {"type": "cut", "profile": "circle", "target": {"contains": "boss."}}
+        ],
+        "geometry": {"solid_count": 1}
+      }
+    },
+    {
+      "name": "stepped_shaft_collars_grooves_end_bore",
+      "prompt": "Create a 24 mm diameter shaft 100 mm long, add two 36 mm diameter collars that are each 8 mm wide, cut one 3 mm wide circumferential groove beside each collar, and add a centered 8 mm diameter blind axial bore 20 mm deep from one end.",
+      "focus": "Multiple revolved additions/cuts plus a planar end-face bore.",
+      "expected_intent": {
+        "base": {"profile": "cylinder"},
+        "features": [
+          {"operation": "revolved_extrusion", "shape": "rectangle"},
+          {"operation": "revolved_cut", "shape": "rectangle"},
+          {"operation": "cut", "shape": "circle"}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "revolve", "angle": 360},
+        "min_operation_counts": {"add_revolve": 1, "cut_revolve": 1, "cut": 1},
+        "operations": [
+          {"type": "cut", "profile": "circle", "target": {"one_of": ["base.front", "base.back"]}, "depth": {"approx": 20, "tolerance": 0.2}}
+        ],
+        "geometry": {"solid_count": 1}
+      }
+    },
+    {
+      "name": "half_cylinder_plate_holes_and_groove",
+      "prompt": "Create an 80 mm diameter half-cylinder cradle 120 mm long. Attach a flat 120 mm by 80 mm mounting plate to its flat face, cut two 7 mm through holes through the plate, and cut a centered 70 mm long by 8 mm wide rounded groove 3 mm deep along the curved surface.",
+      "focus": "Flat versus curved half-cylinder references and tangent-plane placement.",
+      "expected_intent": {
+        "base": {"profile": "half_cylinder"},
+        "features": [
+          {"role": "mounting_plate", "operation": "extrusion", "shape": "rectangle"},
+          {"operation": "cut", "shape": "circle"},
+          {"role": "groove", "operation": "cut", "shape": {"one_of": ["slot", "rounded_rectangle"]}}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "revolve", "angle": 180},
+        "min_operation_counts": {"add_extrude": 1, "cut": 2},
+        "operations": [
+          {"type": "add_extrude", "profile": "rectangle"},
+          {"type": "cut", "profile": "circle", "positions": {"length": 2, "unique_length": 2}},
+          {"type": "cut", "profile": "sketch"}
+        ],
+        "geometry": {"solid_count": 1}
+      }
+    },
+    {
+      "name": "triangular_vertex_boss_hole_pairs",
+      "prompt": "Create an equilateral triangular plate 110 mm across and 7 mm thick. Place a 14 mm diameter boss near each of the three vertices and cut one concentric 4 mm through hole through every boss.",
+      "focus": "Nonrectangular containment and inherited three-instance placement.",
+      "expected_intent": {
+        "base": {"profile": "polygon"},
+        "features": [
+          {"operation": "extrusion", "shape": "circle"},
+          {"operation": "cut", "shape": "circle"}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "polygon"},
+        "operations": [
+          {"type": "add_extrude", "profile": "circle", "positions": {"length": 3, "unique_length": 3}},
+          {"type": "cut", "profile": "circle", "positions": {"length": 3, "unique_length": 3}}
+        ],
+        "operation_relationships": [
+          {
+            "type": "same_positions",
+            "features": [
+              {"type": "add_extrude", "profile": "circle"},
+              {"type": "cut", "profile": "circle"}
+            ]
+          },
+          {
+            "type": "targets_parent",
+            "feature": {"type": "cut", "profile": "circle"},
+            "parent": {"type": "add_extrude", "profile": "circle"}
+          }
+        ],
+        "geometry": {"solid_count": 1}
+      }
+    },
+    {
+      "name": "hub_with_six_connected_spokes",
+      "prompt": "Create a 100 mm diameter circular plate 6 mm thick with a centered 28 mm diameter hub 10 mm tall and six identical 8 mm wide raised radial spokes connecting the hub toward the outer edge, evenly spaced around the center.",
+      "focus": "Radial count, equal spacing, and physical connection of every spoke.",
+      "expected_intent": {
+        "base": {"profile": "circle"},
+        "features": [
+          {"role": "hub", "operation": "extrusion", "shape": "circle", "placement": {"type": "centered"}},
+          {"role": "spoke", "operation": "extrusion", "shape": "rectangle", "placement": {"type": "circular_pattern"}}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "circle"},
+        "operations": [
+          {"type": "add_extrude", "profile": "circle", "positions": {"length": 1}},
+          {"type": "add_extrude", "profile": "rectangle", "positions": {"length": 6, "unique_length": 6, "circular_pattern": {"count": 6}}}
+        ],
+        "geometry": {"solid_count": 1}
+      }
+    },
+    {
+      "name": "open_tray_rim_and_bottom_drain",
+      "prompt": "Create a 120 mm by 80 mm by 20 mm rectangular tray with 4 mm walls and an open top. Add a 3 mm tall raised rim around the opening and a centered 8 mm through drain hole through the tray bottom.",
+      "focus": "Pocket/shell representation, connected rim, and drain through remaining bottom material.",
+      "expected_intent": {
+        "base": {"profile": "rectangle"},
+        "features": [
+          {"operation": "cut", "shape": "rectangle", "target": "base.top"},
+          {"role": "rim", "operation": "extrusion"},
+          {"operation": "cut", "shape": "circle", "target": "base.bottom"}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "rectangle"},
+        "min_operation_counts": {"cut": 2, "add_extrude": 1},
+        "operations": [
+          {"type": "cut", "profile": "circle", "positions": {"length": 1}}
+        ],
+        "geometry": {"solid_count": 1}
+      }
+    },
+    {
+      "name": "d_plate_side_tabs_with_tab_holes",
+      "prompt": "Create a D-shaped mounting plate 100 mm wide by 70 mm high and 8 mm thick. Add one rectangular tab to each side and cut one centered 6 mm through hole through each tab.",
+      "focus": "Custom base, mirrored support features, and one child hole per tab.",
+      "expected_intent": {
+        "base": {"profile": "d_shape"},
+        "features": [
+          {"role": "tab", "operation": "extrusion", "shape": "rectangle"},
+          {"role": "hole", "operation": "cut", "shape": "circle"}
+        ]
+      },
+      "expected_concepts": {
+        "any_of": [
+          {
+            "base": {"type": "extrude", "profile": "sketch"},
+            "operations": [
+              {"type": "add_extrude", "profile": "rectangle", "positions": {"length": 2, "unique_length": 2}},
+              {"type": "cut", "profile": "circle", "positions": {"length": 2, "unique_length": 2}}
+            ],
+            "operation_relationships": [
+              {
+                "type": "same_positions",
+                "features": [
+                  {"type": "add_extrude", "profile": "rectangle"},
+                  {"type": "cut", "profile": "circle"}
+                ]
+              },
+              {
+                "type": "targets_parent",
+                "feature": {"type": "cut", "profile": "circle"},
+                "parent": {"type": "add_extrude", "profile": "rectangle"}
+              }
+            ],
+            "geometry": {"solid_count": 1}
+          },
+          {
+            "base": {"type": "extrude", "profile": "sketch"},
+            "operation_counts": {"add_extrude": 2, "cut": 2},
+            "operations": [
+              {"type": "cut", "profile": "circle", "target": {"contains": "tab."}}
+            ],
+            "geometry": {"solid_count": 1}
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -312,6 +312,10 @@
           },
           {
             "operation": "cut"
+          },
+          {
+            "operation": "cut",
+            "shape": "slot"
           }
         ]
       },
@@ -327,6 +331,10 @@
           },
           {
             "type": "cut"
+          },
+          {
+            "type": "cut",
+            "profile": "sketch"
           }
         ],
         "geometry": {
@@ -366,6 +374,45 @@
           {
             "type": "cut",
             "profile": "circle"
+          }
+        ],
+        "operation_relationships": [
+          {
+            "type": "same_positions",
+            "features": [
+              {
+                "type": "add_extrude",
+                "profile": "circle"
+              },
+              {
+                "type": "cut",
+                "profile": "circle"
+              }
+            ]
+          },
+          {
+            "type": "same_instance_count",
+            "features": [
+              {
+                "type": "add_extrude",
+                "profile": "circle"
+              },
+              {
+                "type": "cut",
+                "profile": "circle"
+              }
+            ]
+          },
+          {
+            "type": "targets_parent",
+            "feature": {
+              "type": "cut",
+              "profile": "circle"
+            },
+            "parent": {
+              "type": "add_extrude",
+              "profile": "circle"
+            }
           }
         ],
         "geometry": {
@@ -476,7 +523,12 @@
       "focus": "Circular-pattern holes plus annular/revolved groove concept",
       "expected_intent": {
         "base": {
-          "profile": "circle"
+          "profile": {
+            "one_of": [
+              "circle",
+              "cylinder"
+            ]
+          }
         },
         "features": [
           {
@@ -492,19 +544,65 @@
         ]
       },
       "expected_concepts": {
-        "base": {
-          "type": "extrude",
-          "profile": "circle"
-        },
-        "operations": [
+        "any_of": [
           {
-            "type": "cut",
-            "profile": "circle"
+            "base": {
+              "type": "extrude",
+              "profile": "circle"
+            },
+            "operations": [
+              {
+                "type": "cut",
+                "profile": "circle",
+                "target": "base.top",
+                "positions": {
+                  "length": 8,
+                  "unique_length": 8,
+                  "circular_pattern": {
+                    "count": 8
+                  }
+                }
+              },
+              {
+                "type": "cut_revolve"
+              }
+            ],
+            "geometry": {
+              "solid_count": 1
+            }
+          },
+          {
+            "base": {
+              "type": "revolve",
+              "angle": 360
+            },
+            "operations": [
+              {
+                "type": "cut",
+                "profile": "circle",
+                "target": {
+                  "one_of": [
+                    "base.front",
+                    "base.back"
+                  ]
+                },
+                "positions": {
+                  "length": 8,
+                  "unique_length": 8,
+                  "circular_pattern": {
+                    "count": 8
+                  }
+                }
+              },
+              {
+                "type": "cut_revolve"
+              }
+            ],
+            "geometry": {
+              "solid_count": 1
+            }
           }
-        ],
-        "geometry": {
-          "solid_count": 1
-        }
+        ]
       }
     },
     {

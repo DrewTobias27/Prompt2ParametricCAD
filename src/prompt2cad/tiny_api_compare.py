@@ -28,6 +28,8 @@ from prompt2cad.evaluator import evaluate_model_data as evaluate_against_case
 from prompt2cad.intent_evaluator import evaluate_design_intent
 from prompt2cad.interpreter import build_model
 from prompt2cad.intent_coverage import intent_coverage_failures
+from prompt2cad.intent_alignment import evaluate_intent_alignment
+from prompt2cad.operation_effects import evaluate_operation_effects
 from prompt2cad.prompting import prompt_to_design_intent
 from prompt2cad.prompting import prompt_to_model_data
 from prompt2cad.quality import check_model_quality
@@ -122,7 +124,11 @@ def check_openai_connection(timeout_seconds: int = 10) -> dict[str, Any]:
         }
 
 
-def evaluate_model_data(model_data: dict[str, Any]) -> dict[str, Any]:
+def evaluate_model_data(
+    model_data: dict[str, Any],
+    *,
+    include_operation_effects: bool = True,
+) -> dict[str, Any]:
     """Validate, build, and quality-check generated model data."""
     validate_model_data(model_data)
     part = build_model(model_data)
@@ -131,11 +137,20 @@ def evaluate_model_data(model_data: dict[str, Any]) -> dict[str, Any]:
         build_succeeded=True,
         built_part=part,
     )
-    return {
+    result = {
         "build_succeeded": True,
         "quality_passed": quality_report.get("passed", False),
         "quality_report": quality_report,
     }
+    if include_operation_effects:
+        operation_effects = evaluate_operation_effects(model_data)
+        result.update({
+            "operation_effects_passed": operation_effects["passed"],
+            "operation_effect_failures": operation_effects["failures"],
+            "operation_effect_warnings": operation_effects["warnings"],
+            "operation_trace": operation_effects["trace"],
+        })
+    return result
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -240,6 +255,7 @@ def run_intent(prompt: str) -> dict[str, Any]:
         error.design_intent = design_intent
         error.intent_missing_required_dimensions = missing_dimensions
         raise
+    intent_alignment = evaluate_intent_alignment(design_intent, model_data)
     try:
         evaluation = evaluate_model_data(model_data)
     except Exception as error:
@@ -252,6 +268,8 @@ def run_intent(prompt: str) -> dict[str, Any]:
         "intent_coverage_passed": not coverage_failures,
         "intent_coverage_failures": coverage_failures,
         "intent_missing_required_dimensions": missing_dimensions,
+        "intent_alignment_passed": intent_alignment["passed"],
+        "intent_alignment_failures": intent_alignment["failures"],
         "model_data": model_data,
         **evaluation,
     }
@@ -351,6 +369,12 @@ def status_for_result(result: dict[str, Any]) -> str:
         status = "warn"
     if result.get("intent_coverage_passed") is False:
         status = "warn"
+    if result.get("intent_alignment_passed") is False:
+        status = "warn"
+    if result.get("operation_effects_passed") is False:
+        status = "warn"
+    if result.get("operation_effect_warnings"):
+        status = "warn"
     return status
 
 
@@ -395,33 +419,47 @@ def attach_prompt_case_expectations(
     expected_concepts = prompt_case.get("expected_concepts")
     model_data = result.get("model_data")
     if expected_concepts is not None and model_data is not None:
-        geometry_summary = (
-            result.get("quality_report", {})
-            .get("geometry_summary")
-        )
-        concept_result = evaluate_model_concepts(
-            model_data,
-            expected_concepts,
-            geometry_summary=geometry_summary,
-        )
-        result["concept_passed"] = concept_result.passed
-        result["concept_failures"] = concept_result.failures
-        if not concept_result.passed and result["status"] == "pass":
+        try:
+            geometry_summary = (
+                result.get("quality_report", {})
+                .get("geometry_summary")
+            )
+            concept_result = evaluate_model_concepts(
+                model_data,
+                expected_concepts,
+                geometry_summary=geometry_summary,
+            )
+            result["concept_passed"] = concept_result.passed
+            result["concept_failures"] = concept_result.failures
+        except Exception as error:  # noqa: BLE001 - preserve API output on evaluator bugs.
+            result["concept_passed"] = False
+            result["concept_failures"] = [
+                f"Concept evaluator failed: {error}"
+            ]
+            result["concept_error"] = error_details(error)
+        if not result["concept_passed"] and result["status"] == "pass":
             result["status"] = "warn"
 
     expected_intent = prompt_case.get("expected_intent")
     design_intent = result.get("design_intent")
     if expected_intent is not None and design_intent is not None:
-        intent_result = evaluate_design_intent(
-            design_intent,
-            {
-                "name": prompt_case["case"],
-                "expected_intent": expected_intent,
-            },
-        )
-        result["intent_eval_passed"] = intent_result.passed
-        result["intent_eval_failures"] = intent_result.failures
-        if not intent_result.passed and result["status"] == "pass":
+        try:
+            intent_result = evaluate_design_intent(
+                design_intent,
+                {
+                    "name": prompt_case["case"],
+                    "expected_intent": expected_intent,
+                },
+            )
+            result["intent_eval_passed"] = intent_result.passed
+            result["intent_eval_failures"] = intent_result.failures
+        except Exception as error:  # noqa: BLE001 - preserve API output on evaluator bugs.
+            result["intent_eval_passed"] = False
+            result["intent_eval_failures"] = [
+                f"Intent evaluator failed: {error}"
+            ]
+            result["intent_eval_error"] = error_details(error)
+        if not result["intent_eval_passed"] and result["status"] == "pass":
             result["status"] = "warn"
 
     return result
@@ -458,6 +496,12 @@ def rescore_report(
                     )
                     model_data = intent_to_model_data(design_intent)
                     result["model_data"] = model_data
+                    intent_alignment = evaluate_intent_alignment(
+                        design_intent,
+                        model_data,
+                    )
+                    result["intent_alignment_passed"] = intent_alignment["passed"]
+                    result["intent_alignment_failures"] = intent_alignment["failures"]
                 except Exception as error:  # noqa: BLE001 - report should capture failures.
                     result.update(error_details(error))
                     result["status"] = "fail"
@@ -563,6 +607,7 @@ def compare_prompt_cases(
             "results": results,
         }
         report["cases"].append(case_result)
+        write_report_checkpoint(report, output_path)
 
     attach_report_summary(report)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -621,11 +666,22 @@ def compare_eval_cases(
             "case_path": str(case_path),
             "results": results,
         })
+        write_report_checkpoint(report, output_path)
 
     attach_report_summary(report)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report
+
+
+def write_report_checkpoint(
+    report: dict[str, Any],
+    output_path: Path,
+) -> None:
+    """Persist completed cases so an interrupted batch does not lose API work."""
+    attach_report_summary(report)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
 def print_summary(report: dict[str, Any], output_path: Path) -> None:
@@ -690,6 +746,21 @@ def print_summary(report: dict[str, Any], output_path: Path) -> None:
                     f"{detail} "
                     f"intent_coverage_failures="
                     f"{len(result['intent_coverage_failures'])}"
+                )
+            if result.get("intent_alignment_failures"):
+                detail = (
+                    f"{detail} intent_alignment_failures="
+                    f"{len(result['intent_alignment_failures'])}"
+                )
+            if result.get("operation_effect_failures"):
+                detail = (
+                    f"{detail} operation_effect_failures="
+                    f"{len(result['operation_effect_failures'])}"
+                )
+            if result.get("operation_effect_warnings"):
+                detail = (
+                    f"{detail} operation_effect_warnings="
+                    f"{len(result['operation_effect_warnings'])}"
                 )
             print(
                 f"  {result['status'].upper()} {result['mode']} "
