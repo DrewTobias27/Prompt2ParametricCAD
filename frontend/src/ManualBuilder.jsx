@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { createLocalId } from "./localIds.js";
 import { createFeature, defaultBase, isEdgeTreatment } from "./modelBuilders.js";
 import { MANUAL_PRESETS } from "./manualPresets.js";
 import * as preview from "./previewEngine.js";
@@ -151,7 +152,7 @@ export function ManualBuilder({
     const presetFeatures = preset.features.map((featureData, featureIndex) => ({
       ...createFeature(featureIndex + 1),
       ...featureData,
-      localId: crypto.randomUUID(),
+      localId: createLocalId(),
       reasonable: false,
       polylineDescription: "",
     }));
@@ -604,7 +605,7 @@ function CheckboxField({ label, checked, onChange }) {
 function cloneFeature(feature, featureNumber) {
   return {
     ...feature,
-    localId: crypto.randomUUID(),
+    localId: createLocalId(),
     requestedName: `feature_${featureNumber}`,
     x: Number(feature.x) + 8,
   };

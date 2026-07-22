@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   buildFromModelData,
   generateFromPrompt,
@@ -6,6 +6,7 @@ import {
 } from "./api.js";
 import { DrawingPreview } from "./DrawingPreview.jsx";
 import { FeatureTreePanel } from "./FeatureTreePanel.jsx";
+import { resolveManualModelData } from "./manualAssistance.js";
 import { ManualBuilder } from "./ManualBuilder.jsx";
 import { modelDataToTreeView } from "./modelDataViewModel.js";
 import {
@@ -47,6 +48,34 @@ export default function App() {
     [result],
   );
 
+  const updateBase = useCallback((update) => {
+    setBase(update);
+    setResult(null);
+    setStatus("");
+  }, []);
+
+  const updateFeatures = useCallback((update) => {
+    setFeatures(update);
+    setResult(null);
+    setStatus("");
+  }, []);
+
+  const updatePrompt = useCallback((value) => {
+    setPrompt(value);
+    setResult(null);
+    setStatus("");
+  }, []);
+
+  function handleModeChange(nextMode) {
+    if (nextMode === mode || isLoading) {
+      return;
+    }
+
+    setMode(nextMode);
+    setResult(null);
+    setStatus("");
+  }
+
   async function runRequest(request) {
     setIsLoading(true);
     setStatus("Generating CAD model...");
@@ -72,7 +101,10 @@ export default function App() {
   function handleManualSubmit(event) {
     event.preventDefault();
     if (usesApiAssistance) {
-      runRequest(() => generateFromPrompt(manualPrompt));
+      runRequest(async () => {
+        const resolvedModelData = await resolveManualModelData({ base, features });
+        return buildFromModelData(resolvedModelData, `manual ${base.profile} base`);
+      });
       return;
     }
 
@@ -80,7 +112,7 @@ export default function App() {
   }
 
   function handleTargetReferenceClick(reference) {
-    setMode("manual");
+    handleModeChange("manual");
     const activeFeatureIndex = features.findIndex((feature) => feature.localId === activeFeatureId);
     const activeFeature = features[activeFeatureIndex];
     const canRetargetActiveFeature = activeFeature
@@ -89,7 +121,7 @@ export default function App() {
         || (reference.kind === "face" && !isEdgeTreatment(activeFeature)));
 
     if (canRetargetActiveFeature) {
-      setFeatures((currentFeatures) => currentFeatures.map((feature) => (
+      updateFeatures((currentFeatures) => currentFeatures.map((feature) => (
         feature.localId === activeFeatureId
           ? { ...feature, target: reference.name }
           : feature
@@ -112,7 +144,7 @@ export default function App() {
         target: reference.name,
       };
 
-    setFeatures((currentFeatures) => [...currentFeatures, newFeature]);
+    updateFeatures((currentFeatures) => [...currentFeatures, newFeature]);
     setActiveFeatureId(newFeature.localId);
     setStatus(
       reference.kind === "edge"
@@ -138,14 +170,16 @@ export default function App() {
             <button
               className={mode === "manual" ? "active" : ""}
               type="button"
-              onClick={() => setMode("manual")}
+              disabled={isLoading}
+              onClick={() => handleModeChange("manual")}
             >
               Manual builder
             </button>
             <button
               className={mode === "prompt" ? "active" : ""}
               type="button"
-              onClick={() => setMode("prompt")}
+              disabled={isLoading}
+              onClick={() => handleModeChange("prompt")}
             >
               Description
             </button>
@@ -154,9 +188,9 @@ export default function App() {
           {mode === "manual" ? (
             <ManualBuilder
               base={base}
-              setBase={setBase}
+              setBase={updateBase}
               features={features}
-              setFeatures={setFeatures}
+              setFeatures={updateFeatures}
               activeFeatureId={activeFeatureId}
               setActiveFeatureId={setActiveFeatureId}
               modelData={manualModelData}
@@ -168,7 +202,7 @@ export default function App() {
           ) : (
             <PromptBuilder
               prompt={prompt}
-              setPrompt={setPrompt}
+              setPrompt={updatePrompt}
               onSubmit={handlePromptSubmit}
               isLoading={isLoading}
             />

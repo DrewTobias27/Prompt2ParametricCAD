@@ -1,6 +1,6 @@
 import { createFeature, defaultBase } from "../src/modelBuilders.js";
 import { MANUAL_PRESETS } from "../src/manualPresets.js";
-import { buildPreviewModel } from "../src/previewEngine.js";
+import { buildPreviewModel, formatDimension } from "../src/previewEngine.js";
 
 function feature(overrides) {
   return {
@@ -288,6 +288,12 @@ function testFeatureLinkedWarningsIncludeSuggestions() {
   assert(linkedWarnings.some((warning) => warning.suggestion), "linked warnings should include suggested fixes");
 }
 
+function testFormatDimensionHandlesEditedInputStrings() {
+  assert(formatDimension("7") === "7", "whole-number input strings should retain their value");
+  assert(formatDimension("2.50") === "2.5", "decimal input strings should be formatted cleanly");
+  assert(formatDimension("") === "", "empty inputs should stay empty");
+}
+
 const tests = [
   testTopBossProjectsToFrontAndRight,
   testCircularPatternCreatesRepeatedHoleRecords,
@@ -298,6 +304,7 @@ const tests = [
   testMountingPlatePresetKeepsCornerHolesInsideBase,
   testManualPresetsHaveIsolatedPreviewRecords,
   testFeatureLinkedWarningsIncludeSuggestions,
+  testFormatDimensionHandlesEditedInputStrings,
 ];
 
 for (const test of tests) {

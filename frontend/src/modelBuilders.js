@@ -1,3 +1,5 @@
+import { createLocalId } from "./localIds.js";
+
 export const defaultBase = {
   profile: "rectangle",
   width: 80,
@@ -11,7 +13,7 @@ export const defaultBase = {
 
 export function createFeature(featureNumber = 1) {
   return {
-    localId: crypto.randomUUID(),
+    localId: createLocalId(),
     operation: "add_extrude",
     target: "base.top",
     edgeSelector: "top_outer_edges",
@@ -73,7 +75,7 @@ export function buildManualPrompt({ base, features }) {
   ].join(" ");
 }
 
-function buildBaseOperation(base) {
+export function buildBaseOperation(base) {
   const common = {
     type: "extrude",
     id: "base",
@@ -105,7 +107,7 @@ function buildBaseOperation(base) {
   };
 }
 
-function buildFeatureOperation(feature, featureNumber, instances) {
+export function buildFeatureOperation(feature, featureNumber, instances) {
   if (isEdgeTreatment(feature)) {
     const operation = {
       type: feature.operation,
@@ -152,7 +154,7 @@ function buildFeatureOperation(feature, featureNumber, instances) {
   return operation;
 }
 
-function expandFeatureInstances(feature) {
+export function expandFeatureInstances(feature) {
   const x = numberValue(feature.x);
   const y = numberValue(feature.y);
 
@@ -265,5 +267,6 @@ function numberValue(value) {
 }
 
 function roundNumber(value) {
-  return Math.round(value * 1000) / 1000;
+  const rounded = Math.round(value * 1000) / 1000;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }

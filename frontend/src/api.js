@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || "/api";
 
 async function postJson(path, payload) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -9,11 +9,21 @@ async function postJson(path, payload) {
     body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    // The status fallback below still gives a useful error for non-JSON failures.
   }
 
-  return response.json();
+  if (!response.ok) {
+    const detail = typeof data?.detail === "string"
+      ? data.detail
+      : data?.message;
+    throw new Error(detail || `Request failed with status ${response.status}`);
+  }
+
+  return data;
 }
 
 export function generateFromPrompt(prompt) {
@@ -24,6 +34,23 @@ export function buildFromModelData(modelData, filenameHint) {
   return postJson("/build", {
     model_data: modelData,
     filename_hint: filenameHint,
+  });
+}
+
+export function suggestBase({ profile, description, distance }) {
+  return postJson("/suggest-base", {
+    profile,
+    description,
+    distance,
+  });
+}
+
+export function suggestFeature({ operationType, target, profile, description }) {
+  return postJson("/suggest-feature", {
+    operation_type: operationType,
+    target,
+    profile,
+    description,
   });
 }
 

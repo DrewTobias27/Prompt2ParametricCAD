@@ -169,15 +169,20 @@ export function createPreviewMapper(worldBounds, fixedScale = null) {
 }
 
 export function formatDimension(value) {
-  if (!Number.isFinite(value)) {
+  if (value === "" || value === null || value === undefined) {
     return "";
   }
 
-  if (Math.abs(value - Math.round(value)) < 0.001) {
-    return String(Math.round(value));
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "";
   }
 
-  return value.toFixed(2).replace(/\.?0+$/, "");
+  if (Math.abs(numericValue - Math.round(numericValue)) < 0.001) {
+    return String(Math.round(numericValue));
+  }
+
+  return numericValue.toFixed(2).replace(/\.?0+$/, "");
 }
 
 export function regularPolygonPoints(center, radius, sides, mapper) {

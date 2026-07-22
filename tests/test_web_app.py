@@ -489,3 +489,52 @@ def test_suggest_base_caches_successful_response(monkeypatch):
     assert first_response["performance"]["cache_hit"] is False
     assert second_response["performance"]["cache_hit"] is True
     assert calls["api"] == 1
+
+
+def test_suggest_feature_returns_one_constrained_operation(monkeypatch):
+    web_app.SUCCESS_RESPONSE_CACHE.clear()
+    calls = {"api": 0}
+
+    def fake_suggest_feature_model_data(**kwargs):
+        calls["api"] += 1
+        assert kwargs == {
+            "operation_type": "add_extrude",
+            "target": "base.top",
+            "profile": "rectangle",
+            "description": "reasonable boss",
+        }
+        return {
+            "operations": [
+                {
+                    "type": "add_extrude",
+                    "id": "suggested_feature",
+                    "target": "base.top",
+                    "profile": "rectangle",
+                    "positions": [[0, 0]],
+                    "width": 24,
+                    "height": 16,
+                    "distance": 6,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        web_app,
+        "suggest_feature_model_data",
+        fake_suggest_feature_model_data,
+    )
+
+    request = web_app.CADSuggestFeatureRequest(
+        operation_type="add_extrude",
+        target="base.top",
+        profile="rectangle",
+        description="reasonable boss",
+    )
+    first_response = web_app.suggest_feature(request)
+    second_response = web_app.suggest_feature(request)
+
+    assert first_response["status"] == "success"
+    assert first_response["model_data"]["operations"][0]["width"] == 24
+    assert first_response["performance"]["cache_hit"] is False
+    assert second_response["performance"]["cache_hit"] is True
+    assert calls["api"] == 1
