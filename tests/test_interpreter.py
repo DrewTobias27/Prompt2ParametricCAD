@@ -131,6 +131,50 @@ def test_add_extrusion():
     assert bounding_box.zlen == 14
 
 
+def test_pattern_child_cut_reuses_parent_pattern_coordinates():
+    boss_positions = [[-30, 18], [30, 18], [-30, -18], [30, -18]]
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 90,
+                "height": 60,
+                "distance": 8,
+            },
+            {
+                "type": "add_extrude",
+                "id": "bosses",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": boss_positions,
+                "diameter": 14,
+                "distance": 6,
+            },
+            {
+                "type": "cut",
+                "id": "boss_holes",
+                "target": "bosses.top",
+                "profile": "circle",
+                "positions": boss_positions,
+                "diameter": 4,
+                "depth": "through",
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    base_volume = 90 * 60 * 8
+    boss_volume = 4 * math.pi * 7**2 * 6
+    hole_volume = 4 * math.pi * 2**2 * 14
+
+    assert part.val().Volume() == pytest.approx(
+        base_volume + boss_volume - hole_volume
+    )
+
+
 @pytest.mark.parametrize(
     "cut_operation, expected_removed_volume",
     [
@@ -701,7 +745,7 @@ def test_add_revolved_collar_to_cylinder():
     assert solid.Volume() == pytest.approx(base_volume + collar_volume)
 
 
-def test_add_revolve_projects_tangent_feature_until_connected():
+def test_add_revolve_does_not_move_disconnected_feature_toward_axis():
     model_data = {
         "operations": [
             {
@@ -730,13 +774,11 @@ def test_add_revolve_projects_tangent_feature_until_connected():
         ]
     }
 
-    part = build_model(model_data)
-    solids = part.solids().vals()
-
-    assert len(solids) == 1
+    with pytest.raises(ValueError, match="Expected one connected solid"):
+        build_model(model_data)
 
 
-def test_add_revolve_projects_far_feature_until_connected():
+def test_add_revolve_rejects_far_disconnected_feature():
     model_data = {
         "operations": [
             {
@@ -765,10 +807,8 @@ def test_add_revolve_projects_far_feature_until_connected():
         ]
     }
 
-    part = build_model(model_data)
-    solids = part.solids().vals()
-
-    assert len(solids) == 1
+    with pytest.raises(ValueError, match="Expected one connected solid"):
+        build_model(model_data)
 
 
 def test_cut_revolved_groove_from_cylinder():
@@ -1085,7 +1125,7 @@ def test_cut_uses_virtual_side_target_for_polyline_base():
     assert solid.Volume() == pytest.approx(base_volume - removed_volume)
 
 
-def test_side_extrude_normalizes_misplaced_vertical_position():
+def test_side_extrude_does_not_reinterpret_misplaced_position():
     model_data = {
         "operations": [
             {
@@ -1130,10 +1170,8 @@ def test_side_extrude_normalizes_misplaced_vertical_position():
         ]
     }
 
-    part = build_model(model_data)
-    solids = part.solids().vals()
-
-    assert len(solids) == 1
+    with pytest.raises(ValueError, match="Expected one connected solid"):
+        build_model(model_data)
 
 
 def test_added_extrusion_side_face_can_be_targeted():
@@ -1285,7 +1323,7 @@ def test_side_extrude_overlaps_rounded_virtual_target_until_connected():
     assert len(solids) == 1
 
 
-def test_side_extrude_projects_extreme_position_toward_side_center():
+def test_side_extrude_does_not_project_extreme_position_to_center():
     model_data = {
         "operations": [
             {
@@ -1313,10 +1351,8 @@ def test_side_extrude_projects_extreme_position_toward_side_center():
         ]
     }
 
-    part = build_model(model_data)
-    solids = part.solids().vals()
-
-    assert len(solids) == 1
+    with pytest.raises(ValueError, match="Expected one connected solid"):
+        build_model(model_data)
 
 
 def test_cut_revolved_front_face():

@@ -220,7 +220,16 @@ class FeatureRegistry:
     def get_plane(self, name: str, inset: float = 0) -> cq.Plane | None:
         """Return a registered planar target as a CadQuery plane."""
         reference = self.get_reference(name)
-        if reference is None or reference.kind != "plane":
+        if reference is None:
+            return None
+
+        if reference.kind == "surface" and reference.metadata.get(
+            "supports_tangent_plane",
+            False,
+        ):
+            return reference.frame.to_plane(inset=inset)
+
+        if reference.kind != "plane":
             return None
 
         return reference.frame.to_plane(inset=inset)
@@ -232,6 +241,56 @@ class FeatureRegistry:
             return None
 
         return self.references[canonical_name]
+
+    def register_pattern_planes(
+        self,
+        feature_id: str,
+        target_plane: cq.Plane,
+        distance: float,
+        instance_count: int,
+    ) -> None:
+        """Register shared datum planes for a coplanar repeated extrusion.
+
+        Individual patterned solids still own instance-specific face references.
+        These aggregate aliases preserve the parent workplane origin so one
+        child operation can reuse the pattern's global XY positions without
+        accidentally offsetting them from the first instance.
+        """
+        parent_frame = ReferenceFrame.from_plane(target_plane)
+        plane_specs = [
+            (
+                "top",
+                parent_frame.child_frame(
+                    (0, 0, distance),
+                    target_plane.xDir,
+                    target_plane.zDir,
+                ),
+            ),
+            (
+                "bottom",
+                parent_frame.child_frame(
+                    (0, 0, 0),
+                    target_plane.xDir,
+                    target_plane.zDir.multiply(-1),
+                ),
+            ),
+        ]
+        for index, (face_name, frame) in enumerate(plane_specs, start=1):
+            self.register_plane(
+                f"{feature_id}.aggregate_plane.p{index:03d}",
+                frame,
+                source_feature_id=feature_id,
+                aliases=[
+                    f"{feature_id}.{face_name}",
+                    f"{feature_id}.face.{face_name}",
+                ],
+                metadata={
+                    "semantic_label": face_name,
+                    "reference_type": "pattern_datum_plane",
+                    "instance_count": instance_count,
+                    "distance": distance,
+                },
+            )
 
     def resolve_reference_name(self, name: str) -> str | None:
         """Resolve a canonical reference name or alias."""
@@ -836,12 +895,29 @@ class FeatureRegistry:
                 },
             )
 
+        center_offset = center.sub(axis_midpoint)
+        radial_hint = center_offset.sub(
+            axis_direction.multiply(vector_dot(center_offset, axis_direction))
+        )
+        if radial_hint.Length <= 1e-9:
+            radial_hint = workplane.zDir.sub(
+                axis_direction.multiply(vector_dot(workplane.zDir, axis_direction))
+            )
+        radial_direction = normalized_vector(radial_hint)
+        radial_extent = max(
+            vector_dot(corner.sub(axis_midpoint), radial_direction)
+            for corner in bounding_box_corners(bounding_box)
+        )
+        tangent_origin = axis_midpoint.add(
+            radial_direction.multiply(radial_extent)
+        )
+
         self.register_surface(
             f"{reference_scope}.surface.s001",
             ReferenceFrame(
-                origin=vector_to_tuple(center),
+                origin=vector_to_tuple(tangent_origin),
                 x_axis=vector_to_tuple(axis_direction),
-                normal=vector_to_tuple(x_axis),
+                normal=vector_to_tuple(radial_direction),
             ),
             source_feature_id=feature_id,
             aliases=[
@@ -853,6 +929,8 @@ class FeatureRegistry:
                 "surface_type": "cylindrical_or_conical",
                 "axis_reference": f"{reference_scope}.axis.a001",
                 "angle": angle,
+                "supports_tangent_plane": True,
+                "tangent_radius": radial_extent,
             },
         )
 

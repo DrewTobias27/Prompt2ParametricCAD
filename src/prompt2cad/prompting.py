@@ -314,6 +314,11 @@ Supported placements:
 - offset_from_edge: for features placed a set distance from a named edge
   or described as offset upward/downward/inward from an edge. Prefer this over
   explicit coordinates when the prompt describes an edge-relative position.
+- same_as_feature: for child features that must reuse every instance position
+  of an earlier feature. Include source_feature with that earlier feature's id.
+  Use this for requests such as "one hole in each boss", "a hole in every
+  tab", or concentric counterbores. The child should normally target the
+  source feature's appropriate face, such as "corner_bosses.top".
 
 Supported edge treatments:
 - chamfer: needs distance
@@ -332,6 +337,26 @@ profile that is not a normal edge treatment.
 Use stable ids such as "corner_holes", "center_boss", "bolt_holes", or
 "side_slot". Use target "base.top" unless a side or feature face is clearly
 requested.
+
+Parent-child feature rules:
+- If a feature is described as being in, on, through, or concentric with an
+  earlier feature, target that earlier feature rather than the base.
+- When there is one child for every repeated parent, use same_as_feature so
+  the child inherits exact positions instead of independently recomputing a
+  similar near-corner, mirrored, or circular pattern.
+- For a raised rim made as an outer extrusion followed by an inner cut, make
+  the inner cut target the rim extrusion's top face.
+- A single through cut may pass through multiple aligned, parallel walls.
+  When one straight bore creates the requested hole in every aligned wall,
+  output one cut from the nearest wall rather than duplicate cuts at the same
+  axis; later duplicate cuts would have no physical effect.
+
+Wall dimension rules for extrusion from a base top face:
+- distance is the vertical wall height.
+- For a wall along the left or right edge, rectangle width is wall thickness
+  and rectangle height is the wall span along the base height.
+- For a wall along the front or back edge, rectangle height is wall thickness
+  and rectangle width is the wall span along the base width.
 
 For shaft-like parts:
 - Use base profile "cylinder" for normal shafts/cylinders that have diameter

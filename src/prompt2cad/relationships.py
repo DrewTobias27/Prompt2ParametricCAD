@@ -354,36 +354,45 @@ def validate_inside(
         )
 
     container_bounds_list = positioned_bounds(container)
-    if len(container_bounds_list) != 1:
+    if not container_bounds_list:
         return RelationshipFailure(
             relationship_number=relationship_number,
             relationship_type=relationship["type"],
             feature=relationship["feature"],
-            reason="Inside relationships currently require one container bounds box.",
+            reason="Could not compute bounds for the requested container.",
             suggested_fixes=[
-                "Use a single parent/base feature as the container.",
-                "Avoid using repeated features as relationship containers.",
+                "Use a supported profile with measurable 2D bounds.",
+                "Use rectangle, circle, polygon, polyline, or sketch profiles.",
             ],
-            details={"container_instance_count": len(container_bounds_list)},
+            details={},
         )
 
     margin = relationship["margin"]
-    container_bounds = shrink_bounds(container_bounds_list[0], margin)
+    container_bounds_list = [
+        shrink_bounds(container_bounds, margin)
+        for container_bounds in container_bounds_list
+    ]
     for feature_bounds in positioned_bounds(feature_operation):
-        if not bounds_inside(feature_bounds, container_bounds):
+        if not any(
+            bounds_inside(feature_bounds, container_bounds)
+            for container_bounds in container_bounds_list
+        ):
             return RelationshipFailure(
                 relationship_number=relationship_number,
                 relationship_type=relationship["type"],
                 feature=relationship["feature"],
                 reason="Feature bounds are not fully inside the requested container.",
                 suggested_fixes=[
-                    "Move the feature toward the container center.",
+                    "Move the feature toward one of the container instances.",
                     "Reduce the feature size.",
                     "Increase the container size or reduce the requested margin.",
                 ],
                 details={
                     "feature_bounds": list(feature_bounds),
-                    "container_bounds": list(container_bounds),
+                    "container_bounds": [
+                        list(container_bounds)
+                        for container_bounds in container_bounds_list
+                    ],
                     "margin": margin,
                 },
             )

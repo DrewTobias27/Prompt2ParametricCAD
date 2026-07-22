@@ -72,6 +72,22 @@ def test_register_rectangular_prism_instance_references():
     assert registry.resolve_reference_name("feature_1.right") is None
 
 
+def test_pattern_planes_keep_shared_parent_origin():
+    registry = FeatureRegistry()
+    target_plane = cq.Plane.XY(origin=(10, 20, 8))
+
+    registry.register_pattern_planes(
+        feature_id="bosses",
+        target_plane=target_plane,
+        distance=6,
+        instance_count=4,
+    )
+
+    top_plane = registry.get_plane("bosses.top")
+    assert top_plane.origin.toTuple() == (10.0, 20.0, 14.0)
+    assert registry.get_reference("bosses.top").metadata["instance_count"] == 4
+
+
 def test_unknown_reference_returns_none():
     registry = FeatureRegistry()
 

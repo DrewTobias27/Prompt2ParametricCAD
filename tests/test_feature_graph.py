@@ -157,7 +157,9 @@ def test_feature_graph_records_multi_instance_references():
     assert "feature_1.inst002.face.f001" in created_references
     assert "feature_1.inst002.edge.e001" in created_references
     assert "feature_1.inst002.vertex.v001" in created_references
-    assert len(created_references) == 52
+    assert "feature_1.aggregate_plane.p001" in created_references
+    assert "feature_1.aggregate_plane.p002" in created_references
+    assert len(created_references) == 54
     assert graph.registry.get_plane("feature_1.inst001.top") is not None
     assert graph.registry.get_plane("feature_1.inst002.top") is not None
     assert graph.registry.get_reference_group(
@@ -312,6 +314,7 @@ def test_revolved_base_registers_axis_faces_surface_and_edge_groups():
     assert graph.registry.get_plane("base.front") is not None
     assert graph.registry.get_plane("base.back") is not None
     assert graph.registry.get_reference("base.outer_surface").kind == "surface"
+    assert graph.registry.get_plane("base.outer_surface") is not None
     assert graph.registry.get_reference_group("base.front_outer_edges") is not None
     assert graph.registry.get_reference_group("base.back_outer_edges") is not None
     assert graph.registry.get_reference_group("base.end_edges") is not None

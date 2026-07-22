@@ -132,6 +132,7 @@ PLACEMENT_SCHEMA = {
                 "rectangular_pattern",
                 "mirrored",
                 "offset_from_edge",
+                "same_as_feature",
             ],
         },
     },
@@ -288,7 +289,7 @@ OPENAI_NEAR_CORNERS_PLACEMENT_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "type": {"type": "string", "enum": ["near_corners"]},
-        "count": {"type": "integer", "minimum": 1, "maximum": 4},
+        "count": {"type": "integer", "minimum": 1, "maximum": 24},
         "margin": OPENAI_NULLABLE_NUMBER_SCHEMA,
     },
     "required": ["type", "count", "margin"],
@@ -358,6 +359,16 @@ OPENAI_OFFSET_FROM_EDGE_PLACEMENT_SCHEMA = {
     "required": ["type", "edge", "offset", "along"],
 }
 
+OPENAI_SAME_AS_FEATURE_PLACEMENT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["same_as_feature"]},
+        "source_feature": {"type": "string"},
+    },
+    "required": ["type", "source_feature"],
+}
+
 OPENAI_PLACEMENT_SCHEMA = {
     "anyOf": [
         OPENAI_CENTERED_PLACEMENT_SCHEMA,
@@ -367,6 +378,7 @@ OPENAI_PLACEMENT_SCHEMA = {
         OPENAI_RECTANGULAR_PATTERN_PLACEMENT_SCHEMA,
         OPENAI_MIRRORED_PLACEMENT_SCHEMA,
         OPENAI_OFFSET_FROM_EDGE_PLACEMENT_SCHEMA,
+        OPENAI_SAME_AS_FEATURE_PLACEMENT_SCHEMA,
     ],
 }
 
@@ -540,11 +552,13 @@ def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
 
     base = intent["base"]
     operations = [base_operation(base)]
+    operations_by_id = {"base": operations[0]}
     relationships = []
 
     for feature in intent["features"]:
-        operation = feature_operation(base, feature)
+        operation = feature_operation(base, feature, operations_by_id)
         operations.append(operation)
+        operations_by_id[operation["id"]] = operation
         relationships.extend(feature_relationships(base, feature))
 
     features_by_id = {
@@ -647,9 +661,11 @@ def normalize_face_target(
 
     target_aliases = {
         "base.flat": "base.front",
-        "base.curved": "base.top",
+        "base.flat_face": "base.front",
+        "base.curved": "base.outer_surface",
+        "base.curved_surface": "base.outer_surface",
         "base.side": "base.top",
-        "base.outer_surface": "base.top",
+        "base.outer_surface": "base.outer_surface",
     }
     if target in target_aliases:
         return target_aliases[target]
@@ -920,7 +936,11 @@ def flat_capsule_base_operation(base: dict[str, Any]) -> dict[str, Any]:
     return operation
 
 
-def feature_operation(base: dict[str, Any], feature: dict[str, Any]) -> dict[str, Any]:
+def feature_operation(
+    base: dict[str, Any],
+    feature: dict[str, Any],
+    operations_by_id: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Return one concrete add_extrude or cut operation."""
     if feature["operation"] in {"revolved_extrusion", "revolved_cut"}:
         return revolved_feature_operation(base, feature)
@@ -930,7 +950,7 @@ def feature_operation(base: dict[str, Any], feature: dict[str, Any]) -> dict[str
         "type": operation_type,
         "id": feature["id"],
         "target": feature["target"],
-        "positions": resolve_positions(base, feature),
+        "positions": resolve_positions(base, feature, operations_by_id),
     }
 
     operation.update(profile_fields(feature))
@@ -1156,7 +1176,14 @@ def rounded_rectangle_profile_fields(
     """Return an arc sketch for a rounded rectangle."""
     if radius <= 0:
         raise ValueError("Rounded rectangle radius must be positive")
-    if radius * 2 >= min(width, height):
+    smaller_side = min(width, height)
+    if math.isclose(radius * 2, smaller_side, rel_tol=0, abs_tol=1e-9):
+        return slot_profile_fields(
+            length=max(width, height),
+            width=smaller_side,
+            orientation="horizontal" if width >= height else "vertical",
+        )
+    if radius * 2 > smaller_side:
         raise ValueError(
             "Rounded rectangle radius must be less than half the smaller side"
         )
@@ -1261,10 +1288,19 @@ def slot_profile_fields(length: float, width: float, orientation: str) -> dict[s
     }
 
 
-def resolve_positions(base: dict[str, Any], feature: dict[str, Any]) -> list[list[float]]:
+def resolve_positions(
+    base: dict[str, Any],
+    feature: dict[str, Any],
+    operations_by_id: dict[str, dict[str, Any]] | None = None,
+) -> list[list[float]]:
     """Resolve high-level placement into exact operation positions."""
     placement = feature["placement"]
     placement_type = placement["type"]
+    placement_reference = placement_reference_geometry(
+        base,
+        feature,
+        operations_by_id or {},
+    )
 
     if placement_type == "centered":
         return [[0, 0]]
@@ -1273,10 +1309,10 @@ def resolve_positions(base: dict[str, Any], feature: dict[str, Any]) -> list[lis
         return rounded_points(placement["positions"])
 
     if placement_type == "near_corners":
-        return near_corner_positions(base, feature, placement)
+        return near_corner_positions(placement_reference, feature, placement)
 
     if placement_type == "circular_pattern":
-        return circular_pattern_positions(base, feature, placement)
+        return circular_pattern_positions(placement_reference, feature, placement)
 
     if placement_type == "rectangular_pattern":
         return rectangular_pattern_positions(placement)
@@ -1285,9 +1321,81 @@ def resolve_positions(base: dict[str, Any], feature: dict[str, Any]) -> list[lis
         return mirrored_positions(placement)
 
     if placement_type == "offset_from_edge":
-        return offset_from_edge_position(base, feature, placement)
+        return offset_from_edge_position(placement_reference, feature, placement)
+
+    if placement_type == "same_as_feature":
+        source_feature = placement["source_feature"]
+        source_operation = (operations_by_id or {}).get(source_feature)
+        if source_operation is None:
+            raise ValueError(
+                f"same_as_feature placement references unknown or future "
+                f"feature '{source_feature}'"
+            )
+        source_positions = source_operation.get("positions")
+        if not isinstance(source_positions, list) or not source_positions:
+            raise ValueError(
+                f"Feature '{source_feature}' does not provide reusable positions"
+            )
+        return rounded_points(source_positions)
 
     raise ValueError(f"Unsupported placement type: {placement_type}")
+
+
+def placement_reference_geometry(
+    base: dict[str, Any],
+    feature: dict[str, Any],
+    operations_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Return plan dimensions for the actual face targeted by a feature."""
+    target = str(feature.get("target", "base.top"))
+    target_owner, _, face_name = target.partition(".")
+    if target_owner == "base" or target_owner not in operations_by_id:
+        return base
+
+    operation = operations_by_id[target_owner]
+    profile_width, profile_height = operation_profile_size(operation)
+    distance = number_value(operation.get("distance", operation.get("depth", 1)))
+
+    if face_name in {"front", "back"}:
+        return {
+            "profile": "rectangle",
+            "width": profile_width,
+            "height": distance,
+        }
+    if face_name in {"left", "right"}:
+        return {
+            "profile": "rectangle",
+            "width": profile_height,
+            "height": distance,
+        }
+    return {
+        "profile": "rectangle",
+        "width": profile_width,
+        "height": profile_height,
+    }
+
+
+def operation_profile_size(operation: dict[str, Any]) -> tuple[float, float]:
+    """Return approximate local width and height for an operation profile."""
+    profile = operation.get("profile")
+    if profile == "rectangle":
+        return number_value(operation["width"]), number_value(operation["height"])
+    if profile in {"circle", "polygon"}:
+        diameter = number_value(operation["diameter"])
+        return diameter, diameter
+    if profile == "polyline":
+        return points_size(operation["points"])
+    if profile == "sketch":
+        points = [operation["start"]]
+        for segment in operation["segments"]:
+            if segment["type"] == "line":
+                points.append(segment["to"])
+            else:
+                points.extend([segment["through"], segment["to"]])
+        return points_size(points)
+    raise ValueError(
+        f"Cannot determine placement dimensions for profile '{profile}'"
+    )
 
 
 def near_corner_positions(
@@ -1297,8 +1405,43 @@ def near_corner_positions(
 ) -> list[list[float]]:
     """Place repeated feature instances near the base corner regions."""
     count = int(placement.get("count", 4))
-    if count < 1 or count > 4:
-        raise ValueError("near_corners placement supports between 1 and 4 corners")
+    if count < 1:
+        raise ValueError("near_corners placement requires at least one position")
+
+    if base.get("profile") == "polygon":
+        sides = int(base["sides"])
+        if count > sides:
+            raise ValueError(
+                "near_corners placement cannot request more positions than "
+                "the target polygon has vertices"
+            )
+
+        circumradius = number_value(base["diameter"]) / 2
+        feature_width, feature_height = feature_plan_size(feature)
+        margin = number_value(placement.get("margin", 5))
+        clearance = max(feature_width, feature_height) / 2 + margin
+        radial_inset = clearance / math.cos(math.pi / sides)
+        placement_radius = circumradius - radial_inset
+        if placement_radius <= 0:
+            raise ValueError(
+                "Feature is too large to place near the polygon vertices"
+            )
+
+        return rounded_points(
+            [
+                [
+                    placement_radius * math.cos(2 * math.pi * index / sides),
+                    placement_radius * math.sin(2 * math.pi * index / sides),
+                ]
+                for index in range(count)
+            ]
+        )
+
+    if count > 4:
+        raise ValueError(
+            "near_corners placement supports at most four positions on "
+            "rectangular targets"
+        )
 
     base_width, base_height = base_plan_size(base)
     feature_width, feature_height = feature_plan_size(feature)

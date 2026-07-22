@@ -46,6 +46,42 @@ def test_near_corners_intent_computes_four_hole_positions():
     validate_model_data(model_data)
 
 
+def test_near_corners_uses_regular_polygon_vertices():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "polygon",
+            "diameter": 110,
+            "sides": 3,
+            "thickness": 7,
+        },
+        "features": [
+            {
+                "id": "vertex_bosses",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": 14,
+                "distance": 5,
+                "placement": {
+                    "type": "near_corners",
+                    "count": 3,
+                    "margin": 5,
+                },
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["positions"] == [
+        [31, 0],
+        [-15.5, 26.846788],
+        [-15.5, -26.846788],
+    ]
+    assert check_model_data(model_data)["passed"] is True
+
+
 def test_circular_pattern_intent_computes_evenly_spaced_positions():
     intent = {
         "base": {
@@ -301,6 +337,164 @@ def test_rounded_rectangle_intent_lowers_to_arc_sketch_and_builds():
     ]
     assert len(arc_segments) == 4
     assert check_model_data(model_data)["passed"] is True
+
+
+def test_semicircular_rounded_rectangle_lowers_to_slot_profile():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 80,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "groove",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "rounded_rectangle",
+                "width": 8,
+                "height": 70,
+                "radius": 4,
+                "depth": 3,
+                "placement": {"type": "centered"},
+            }
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+    groove = model_data["operations"][1]
+
+    assert groove["profile"] == "sketch"
+    assert len([s for s in groove["segments"] if s["type"] == "arc"]) == 2
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_same_as_feature_reuses_parent_positions():
+    intent = {
+        "base": {
+            "id": "base_plate",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 70,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "corner_bosses",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": 16,
+                "distance": 6,
+                "placement": {
+                    "type": "near_corners",
+                    "count": 4,
+                    "margin": 10,
+                },
+            },
+            {
+                "id": "boss_holes",
+                "operation": "cut",
+                "target": "corner_bosses.top",
+                "shape": "circle",
+                "diameter": 5,
+                "depth": "through",
+                "placement": {
+                    "type": "same_as_feature",
+                    "source_feature": "corner_bosses",
+                },
+            },
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][2]["positions"] == model_data["operations"][1]["positions"]
+    assert model_data["operations"][2]["target"] == "corner_bosses.top"
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_near_corner_placement_uses_target_feature_dimensions():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "half_cylinder",
+            "diameter": 80,
+            "length": 120,
+        },
+        "features": [
+            {
+                "id": "mounting_plate",
+                "operation": "extrusion",
+                "target": "base.flat",
+                "shape": "rectangle",
+                "width": 120,
+                "height": 80,
+                "distance": 6,
+                "placement": {"type": "centered"},
+            },
+            {
+                "id": "plate_holes",
+                "operation": "cut",
+                "target": "mounting_plate.top",
+                "shape": "circle",
+                "diameter": 7,
+                "depth": "through",
+                "placement": {
+                    "type": "near_corners",
+                    "count": 2,
+                    "margin": 5,
+                },
+            },
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][2]["positions"] == [
+        [-51.5, 31.5],
+        [51.5, 31.5],
+    ]
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_half_cylinder_descriptive_face_aliases_are_normalized():
+    intent = {
+        "base": {
+            "id": "cradle",
+            "profile": "half_cylinder",
+            "diameter": 80,
+            "length": 120,
+        },
+        "features": [
+            {
+                "id": "flat_pad",
+                "operation": "extrusion",
+                "target": "base.flat_face",
+                "shape": "rectangle",
+                "width": 40,
+                "height": 20,
+                "distance": 4,
+                "placement": {"type": "centered"},
+            },
+            {
+                "id": "curved_cut",
+                "operation": "cut",
+                "target": "base.curved_surface",
+                "shape": "circle",
+                "diameter": 5,
+                "depth": 2,
+                "placement": {"type": "centered"},
+            },
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["target"] == "base.front"
+    assert model_data["operations"][2]["target"] == "base.outer_surface"
 
 
 def test_validate_design_intent_reports_missing_shape_dimensions():
@@ -1068,7 +1262,7 @@ def test_intent_normalizes_half_cylinder_curved_face_alias():
 
     model_data = intent_to_model_data(intent)
 
-    assert model_data["operations"][1]["target"] == "base.top"
+    assert model_data["operations"][1]["target"] == "base.outer_surface"
     assert check_model_data(model_data)["passed"] is True
 
 

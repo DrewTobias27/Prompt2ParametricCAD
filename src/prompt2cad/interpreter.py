@@ -8,8 +8,6 @@ from prompt2cad.feature_registry import FeatureReference
 
 BASE_OPERATION_TYPES = {"extrude", "revolve"}
 SIDE_FACE_NAMES = {"front", "back", "left", "right"}
-VIRTUAL_TARGET_POSITION_FACTORS = (1, 0.75, 0.5, 0.25, 0)
-ADD_REVOLVE_POSITION_FACTORS = (1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.25)
 GEOMETRY_TOLERANCE = 1e-9
 EDGE_MATCH_TOLERANCE = 1e-6
 
@@ -318,63 +316,6 @@ def get_positions(operation: dict, operation_number: int) -> list:
                 "profile y position must be an integer or float"
             )
     return positions
-
-
-def normalize_side_target_positions(
-    part: cq.Workplane,
-    target: str,
-    positions: list,
-) -> list:
-    """Move obviously misplaced side-target positions back onto the side face."""
-    if not is_side_target(target):
-        return positions
-
-    bounding_box = part.val().BoundingBox()
-    face_name = get_target_face_name(target)
-    if face_name in {"front", "back"}:
-        first_limit = bounding_box.xlen / 2
-    else:
-        first_limit = bounding_box.ylen / 2
-    vertical_limit = bounding_box.zlen / 2
-    normalized_positions = []
-
-    for position in positions:
-        first_coordinate = position[0]
-        vertical_coordinate = position[1]
-
-        if (
-            abs(vertical_coordinate) > vertical_limit
-            and abs(first_coordinate) <= vertical_limit
-        ):
-            normalized_positions.append(
-                [vertical_coordinate, first_coordinate]
-            )
-        elif abs(vertical_coordinate) > vertical_limit:
-            normalized_positions.append([first_coordinate, 0])
-        else:
-            normalized_positions.append(position)
-
-    clamped_positions = []
-    for first_coordinate, vertical_coordinate in normalized_positions:
-        clamped_positions.append(
-            [
-                clamp(first_coordinate, -first_limit, first_limit),
-                clamp(vertical_coordinate, -vertical_limit, vertical_limit),
-            ]
-        )
-
-    return clamped_positions
-
-
-def scale_positions_toward_origin(positions: list, factor: float) -> list:
-    """Scale 2D positions toward the target workplane origin."""
-    return [
-        [
-            position[0] * factor,
-            position[1] * factor,
-        ]
-        for position in positions
-    ]
 
 
 def create_profile(
@@ -881,6 +822,12 @@ def register_add_extrusion_references(
             )
 
     if use_instances:
+        feature_graph.registry.register_pattern_planes(
+            operation["id"],
+            target_workplane.plane,
+            operation["distance"],
+            len(positions),
+        )
         register_multi_instance_edge_groups(
             feature_graph,
             operation["id"],
@@ -942,7 +889,6 @@ def apply_cut_operation(
     depth = operation["depth"]
 
     positions = get_positions(operation, operation_number)
-    positions = normalize_side_target_positions(part, target, positions)
 
     target_workplane, is_virtual_target = get_target_workplane(
         part,
@@ -1000,7 +946,6 @@ def apply_add_extrusion(
     target = operation["target"]
     distance = operation["distance"]
     positions = get_positions(operation, operation_number)
-    positions = normalize_side_target_positions(part, target, positions)
 
     validate_positive_number(distance, "Distance")
     target_workplane, is_virtual_target = get_target_workplane(
@@ -1012,42 +957,19 @@ def apply_add_extrusion(
     )
 
     if is_virtual_target:
-        last_result = part
-        for position_factor in VIRTUAL_TARGET_POSITION_FACTORS:
-            retry_positions = scale_positions_toward_origin(
-                positions,
-                position_factor,
-            )
-            target_workplane, _ = get_target_workplane(
-                part,
-                target,
-                operation_number,
-                prefer_virtual_side=True,
-                feature_graph=feature_graph,
-            )
-            workplane = target_workplane.pushPoints(retry_positions)
-            workplane = create_profile(
-                workplane,
-                operation,
-                operation_number,
-            )
-            extrusion_tool = workplane.extrude(distance)
-            result = part.union(extrusion_tool)
-
-            if len(result.solids().vals()) == 1:
-                register_add_extrusion_references(
-                    feature_graph,
-                    part,
-                    operation,
-                    target,
-                    operation_number,
-                    retry_positions,
-                )
-                return apply_add_extrusion_face_tags(result, operation)
-
-            last_result = result
-
-        return apply_add_extrusion_face_tags(last_result, operation)
+        workplane = target_workplane.pushPoints(positions)
+        workplane = create_profile(workplane, operation, operation_number)
+        extrusion_tool = workplane.extrude(distance)
+        result = part.union(extrusion_tool)
+        register_add_extrusion_references(
+            feature_graph,
+            part,
+            operation,
+            target,
+            operation_number,
+            positions,
+        )
+        return apply_add_extrusion_face_tags(result, operation)
 
     workplane = target_workplane.pushPoints(positions)
     workplane = create_profile(workplane, operation, operation_number)
@@ -1079,58 +1001,6 @@ def validate_axis_point(axis_point: list, point_name: str) -> tuple:
         return (axis_point[0], axis_point[1], 0)
 
     return tuple(axis_point)
-
-
-def project_2d_point_to_axis(point: list, axis_start: tuple, axis_end: tuple) -> list:
-    """Project a 2D point onto the 2D revolve axis line."""
-    point_x = point[0]
-    point_y = point[1]
-    start_x = axis_start[0]
-    start_y = axis_start[1]
-    axis_x = axis_end[0] - start_x
-    axis_y = axis_end[1] - start_y
-    axis_length_squared = axis_x**2 + axis_y**2
-
-    if axis_length_squared == 0:
-        raise ValueError("Revolve axis start and end cannot be the same")
-
-    point_axis_x = point_x - start_x
-    point_axis_y = point_y - start_y
-    axis_fraction = (
-        point_axis_x * axis_x + point_axis_y * axis_y
-    ) / axis_length_squared
-
-    return [
-        start_x + axis_fraction * axis_x,
-        start_y + axis_fraction * axis_y,
-    ]
-
-
-def scale_revolve_positions_toward_axis(
-    positions: list,
-    axis_start: tuple,
-    axis_end: tuple,
-    factor: float,
-) -> list:
-    """Move revolve feature positions toward the revolve axis."""
-    scaled_positions = []
-
-    for position in positions:
-        projected_position = project_2d_point_to_axis(
-            position,
-            axis_start,
-            axis_end,
-        )
-        scaled_positions.append(
-            [
-                projected_position[0]
-                + (position[0] - projected_position[0]) * factor,
-                projected_position[1]
-                + (position[1] - projected_position[1]) * factor,
-            ]
-        )
-
-    return scaled_positions
 
 
 def build_revolve_tool(
@@ -1213,34 +1083,10 @@ def apply_add_revolve(
     if part is None:
         raise ValueError("Cannot add before a solid has been created")
 
-    axis_start = validate_axis_point(operation["axis_start"], "Axis start")
-    axis_end = validate_axis_point(operation["axis_end"], "Axis end")
-    positions = get_positions(operation, operation_number)
-    last_result = part
-
-    for position_factor in ADD_REVOLVE_POSITION_FACTORS:
-        retry_operation = operation.copy()
-        retry_operation["positions"] = scale_revolve_positions_toward_axis(
-            positions,
-            axis_start,
-            axis_end,
-            position_factor,
-        )
-
-        revolve_tool = build_revolve_tool(retry_operation, operation_number)
-        result = part.union(revolve_tool)
-
-        if len(result.solids().vals()) == 1:
-            register_revolve_references(
-                feature_graph,
-                retry_operation,
-                revolve_tool,
-            )
-            return result
-
-        last_result = result
-
-    return last_result
+    revolve_tool = build_revolve_tool(operation, operation_number)
+    result = part.union(revolve_tool)
+    register_revolve_references(feature_graph, operation, revolve_tool)
+    return result
 
 
 def apply_cut_revolve(

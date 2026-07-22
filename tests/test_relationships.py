@@ -99,6 +99,52 @@ def test_inside_relationship_fails_when_feature_exceeds_container_margin():
     assert result["failures"][0]["relationship_type"] == "inside"
 
 
+def test_inside_relationship_supports_repeated_parent_instances():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 6,
+                "width": 100,
+                "height": 60,
+            },
+            {
+                "type": "add_extrude",
+                "id": "bosses",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[-30, 15], [30, 15], [-30, -15], [30, -15]],
+                "distance": 6,
+                "diameter": 16,
+            },
+            {
+                "type": "cut",
+                "id": "boss_holes",
+                "target": "bosses.top",
+                "profile": "circle",
+                "positions": [[-30, 15], [30, 15], [-30, -15], [30, -15]],
+                "depth": "through",
+                "diameter": 5,
+            },
+        ],
+        "relationships": [
+            {
+                "type": "inside",
+                "feature": "boss_holes",
+                "container": "bosses",
+                "margin": 0,
+            }
+        ],
+    }
+
+    result = check_relationships(model_data)
+
+    assert result["passed"] is True
+
+
 def test_smaller_than_relationship_fails_when_feature_is_too_large():
     model_data = plate_with_boss_relationships(
         [0, 0],
