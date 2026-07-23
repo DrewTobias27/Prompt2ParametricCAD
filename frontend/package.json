@@ -1,12 +1,13 @@
 {
   "name": "prompt2parametriccad-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "qa": "node scripts/manual-assistance-smoke.mjs && node scripts/preview-qa.mjs && node scripts/generated-review-smoke.mjs",
     "qa:manual-assistance": "node scripts/manual-assistance-smoke.mjs",
     "qa:preview": "node scripts/preview-qa.mjs",
     "qa:generated-review": "node scripts/generated-review-smoke.mjs"

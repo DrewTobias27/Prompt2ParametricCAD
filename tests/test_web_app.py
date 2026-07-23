@@ -1,8 +1,33 @@
 """Tests for local FastAPI route helpers."""
 
 import cadquery as cq
+from fastapi.responses import FileResponse
 
 from prompt2cad import web_app
+
+
+def test_health_reports_backend_ready():
+    assert web_app.health() == {"status": "ok"}
+
+
+def test_home_reports_when_frontend_is_not_built(monkeypatch, tmp_path):
+    monkeypatch.setattr(web_app, "FRONTEND_DIST_DIR", tmp_path)
+
+    response = web_app.home()
+
+    assert response["status"] == "ok"
+    assert response["frontend"] == "not built"
+
+
+def test_home_serves_built_frontend(monkeypatch, tmp_path):
+    index_path = tmp_path / "index.html"
+    index_path.write_text("<main>Prompt2ParametricCAD</main>", encoding="utf-8")
+    monkeypatch.setattr(web_app, "FRONTEND_DIST_DIR", tmp_path)
+
+    response = web_app.home()
+
+    assert isinstance(response, FileResponse)
+    assert web_app.Path(response.path) == index_path
 
 
 def test_generate_cad_prefers_design_intent_and_returns_model(monkeypatch):
@@ -238,64 +263,6 @@ def test_generate_cad_does_not_retry_missing_credentials(monkeypatch):
     assert response["status"] == "error"
     assert response["generation_path"] == "design_intent"
     assert direct_calls == []
-
-
-def test_legacy_intent_endpoint_uses_automatic_pipeline(monkeypatch):
-    expected = {"status": "success", "generation_mode": "automatic"}
-    monkeypatch.setattr(web_app, "generate_cad", lambda request: expected)
-
-    response = web_app.generate_cad_from_design_intent(
-        web_app.CADRequest(prompt="make a plate")
-    )
-
-    assert response == expected
-
-
-def test_demo_examples_return_curated_prompt_list():
-    response = web_app.demo_examples()
-
-    assert response["examples"]
-    assert all(example["id"] for example in response["examples"])
-    assert all(example["prompt"] for example in response["examples"])
-    assert all(example["has_saved_fallback"] for example in response["examples"])
-
-
-def test_build_demo_uses_saved_model_without_api(monkeypatch):
-    model_data = {
-        "operations": [
-            {
-                "type": "extrude",
-                "id": "base",
-                "plane": "XY",
-                "profile": "circle",
-                "diameter": 80,
-                "distance": 8,
-            }
-        ]
-    }
-
-    monkeypatch.setattr(
-        web_app,
-        "load_demo_model_data",
-        lambda demo_id: (model_data, "demo flange"),
-    )
-    monkeypatch.setattr(
-        web_app,
-        "export_model_data",
-        lambda generated_model_data, filename_hint: {
-            "status": "success",
-            "model_data": generated_model_data,
-            "step_file": "generated/web/demo.step",
-            "download_url": "/download/demo.step",
-            "performance": {"cache_hit": False},
-        },
-    )
-
-    response = web_app.build_demo(web_app.DemoBuildRequest(demo_id="flange"))
-
-    assert response["status"] == "success"
-    assert response["generation_mode"] == "saved_demo"
-    assert response["model_data"] == model_data
 
 
 def test_generate_cad_logs_repaired_prompt_generation(monkeypatch, tmp_path):

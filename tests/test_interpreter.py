@@ -255,7 +255,7 @@ def test_example_files_validate_and_build(input_path):
 
 
 def test_example_model():
-    input_path = PROJECT_ROOT / "examples" / "example_part.json"
+    input_path = PROJECT_ROOT / "examples" / "models" / "example_part.json"
 
     model_data = load_model(input_path)
     part = build_model(model_data)
@@ -1546,7 +1546,7 @@ def test_line_arc_cut():
 
 
 def test_api_rectangular_plate_example():
-    input_path = PROJECT_ROOT / "examples" / "api_rectangular_plate.json"
+    input_path = PROJECT_ROOT / "examples" / "models" / "api_rectangular_plate.json"
 
     model_data = load_model(input_path)
     part = build_model(model_data)
@@ -1745,6 +1745,96 @@ def test_base_edge_treatment_falls_back_when_saved_edges_are_stale():
 
     assert len(part.solids().vals()) == 1
     assert solid.isValid()
+
+
+def test_countersink_cuts_tapered_holes_on_target_face():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 8,
+                "width": 80,
+                "height": 40,
+            },
+            {
+                "type": "countersink",
+                "id": "countersinks",
+                "target": "base.top",
+                "positions": [[-20, 0], [0, 0], [20, 0]],
+                "diameter": 5,
+                "countersink_diameter": 10,
+                "angle": 90,
+                "depth": "through",
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+    solid = part.solids().val()
+
+    assert len(part.solids().vals()) == 1
+    assert solid.isValid()
+    assert solid.Volume() < 80 * 40 * 8
+
+
+def test_feature_edge_treatment_uses_surviving_split_edge_segments():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 3,
+                "width": 120,
+                "height": 80,
+            },
+            {
+                "type": "add_extrude",
+                "id": "rim",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 4,
+                "width": 120,
+                "height": 80,
+            },
+            {
+                "type": "cut",
+                "id": "rim_opening",
+                "target": "rim.top",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "depth": 4,
+                "width": 110,
+                "height": 70,
+            },
+            {
+                "type": "add_extrude",
+                "id": "rib",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 4,
+                "width": 4,
+                "height": 72,
+            },
+            {
+                "type": "fillet",
+                "id": "rib_fillet",
+                "target": "rib.top_outer_edges",
+                "radius": 0.8,
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+
+    assert len(part.solids().vals()) == 1
+    assert part.solids().val().isValid()
 
 
 def test_fillet_vertical_edges_builds_valid_modified_solid():

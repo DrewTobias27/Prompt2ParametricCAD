@@ -548,21 +548,66 @@ def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
     intent = prepare_design_intent_for_lowering(intent)
 
     base = intent["base"]
+    features_by_id = {
+        feature["id"]: feature
+        for feature in intent["features"]
+    }
+    edge_treatments_by_target: dict[str, list[dict[str, Any]]] = {}
+    for edge_treatment in intent.get("edge_treatments", []):
+        edge_treatments_by_target.setdefault(
+            edge_treatment["target_feature"],
+            [],
+        ).append(edge_treatment)
+
     operations = [base_operation(base)]
     operations_by_id = {"base": operations[0]}
     relationships = []
+
+    append_edge_treatment_operations(
+        operations,
+        edge_treatments_by_target.pop("base", []),
+        base,
+        features_by_id,
+    )
 
     for feature in intent["features"]:
         operation = feature_operation(base, feature, operations_by_id)
         operations.append(operation)
         operations_by_id[operation["id"]] = operation
         relationships.extend(feature_relationships(base, feature))
+        append_edge_treatment_operations(
+            operations,
+            edge_treatments_by_target.pop(feature["id"], []),
+            base,
+            features_by_id,
+        )
 
-    features_by_id = {
-        feature["id"]: feature
-        for feature in intent["features"]
+    for unmatched_treatments in edge_treatments_by_target.values():
+        append_edge_treatment_operations(
+            operations,
+            unmatched_treatments,
+            base,
+            features_by_id,
+        )
+
+    return {
+        "operations": operations,
+        "relationships": relationships,
     }
-    for edge_treatment in intent.get("edge_treatments", []):
+
+
+def append_edge_treatment_operations(
+    operations: list[dict[str, Any]],
+    edge_treatments: list[dict[str, Any]],
+    base: dict[str, Any],
+    features_by_id: dict[str, dict[str, Any]],
+) -> None:
+    """Place edge treatments directly after the feature whose edges they own.
+
+    Saved topological references are most stable at that point in the feature
+    tree. Later cuts and unions can split or replace those edges.
+    """
+    for edge_treatment in edge_treatments:
         operations.append(
             edge_treatment_operation(
                 edge_treatment,
@@ -570,11 +615,6 @@ def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
                 features_by_id=features_by_id,
             )
         )
-
-    return {
-        "operations": operations,
-        "relationships": relationships,
-    }
 
 
 def prepare_design_intent_for_lowering(
@@ -710,6 +750,7 @@ def normalize_intent_references(intent: dict[str, Any]) -> dict[str, Any]:
                 feature,
                 original_base_id,
                 intent.get("features", []),
+                base,
             )
             for feature in intent.get("features", [])
         ],
@@ -724,16 +765,66 @@ def normalize_feature_reference(
     feature: dict[str, Any],
     original_base_id: str,
     all_features: list[dict[str, Any]] | None = None,
+    base: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return a feature with canonical target names."""
     normalized = dict(feature)
-    normalized["target"] = normalize_face_target(
+    normalized["target"] = material_support_target(
         normalized.get("target", "base.top"),
         original_base_id,
         normalized,
         all_features or [],
+        base,
     )
     return normalized
+
+
+def material_support_target(
+    target: str,
+    original_base_id: str,
+    feature: dict[str, Any],
+    all_features: list[dict[str, Any]],
+    base: dict[str, Any] | None,
+    visited_feature_ids: set[str] | None = None,
+) -> str:
+    """Resolve references through subtractive features to their material face."""
+    normalized_target = normalize_face_target(
+        target,
+        original_base_id,
+        feature,
+        all_features,
+        base,
+    )
+    target_owner, _, _ = normalized_target.partition(".")
+    visited_feature_ids = set(visited_feature_ids or ())
+    if target_owner in visited_feature_ids:
+        raise ValueError(
+            f"Cyclic subtractive target reference involving '{target_owner}'"
+        )
+
+    target_feature = next(
+        (
+            candidate
+            for candidate in all_features
+            if candidate.get("id") == target_owner
+        ),
+        None,
+    )
+    if target_feature and target_feature.get("operation") in {
+        "cut",
+        "revolved_cut",
+    }:
+        visited_feature_ids.add(target_owner)
+        return material_support_target(
+            target_feature.get("target", "base.top"),
+            original_base_id,
+            feature,
+            all_features,
+            base,
+            visited_feature_ids,
+        )
+
+    return normalized_target
 
 
 def normalize_edge_treatment_reference(
@@ -752,6 +843,7 @@ def normalize_face_target(
     original_base_id: str,
     feature: dict[str, Any] | None = None,
     all_features: list[dict[str, Any]] | None = None,
+    base: dict[str, Any] | None = None,
 ) -> str:
     """Normalize a face-operation target into feature.reference format."""
     if target == "":
@@ -770,13 +862,18 @@ def normalize_face_target(
     }
 
     target_aliases = {
-        "base.flat": "base.front",
-        "base.flat_face": "base.front",
+        "base.flat": "base.top",
+        "base.flat_face": "base.top",
         "base.curved": "base.outer_surface",
         "base.curved_surface": "base.outer_surface",
         "base.side": "base.top",
         "base.outer_surface": "base.outer_surface",
     }
+    if base and base.get("profile") == "half_cylinder":
+        # The canonical half-cylinder revolve places its actual flat material
+        # face at +Z. "Bottom" describes its design role, not the generated
+        # coordinate direction.
+        target_aliases["base.bottom"] = "base.top"
     if target in target_aliases:
         return target_aliases[target]
 
@@ -1052,6 +1149,13 @@ def feature_operation(
     operations_by_id: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Return one concrete add_extrude or cut operation."""
+    if feature.get("role") == "countersink":
+        return countersink_feature_operation(
+            base,
+            feature,
+            operations_by_id or {},
+        )
+
     if feature["operation"] in {"revolved_extrusion", "revolved_cut"}:
         return revolved_feature_operation(base, feature)
 
@@ -1071,6 +1175,52 @@ def feature_operation(
         operation["depth"] = feature.get("depth", "through")
 
     return operation
+
+
+def countersink_feature_operation(
+    base: dict[str, Any],
+    feature: dict[str, Any],
+    operations_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Lower a countersink intent into a target-face tapered-hole feature."""
+    placement = feature.get("placement", {})
+    source_feature_id = placement.get("source_feature")
+    source_operation = operations_by_id.get(source_feature_id)
+
+    hole_diameter = feature.get("diameter")
+    if hole_diameter is None and source_operation is not None:
+        hole_diameter = source_operation.get("diameter")
+    if hole_diameter is None:
+        raise ValueError(
+            f"Countersink feature '{feature.get('id')}' requires a hole "
+            "diameter or a same_as_feature source with a diameter"
+        )
+
+    hole_diameter = number_value(hole_diameter)
+    radial_width = number_value(feature.get("width", hole_diameter / 2))
+    countersink_diameter = max(
+        hole_diameter * 1.5,
+        hole_diameter + 2 * radial_width,
+    )
+
+    axial_depth = number_value(feature.get("height", radial_width))
+    half_angle = math.degrees(math.atan2(radial_width, axial_depth))
+    angle = max(30.0, min(150.0, 2 * half_angle))
+
+    return {
+        "type": "countersink",
+        "id": feature["id"],
+        "target": feature["target"],
+        "positions": resolve_positions(base, feature, operations_by_id),
+        "diameter": round_number(hole_diameter),
+        "countersink_diameter": round_number(countersink_diameter),
+        "angle": round_number(angle),
+        "depth": (
+            source_operation.get("depth", "through")
+            if source_operation is not None
+            else "through"
+        ),
+    }
 
 
 def revolved_feature_operation(
@@ -1446,6 +1596,12 @@ def resolve_positions(
             raise ValueError(
                 f"Feature '{source_feature}' does not provide reusable positions"
             )
+        target_owner, _, _ = str(feature.get("target", "")).partition(".")
+        if target_owner == source_feature and len(source_positions) == 1:
+            # A sketch on the source feature's own face uses that face's local
+            # origin. Reusing its parent-plane offset would apply the offset a
+            # second time and move the dependent feature off the solid.
+            return [[0, 0]]
         return rounded_points(source_positions)
 
     raise ValueError(f"Unsupported placement type: {placement_type}")
@@ -1459,12 +1615,27 @@ def placement_reference_geometry(
     """Return plan dimensions for the actual face targeted by a feature."""
     target = str(feature.get("target", "base.top"))
     target_owner, _, face_name = target.partition(".")
-    if target_owner == "base" or target_owner not in operations_by_id:
+    if target_owner not in operations_by_id:
+        return base
+    if target_owner == "base" and face_name in {"top", "bottom"}:
         return base
 
     operation = operations_by_id[target_owner]
+    visited_targets = set()
+    while operation.get("type") in {"cut", "cut_revolve"}:
+        parent_target = operation.get("target")
+        if not isinstance(parent_target, str) or parent_target in visited_targets:
+            return base
+        visited_targets.add(parent_target)
+        parent_owner, _, parent_face = parent_target.partition(".")
+        parent_operation = operations_by_id.get(parent_owner)
+        if parent_operation is None:
+            return base
+        operation = parent_operation
+        face_name = parent_face
+
     profile_width, profile_height = operation_profile_size(operation)
-    distance = number_value(operation.get("distance", operation.get("depth", 1)))
+    distance = number_value(operation.get("distance", 1))
 
     if face_name in {"front", "back"}:
         return {
@@ -1506,6 +1677,16 @@ def operation_profile_size(operation: dict[str, Any]) -> tuple[float, float]:
     raise ValueError(
         f"Cannot determine placement dimensions for profile '{profile}'"
     )
+
+
+def points_size(points: list[list[float]]) -> tuple[float, float]:
+    """Return the axis-aligned width and height of 2D profile points."""
+    if not points:
+        raise ValueError("Cannot determine dimensions from an empty point list")
+
+    x_values = [number_value(point[0]) for point in points]
+    y_values = [number_value(point[1]) for point in points]
+    return max(x_values) - min(x_values), max(y_values) - min(y_values)
 
 
 def near_corner_positions(

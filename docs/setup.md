@@ -1,154 +1,141 @@
-# Windows setup guide
+# Setup and development
 
-This guide describes how to set up Prompt2ParametricCAD on Windows from a fresh
-clone.
+## Prerequisites
 
-CadQuery can be more sensitive to Python environment details than a normal web
-app, so the most important rule is: use one clean Python environment and run all
-commands from that environment.
+- Python 3.11 or 3.12
+- Node.js
+- pnpm
+- Git
+- OpenAI API key for prompt generation
 
-## 1. Clone the repository
+CadQuery includes compiled geometry dependencies. Use a clean virtual or Conda
+environment if it conflicts with another Python installation.
+
+## Install
 
 ```powershell
 git clone https://github.com/DrewTobias27/Prompt2ParametricCAD.git
 cd Prompt2ParametricCAD
-```
 
-## 2. Create and activate a Python environment
-
-Use Python 3.12 if possible, since that is the version currently used by the
-working development environment.
-
-One common option is a virtual environment:
-
-```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-If PowerShell blocks activation scripts, run this once for the current user:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-Then close and reopen the terminal, activate the environment again, and continue.
-
-## 3. Install dependencies
-
-```powershell
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -e ".[dev]"
+
+cd frontend
+pnpm install
+cd ..
 ```
 
-If CadQuery installation fails through `pip`, use a Conda environment instead.
-CadQuery often behaves better through Conda on some machines.
+If PowerShell blocks environment activation or project scripts, use a process-
+scoped bypass rather than changing machine-wide policy:
 
-## 4. Check the setup
+```powershell
+powershell -ExecutionPolicy Bypass
+```
 
-Run the setup checker:
+## Credentials
+
+Set the key only in an environment variable:
+
+```powershell
+$env:OPENAI_API_KEY = "your-key"
+```
+
+Do not paste keys into source, JSON, `.env` files that are not ignored, terminal
+commands saved in documentation, or Git commits.
+
+Optional model overrides:
+
+```powershell
+$env:PROMPT2CAD_OPENAI_MODEL = "gpt-5-mini"
+$env:PROMPT2CAD_REPAIR_MODEL = "gpt-5-mini"
+```
+
+## Verify the environment
 
 ```powershell
 .\scripts\check_setup.ps1
-```
-
-If PowerShell blocks the script, either use the execution-policy command from
-step 2 or run the checker with a one-time process bypass:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\check_setup.ps1
-```
-
-The checker verifies:
-
-- Python is available
-- required packages import correctly
-- `PYTHONPATH` is pointed at `src`
-- a tiny CadQuery model can be built through the project interpreter
-- whether `OPENAI_API_KEY` is available for prompt-based generation
-
-The OpenAI key is optional for local JSON builds and fixture-backed evals. It is
-only required when using prompt generation.
-
-## 5. Run tests
-
-```powershell
-$env:PYTHONPATH = "src"
 python -m pytest
 ```
 
-## 6. Run evals
-
-Some evals use tracked fixtures and do not require API calls.
-
-```powershell
-$env:PYTHONPATH = "src"
-python -m prompt2cad.eval_runner --models-dir generated\evals --cases-dir evals\cases
-```
-
-If generated eval JSON files are missing, generate fixture-backed and API-backed
-eval outputs:
-
-```powershell
-$env:PYTHONPATH = "src"
-python -m prompt2cad.eval_generator --overwrite
-```
-
-API-backed eval generation requires `OPENAI_API_KEY`.
-
-## 7. Run the web app
-
-```powershell
-.\scripts\run_web_app.ps1
-```
-
-Then open:
-
-```text
-http://127.0.0.1:8000/
-```
-
-Leave that terminal running while using the web app. Press `Ctrl+C` to stop it.
-
-## 8. Run a laptop demo server
-
-To run the CAD backend on this computer and open the frontend from another
-laptop on the same network:
-
-```powershell
-.\scripts\run_demo_server.ps1
-```
-
-Then open `http://THIS-COMPUTER-IP:8000/` from the laptop. See
-`docs/demo_checklist.md` for the full demo runbook and fallback plan.
-
-## Optional: set an OpenAI API key
-
-For the current PowerShell session:
-
-```powershell
-$env:OPENAI_API_KEY = "your-api-key-here"
-```
-
-For future PowerShell sessions:
-
-```powershell
-[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "your-api-key-here", "User")
-```
-
-After setting a persistent key, open a new terminal before running the web app.
-
-Never commit API keys into the repository.
-
-## Optional: use a specific Python executable
-
-The helper scripts use `python` from the active environment by default. If you
-need to point them to a specific interpreter, set `PROMPT2CAD_PYTHON`:
+If `python` or `pnpm` is not the desired executable:
 
 ```powershell
 $env:PROMPT2CAD_PYTHON = "C:\Path\To\python.exe"
-.\scripts\check_setup.ps1
-.\scripts\run_web_app.ps1
+$env:PROMPT2CAD_PNPM = "C:\Path\To\pnpm.cmd"
 ```
 
-This is useful when several Python environments are installed.
+## Run the complete application
+
+The launch script builds React, then serves the frontend and FastAPI backend
+together:
+
+```powershell
+.\scripts\run_app.ps1
+```
+
+Open `http://127.0.0.1:8000/`.
+
+Useful options:
+
+```powershell
+.\scripts\run_app.ps1 -SkipFrontendBuild
+.\scripts\run_app.ps1 -Port 8080
+.\scripts\run_app.ps1 -Network
+```
+
+`-Network` binds to `0.0.0.0`. Only use it on a trusted private network.
+
+## Frontend development
+
+Use two terminals for hot reload.
+
+Backend:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m uvicorn prompt2cad.web_app:app --host 127.0.0.1 --port 8000
+```
+
+Frontend:
+
+```powershell
+cd frontend
+pnpm dev
+```
+
+Open `http://127.0.0.1:5173/`. Vite proxies `/api` requests to port 8000.
+
+## Frontend QA
+
+```powershell
+cd frontend
+pnpm build
+pnpm qa
+```
+
+## Common problems
+
+### `prompt2cad` cannot be imported
+
+Install the package in editable mode with `python -m pip install -e ".[dev]"`,
+or set `$env:PYTHONPATH = "src"` for a one-off command.
+
+### Port 8000 is already in use
+
+Stop the older server with `Ctrl+C`, or run:
+
+```powershell
+.\scripts\run_app.ps1 -Port 8001
+```
+
+### Frontend changes do not appear
+
+Use Vite development mode, or rebuild before starting FastAPI. A hard refresh
+may be needed after replacing a production build.
+
+### Prompt generation says credentials are missing
+
+The key must be set in the same terminal process that starts FastAPI. Open a new
+terminal after setting a persistent user environment variable.

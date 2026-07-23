@@ -589,7 +589,7 @@ def test_half_cylinder_descriptive_face_aliases_are_normalized():
 
     model_data = intent_to_model_data(intent)
 
-    assert model_data["operations"][1]["target"] == "base.front"
+    assert model_data["operations"][1]["target"] == "base.top"
     assert model_data["operations"][2]["target"] == "base.outer_surface"
 
 
@@ -1004,7 +1004,8 @@ def test_rectangular_base_all_edges_fillets_normalize_to_outside_corners():
 
     model_data = intent_to_model_data(intent)
 
-    assert model_data["operations"][2]["target"] == "base.vertical_edges"
+    assert model_data["operations"][1]["target"] == "base.vertical_edges"
+    assert model_data["operations"][2]["target"] == "base.top"
     assert check_model_data(model_data)["passed"] is True
 
 
@@ -1162,9 +1163,9 @@ def test_intent_lowering_normalizes_semantic_base_ids():
     model_data = intent_to_model_data(intent)
 
     assert model_data["operations"][0]["id"] == "base"
-    assert model_data["operations"][1]["target"] == "base.top"
+    assert model_data["operations"][1]["target"] == "base.top_outer_edges"
     assert model_data["operations"][2]["target"] == "base.top"
-    assert model_data["operations"][3]["target"] == "base.top_outer_edges"
+    assert model_data["operations"][3]["target"] == "base.top"
 
 
 def test_cylinder_intent_lowers_to_revolved_base():
@@ -1330,7 +1331,7 @@ def test_intent_normalizes_half_cylinder_flat_face_alias():
 
     model_data = intent_to_model_data(intent)
 
-    assert model_data["operations"][1]["target"] == "base.front"
+    assert model_data["operations"][1]["target"] == "base.top"
 
 
 def test_intent_normalizes_half_cylinder_curved_face_alias():
@@ -1390,3 +1391,157 @@ def test_revolved_polyline_cut_intent_lowers_for_countersink_style_feature():
     assert countersink["type"] == "cut_revolve"
     assert countersink["profile"] == "polyline"
     assert countersink["points"] == [[2.5, 0], [7.5, 0], [0, -2.5]]
+
+
+def test_side_face_offset_uses_side_face_dimensions():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 120,
+            "height": 80,
+            "thickness": 20,
+        },
+        "features": [
+            {
+                "id": "side_hole",
+                "operation": "cut",
+                "target": "base.right",
+                "shape": "circle",
+                "diameter": 10,
+                "depth": "through",
+                "placement": {
+                    "type": "offset_from_edge",
+                    "edge": "front",
+                    "offset": 0,
+                    "along": 0,
+                },
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["positions"] == [[0, 5]]
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_counterbore_inherits_support_face_and_pattern_from_source_cut():
+    intent = {
+        "base": {
+            "id": "plate",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 70,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "holes",
+                "role": "hole",
+                "operation": "cut",
+                "target": "plate.top",
+                "shape": "circle",
+                "diameter": 6,
+                "depth": "through",
+                "placement": {
+                    "type": "near_corners",
+                    "count": 4,
+                    "margin": 8,
+                },
+            },
+            {
+                "id": "counterbores",
+                "role": "counterbore",
+                "operation": "cut",
+                "target": "holes.top",
+                "shape": "circle",
+                "diameter": 10,
+                "depth": 2,
+                "placement": {
+                    "type": "same_as_feature",
+                    "source_feature": "holes",
+                },
+            },
+            {
+                "id": "nested_recess",
+                "role": "counterbore",
+                "operation": "cut",
+                "target": "counterbores.top",
+                "shape": "circle",
+                "diameter": 12,
+                "depth": 1,
+                "placement": {
+                    "type": "same_as_feature",
+                    "source_feature": "counterbores",
+                },
+            },
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+    holes, counterbores, nested_recess = model_data["operations"][1:4]
+
+    assert counterbores["target"] == "base.top"
+    assert counterbores["positions"] == holes["positions"]
+    assert nested_recess["target"] == "base.top"
+    assert nested_recess["positions"] == counterbores["positions"]
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_planar_countersink_lowers_to_native_tapered_hole_feature():
+    intent = {
+        "base": {
+            "id": "plate",
+            "profile": "rectangle",
+            "width": 100,
+            "height": 40,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "holes",
+                "role": "hole",
+                "operation": "cut",
+                "target": "plate.top",
+                "shape": "circle",
+                "diameter": 5,
+                "depth": "through",
+                "placement": {
+                    "type": "rectangular_pattern",
+                    "rows": 1,
+                    "columns": 3,
+                    "row_spacing": 0,
+                    "column_spacing": 30,
+                    "center": [0, 0],
+                },
+            },
+            {
+                "id": "countersinks",
+                "role": "countersink",
+                "operation": "revolved_cut",
+                "target": "holes.top",
+                "shape": "rectangle",
+                "width": 2.5,
+                "height": 2.5,
+                "placement": {
+                    "type": "same_as_feature",
+                    "source_feature": "holes",
+                },
+            },
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+    countersinks = model_data["operations"][2]
+
+    assert countersinks["type"] == "countersink"
+    assert countersinks["target"] == "base.top"
+    assert countersinks["diameter"] == 5
+    assert countersinks["countersink_diameter"] == 10
+    assert countersinks["angle"] == 90
+    assert countersinks["positions"] == model_data["operations"][1]["positions"]
+    assert check_model_data(model_data)["passed"] is True

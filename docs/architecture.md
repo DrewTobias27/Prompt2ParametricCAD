@@ -1,199 +1,116 @@
-# Prompt2ParametricCAD architecture
+# Architecture
 
-Prompt2ParametricCAD is organized around one central idea: every generated part
-should be represented as an ordered feature sequence before it becomes CAD
-geometry. The JSON operation list is the contract between user input, AI output,
-validation, CadQuery model construction, debug export, and future editable CAD
-export.
+Prompt2ParametricCAD uses a staged pipeline so language understanding, CAD
+representation, solid modeling, and evaluation can improve independently.
 
-## System pipeline
+## Production pipeline
 
 ```mermaid
-flowchart TD
-    A["Natural-language prompt"] --> B["OpenAI Structured Outputs"]
-    C["Manual web builder"] --> D["Operation JSON"]
-    B --> D
-    D --> E["Schema validation"]
-    E --> F["Interpreter"]
-    F --> G["Feature graph"]
-    F --> H["CadQuery solid"]
-    H --> I["STEP export"]
-    G --> J["Feature-tree debug JSON"]
-    H --> K["Geometry evaluator"]
-    G --> K
-    D --> K
+flowchart LR
+    P["Natural-language prompt"] --> I["Structured design intent"]
+    I --> L["Intent lowering"]
+    L --> J["Operation JSON"]
+    P -. "bounded compatibility fallback" .-> J
+    M["Manual builder"] --> J
+    J --> V["Schema and structural validation"]
+    V --> B["CadQuery interpreter"]
+    B --> S["Connected solid"]
+    B --> G["Feature graph"]
+    S --> Q["Geometry and operation-effect checks"]
+    G --> Q
+    Q --> E["STEP and debug export"]
 ```
 
-## Main components
+The operation JSON is the central contract. Prompt generation and the manual
+builder both produce it; validation, building, evaluation, and exports consume
+it.
 
-### Schema
+## Core modules
 
-`src/prompt2cad/schema.py` defines the allowed CAD operation JSON structure. It
-is intentionally strict because downstream geometry construction depends on
-predictable fields.
+| Module | Responsibility |
+| --- | --- |
+| `design_intent.py` | Relationship-aware description of the requested part |
+| `prompting.py` | Structured OpenAI calls, examples, and bounded repair |
+| `intent_alignment.py` | Normalizes intent vocabulary before lowering |
+| `intent_coverage.py` | Detects concepts or dimensions lost in translation |
+| `schema.py` | Strict operation JSON contract |
+| `interpreter.py` | Ordered CadQuery construction and reference registration |
+| `feature_graph.py` | Feature dependencies, references, and build order |
+| `feature_registry.py` | Runtime face, edge, alias, and target lookup |
+| `sketch_model.py` | Normalized sketch entities and geometric metadata |
+| `quality.py` | Schema, structure, build, export, and geometry quality gates |
+| `operation_effects.py` | Verifies each feature materially changed geometry |
+| `web_app.py` | FastAPI endpoints and production frontend hosting |
 
-The schema currently covers:
+## Design intent
 
-- base extrusions
-- base revolves
-- additive extrudes
-- cutting extrudes
-- additive revolves
-- cutting revolves
-- rectangle, circle, polygon, polyline, and sketch profiles
-- sketch segments with lines and arcs
-- repeated feature positions
+Design intent is a higher-level representation than raw CAD commands. It stores
+what a feature means—centered boss, near-corner holes, bolt-circle pattern,
+offset slot—before deciding exact operation coordinates.
 
-### Prompting
+The lowering stage:
 
-`src/prompt2cad/prompting.py` converts natural-language requests into schema
-valid model data. The current approach uses OpenAI Structured Outputs so the
-model returns JSON directly instead of freeform text.
+1. validates required concepts and dimensions;
+2. aligns aliases and general relationship vocabulary;
+3. resolves parents and target faces;
+4. computes positions from host geometry;
+5. emits strict operation JSON;
+6. checks that required intent survived lowering.
 
-The prompt layer should stay responsible for intent translation, not geometry
-repair. If a generated model is invalid, the preferred long-term fix is usually
-better operation representation or validation, not more hidden prompt hacks.
+This representation is also the preferred format for future training data
+because it isolates language reasoning from CadQuery syntax.
 
-### Manual builder
+## Geometry and references
 
-The web UI in `src/prompt2cad/web/` provides a guided way to produce operation
-JSON without relying only on a sentence. It is useful for demos, debugging, and
-for understanding what the language model is supposed to produce.
+The interpreter builds operations sequentially. Each feature receives:
 
-The manual builder supports:
+- a stable feature ID;
+- a build-order index;
+- parent and child relationships;
+- a normalized sketch;
+- created face and edge references;
+- readable aliases such as `feature_1.top`;
+- geometry summaries used by evaluators.
 
-- base shape selection
-- explicit or reasonable dimensions
-- added cuts and extrusions
-- feature targets
-- simple mirror and circular patterns
-- API-assisted dimensions/profile generation where needed
+Canonical IDs such as `base.face.f001` are intended to remain machine-friendly.
+Aliases remain prompt- and UI-friendly. Target resolution uses geometry-derived
+frames and directional aliases when possible, rather than fixed global planes.
 
-### Interpreter
+## Quality pipeline
 
-`src/prompt2cad/interpreter.py` is the bridge from operation JSON to CadQuery
-geometry. It builds features in order, applies cuts and additions, registers
-references, and enforces basic geometry validity.
+A successful build must pass multiple independent layers:
 
-This is currently the busiest part of the project. As the system grows, good
-future split points are:
+1. JSON Schema validation
+2. operation ordering and target validation
+3. design-intent coverage checks
+4. progressive CadQuery build
+5. connected-solid and shape-validity checks
+6. operation-effect checks
+7. semantic/eval-case assertions
+8. STEP export verification
 
-- sketch construction utilities
-- extrude operations
-- revolve operations
-- reference-frame and face-targeting logic
-- validation and repair suggestions
+Failures are structured by operation and stage so they can drive UI feedback,
+benchmarks, or bounded repair attempts.
 
-### Feature graph
+## Frontend and API
 
-The feature graph is the foundation for future editability. It records the
-semantic build structure alongside the generated geometry.
+The supported frontend is the React/Vite app in `frontend/`. In development,
+Vite proxies `/api` to FastAPI. For a production-style local run, Vite builds to
+`frontend/dist` and FastAPI serves the compiled application and CAD endpoints
+from one origin.
 
-Important graph data includes:
+The public workflow uses `/generate` for automatic prompt generation and
+`/build` for supplied operation JSON. Manual-builder assistance uses
+`/suggest-base` and `/suggest-feature`.
 
-- feature ids
-- operation types
-- build order
-- parent feature ids
-- child feature ids
-- target references
-- created references
-- normalized sketch definitions
-- validation warnings
+## Current constraints
 
-The current reference system separates canonical ids from readable aliases:
+- STEP preserves final geometry, not a native editable feature history.
+- Topological names can change after cuts, fillets, chamfers, and shelling.
+- Curved or highly irregular target surfaces need stronger local-frame support.
+- Some compound CAD concepts still lower into multiple primitive operations.
+- Semantic correctness is harder to prove than geometric validity.
 
-- canonical: `base.face.f001`
-- alias: `base.top`
-
-This keeps the UI and prompt layer readable while giving the internal system a
-more stable naming scheme.
-
-### Evaluator
-
-`src/prompt2cad/evaluator.py` checks generated model data against expected
-constraints. It now evaluates more than whether an operation exists.
-
-Supported eval checks include:
-
-- operation count
-- base operation fields
-- required operations
-- repeated operation patterns
-- bounding box dimensions
-- connected solid count
-- solid validity
-- approximate volume
-- required graph references
-- required aliases
-- feature parent/child relationships
-- sketch profile types
-
-### Fixture-backed evals
-
-Some evals are meant to test AI generation. Others are meant to test the CAD
-interpreter, graph, and evaluator deterministically. Fixture-backed evals use
-tracked JSON models from `evals/fixtures/` so they can run without API calls.
-
-This gives the project two useful test modes:
-
-1. API evals: ask the model to generate JSON, then evaluate the result.
-2. Fixture evals: use known-good JSON to regression-test geometry and graph
-   behavior.
-
-## Feature tree direction
-
-The current STEP export produces usable geometry, but STEP does not preserve a
-true editable feature tree in the way a native CAD file does. The internal graph
-is therefore being shaped toward a future export pipeline.
-
-An editable feature export will eventually need:
-
-- stable feature ids
-- build order
-- target references
-- sketch planes or reference frames
-- sketch points, lines, arcs, and circles
-- dimensions
-- constraints
-- operation parameters
-- parent/child dependencies
-- rebuild validation
-
-The feature-tree debug export is the intermediate contract. Before attempting a
-native SolidWorks workflow, the project should first prove that this debug JSON
-contains enough information to rebuild the model feature by feature.
-
-## Current risk areas
-
-### Face targeting
-
-Planar rectangular faces are the easiest case. Curved surfaces, polygon sides,
-sketch-derived faces, partial revolves, and corner-adjacent geometry are harder
-because they require better reference frames and topology tracking.
-
-### Topology changes
-
-A registered face reference can become stale after later cuts. The project does
-not yet fully prove that every stored reference still exists after every
-operation.
-
-### Pattern representation
-
-The web builder can create repeated positions, mirror-style placement, and
-circular placement, but the feature graph does not yet represent these as true
-pattern features. That will matter for a future editable CAD export.
-
-### Dependency setup
-
-The project now has pinned dependencies in `requirements.txt`, but CadQuery can
-be sensitive to Python and platform versions. A future `environment.yml` may be
-useful if Conda becomes the preferred setup path.
-
-## Recommended next milestones
-
-1. Add reference extraction for circular, polygon, and sketch-derived extrusions.
-2. Add graph metadata for mirror and circular patterns.
-3. Expand evals for curved surfaces, side-face operations, and stale references.
-4. Add a graph-only validation path that does not need to build CadQuery solids.
-5. Prototype a SolidWorks macro/export adapter from feature-tree debug JSON.
+The feature graph, normalized sketches, and reference registry are intentionally
+designed as the intermediate layer for future SolidWorks or other native-CAD
+adapters.

@@ -58,7 +58,7 @@ def rigorous_plate_holes_boss_model_data() -> dict:
 
 def test_evaluator_accepts_rectangular_plate_four_holes_example():
     model_data = load_json(
-        PROJECT_ROOT / "examples" / "rectangular_plate_multiple_holes.json"
+        PROJECT_ROOT / "examples" / "models" / "rectangular_plate_multiple_holes.json"
     )
     eval_case = load_json(
         PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"
@@ -73,7 +73,7 @@ def test_evaluator_accepts_rectangular_plate_four_holes_example():
 
 def test_evaluator_accepts_circular_base_rectangular_boss_example():
     model_data = load_json(
-        PROJECT_ROOT / "examples" / "circular_base_rectangular_boss.json"
+        PROJECT_ROOT / "examples" / "models" / "circular_base_rectangular_boss.json"
     )
     eval_case = load_json(
         PROJECT_ROOT
@@ -272,7 +272,7 @@ def test_evaluator_reports_wrong_required_operation_dimension():
 
 def test_evaluator_reports_missing_part_for_bounding_box_check():
     model_data = load_json(
-        PROJECT_ROOT / "examples" / "rectangular_plate_multiple_holes.json"
+        PROJECT_ROOT / "examples" / "models" / "rectangular_plate_multiple_holes.json"
     )
     eval_case = load_json(
         PROJECT_ROOT / "evals" / "cases" / "rectangular_plate_four_holes.json"

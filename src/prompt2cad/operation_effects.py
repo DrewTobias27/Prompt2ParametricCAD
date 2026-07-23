@@ -17,7 +17,7 @@ from prompt2cad.quality import summarize_geometry
 
 
 ADDITIVE_TYPES = {"add_extrude", "add_revolve"}
-SUBTRACTIVE_TYPES = {"cut", "cut_revolve"}
+SUBTRACTIVE_TYPES = {"cut", "cut_revolve", "countersink"}
 EDGE_TREATMENT_TYPES = {"chamfer", "fillet"}
 
 

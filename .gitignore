@@ -2,6 +2,9 @@
 *.stl
 *.svg
 *.png
+.env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -12,4 +15,3 @@ generated/*
 data/external/
 frontend/node_modules/
 frontend/dist/
-frontend/.env

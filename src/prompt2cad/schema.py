@@ -769,6 +769,42 @@ RELATIONAL_OPENAI_FILLET_SCHEMA = build_edge_treatment_schema(
     require_id=True,
 )
 
+COUNTERSINK_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {
+            "type": "string",
+            "enum": ["countersink"],
+        },
+        "id": {
+            "type": "string",
+        },
+        "target": {
+            "type": "string",
+        },
+        "positions": POSITIONS_SCHEMA,
+        "diameter": POSITIVE_NUMBER_SCHEMA,
+        "countersink_diameter": POSITIVE_NUMBER_SCHEMA,
+        "angle": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "exclusiveMaximum": 180,
+        },
+        "depth": CUT_DEPTH_SCHEMA,
+    },
+    "required": [
+        "type",
+        "id",
+        "target",
+        "positions",
+        "diameter",
+        "countersink_diameter",
+        "angle",
+        "depth",
+    ],
+}
+
 OPERATION_SCHEMAS = [
     RECTANGLE_EXTRUDE_SCHEMA,
     CIRCLE_EXTRUDE_SCHEMA,
@@ -800,6 +836,7 @@ OPERATION_SCHEMAS = [
     POLYGON_CUT_REVOLVE_SCHEMA,
     POLYLINE_CUT_REVOLVE_SCHEMA,
     SKETCH_CUT_REVOLVE_SCHEMA,
+    COUNTERSINK_SCHEMA,
     CHAMFER_SCHEMA,
     FILLET_SCHEMA,
 ]

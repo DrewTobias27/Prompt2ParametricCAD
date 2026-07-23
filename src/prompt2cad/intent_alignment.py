@@ -52,14 +52,22 @@ def evaluate_intent_alignment(
             )
             continue
 
-        expected_type = INTENT_OPERATION_TYPES.get(feature.get("operation"))
+        expected_type = (
+            "countersink"
+            if feature.get("role") == "countersink"
+            else INTENT_OPERATION_TYPES.get(feature.get("operation"))
+        )
         if operation.get("type") != expected_type:
             failures.append(
                 f"Intent feature '{feature_id}' expected operation type "
                 f"'{expected_type}', but lowered to '{operation.get('type')}'."
             )
 
-        expected_profile = INTENT_PROFILE_TYPES.get(feature.get("shape"))
+        expected_profile = (
+            None
+            if feature.get("role") == "countersink"
+            else INTENT_PROFILE_TYPES.get(feature.get("shape"))
+        )
         if expected_profile and operation.get("profile") != expected_profile:
             failures.append(
                 f"Intent feature '{feature_id}' expected profile "
@@ -76,8 +84,14 @@ def evaluate_intent_alignment(
                     f"Intent feature '{feature_id}' inherits positions from "
                     f"missing feature '{source_feature}'."
                 )
-            elif normalized_positions(operation) != normalized_positions(
-                source_operation
+            elif (
+                normalized_positions(operation)
+                != normalized_positions(source_operation)
+                and not same_feature_local_origin_is_valid(
+                    feature,
+                    operation,
+                    source_operation,
+                )
             ):
                 failures.append(
                     f"Intent feature '{feature_id}' did not preserve positions "
@@ -103,6 +117,21 @@ def evaluate_intent_alignment(
         "passed": not failures,
         "failures": failures,
     }
+
+
+def same_feature_local_origin_is_valid(
+    feature: dict[str, Any],
+    operation: dict[str, Any],
+    source_operation: dict[str, Any],
+) -> bool:
+    """Accept local [0, 0] when a child sketches on its one-instance parent."""
+    source_feature = feature.get("placement", {}).get("source_feature")
+    target_owner = str(feature.get("target", "")).partition(".")[0]
+    return (
+        target_owner == source_feature
+        and len(normalized_positions(source_operation)) == 1
+        and normalized_positions(operation) == [(0.0, 0.0)]
+    )
 
 
 def feature_instance_failures(

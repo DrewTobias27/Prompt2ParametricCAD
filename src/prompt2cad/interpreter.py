@@ -1,5 +1,7 @@
 """Interpret structured CAD operations and build a CadQuery model."""
 
+import math
+
 import cadquery as cq
 
 from prompt2cad.feature_graph import FeatureGraph
@@ -566,6 +568,45 @@ def edge_matches_reference(edge, reference: FeatureReference) -> bool:
     )
 
 
+def edge_descends_from_reference(edge, reference: FeatureReference) -> bool:
+    """Return whether a live straight edge is a surviving segment of a saved edge."""
+    metadata = reference.metadata
+    start_point = metadata.get("start_point")
+    end_point = metadata.get("end_point")
+    if start_point is None or end_point is None or edge.geomType() != "LINE":
+        return False
+
+    start = cq.Vector(*start_point)
+    end = cq.Vector(*end_point)
+    reference_vector = end.sub(start)
+    reference_length_squared = reference_vector.dot(reference_vector)
+    if reference_length_squared <= GEOMETRY_TOLERANCE:
+        return False
+
+    vertices = edge.Vertices()
+    if len(vertices) != 2:
+        return False
+
+    for vertex in vertices:
+        point = vertex.Center()
+        from_start = point.sub(start)
+        parameter = from_start.dot(reference_vector) / reference_length_squared
+        if parameter < -EDGE_MATCH_TOLERANCE or parameter > 1 + EDGE_MATCH_TOLERANCE:
+            return False
+
+        projected = start.add(reference_vector.multiply(parameter))
+        if point.sub(projected).Length > EDGE_MATCH_TOLERANCE:
+            return False
+
+    return True
+
+
+def edge_identity(edge) -> int:
+    """Return a stable-enough identity for deduplicating selected live edges."""
+    hash_code = getattr(edge, "hashCode", None)
+    return hash_code() if callable(hash_code) else id(edge)
+
+
 def select_registered_edges(
     part: cq.Workplane,
     references: list[FeatureReference],
@@ -579,21 +620,30 @@ def select_registered_edges(
     missing_references = []
 
     for reference in references:
-        matching_edge = None
-        for edge in live_edges:
-            if id(edge) in selected_edge_ids:
-                continue
-            if edge_matches_reference(edge, reference):
-                matching_edge = edge
-                break
+        matching_edges = [
+            edge
+            for edge in live_edges
+            if edge_matches_reference(edge, reference)
+        ]
+        if not matching_edges:
+            matching_edges = [
+                edge
+                for edge in live_edges
+                if edge_descends_from_reference(edge, reference)
+            ]
 
-        if matching_edge is None:
+        if not matching_edges:
             missing_references.append(reference.name)
-        else:
-            selected_edge_ids.add(id(matching_edge))
+            continue
+
+        for matching_edge in matching_edges:
+            matching_edge_id = edge_identity(matching_edge)
+            if matching_edge_id in selected_edge_ids:
+                continue
+            selected_edge_ids.add(matching_edge_id)
             selected_edges.append(matching_edge)
 
-    if missing_references:
+    if missing_references and not selected_edges:
         raise ValueError(
             f"Operation {operation_number}: target '{target}' references "
             "saved feature edges that are no longer present in the current "
@@ -933,6 +983,79 @@ def apply_cut_operation(
     return keep_largest_connected_solid(part)
 
 
+def apply_countersink_operation(
+    part: cq.Workplane,
+    operation: dict,
+    operation_number: int,
+    feature_graph: FeatureGraph | None = None,
+) -> cq.Workplane:
+    """Cut one or more tapered holes normal to a referenced planar face."""
+    if part is None:
+        raise ValueError("Cannot countersink before a solid has been created")
+
+    diameter = operation["diameter"]
+    countersink_diameter = operation["countersink_diameter"]
+    angle = operation["angle"]
+    depth = operation["depth"]
+    validate_positive_number(diameter, "Diameter")
+    validate_positive_number(countersink_diameter, "Countersink diameter")
+    validate_positive_number(angle, "Countersink angle")
+    if countersink_diameter <= diameter:
+        raise ValueError("Countersink diameter must be greater than hole diameter")
+    if angle >= 180:
+        raise ValueError("Countersink angle must be less than 180 degrees")
+
+    target_workplane, _ = get_target_workplane(
+        part,
+        operation["target"],
+        operation_number,
+        feature_graph=feature_graph,
+    )
+    positions = get_positions(operation, operation_number)
+    bounding_box = part.val().BoundingBox()
+    if depth == "through":
+        hole_depth = max(
+            bounding_box.xlen,
+            bounding_box.ylen,
+            bounding_box.zlen,
+        ) * 2
+    else:
+        validate_positive_number(depth, "Depth")
+        hole_depth = depth
+
+    hole_radius = diameter / 2
+    countersink_radius = countersink_diameter / 2
+    sink_depth = (countersink_radius - hole_radius) / math.tan(
+        math.radians(angle / 2)
+    )
+    cutting_tool = None
+    direction = target_workplane.plane.zDir.multiply(-1)
+
+    for x, y in positions:
+        origin = target_workplane.plane.toWorldCoords(cq.Vector(x, y, 0))
+        cone = cq.Solid.makeCone(
+            countersink_radius,
+            hole_radius,
+            sink_depth,
+            origin,
+            direction,
+        )
+        cylinder = cq.Solid.makeCylinder(
+            hole_radius,
+            hole_depth,
+            origin,
+            direction,
+        )
+        position_tool = cone.fuse(cylinder)
+        cutting_tool = (
+            position_tool
+            if cutting_tool is None
+            else cutting_tool.fuse(position_tool)
+        )
+
+    return keep_largest_connected_solid(part.cut(cutting_tool))
+
+
 def apply_add_extrusion(
     part: cq.Workplane,
     operation: dict,
@@ -1172,6 +1295,13 @@ def build_model_with_graph(model_data: dict) -> tuple[cq.Workplane, FeatureGraph
             )
         elif operation_type == "cut":
             part = apply_cut_operation(
+                part,
+                operation,
+                operation_number,
+                feature_graph=feature_graph,
+            )
+        elif operation_type == "countersink":
+            part = apply_countersink_operation(
                 part,
                 operation,
                 operation_number,

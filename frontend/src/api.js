@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || "/api";
+const configuredApiUrl = import.meta.env?.VITE_API_BASE_URL?.trim();
+const API_BASE_URL = configuredApiUrl
+  || (import.meta.env?.DEV ? "/api" : "");
 
 async function postJson(path, payload) {
   const response = await fetch(`${API_BASE_URL}${path}`, {

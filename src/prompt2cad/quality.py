@@ -24,11 +24,12 @@ FEATURE_OPERATION_TYPES = {
     "cut",
     "add_revolve",
     "cut_revolve",
+    "countersink",
     "chamfer",
     "fillet",
 }
 EDGE_OPERATION_TYPES = {"chamfer", "fillet"}
-FACE_OPERATION_TYPES = {"add_extrude", "cut"}
+FACE_OPERATION_TYPES = {"add_extrude", "cut", "countersink"}
 POSITIONED_REVOLVE_OPERATION_TYPES = {"add_revolve", "cut_revolve"}
 PROFILE_DIMENSION_FIELDS = {
     "rectangle": ["width", "height"],
@@ -272,8 +273,8 @@ def check_structure(model_data: dict | None) -> list[QualityIssue]:
                         "operation after the base."
                     ),
                     suggestion=(
-                        "Use add_extrude, cut, add_revolve, cut_revolve, "
-                        "chamfer, or fillet."
+                        "Use add_extrude, cut, countersink, add_revolve, "
+                        "cut_revolve, chamfer, or fillet."
                     ),
                 )
             )
@@ -458,6 +459,18 @@ def check_operation_dimensions(
         issues.extend(check_positive_number(operation, "distance", operation_number))
     if operation_type == "cut" and operation.get("depth") != "through":
         issues.extend(check_positive_number(operation, "depth", operation_number))
+    if operation_type == "countersink":
+        issues.extend(check_positive_number(operation, "diameter", operation_number))
+        issues.extend(
+            check_positive_number(
+                operation,
+                "countersink_diameter",
+                operation_number,
+            )
+        )
+        issues.extend(check_positive_number(operation, "angle", operation_number))
+        if operation.get("depth") != "through":
+            issues.extend(check_positive_number(operation, "depth", operation_number))
     if operation_type == "chamfer":
         issues.extend(check_positive_number(operation, "distance", operation_number))
     if operation_type == "fillet":
@@ -632,7 +645,7 @@ def register_operation_references(
         register_extrude_target_references(operation_id, operation, target_catalog)
     if operation_type in {"revolve", "add_revolve"}:
         register_revolve_target_references(operation_id, target_catalog)
-    if operation_type == "cut":
+    if operation_type in {"cut", "countersink"}:
         register_cut_target_references(operation_id, target_catalog)
 
 

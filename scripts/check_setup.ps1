@@ -106,6 +106,21 @@ print(
 $smokeCheck | & $pythonExe -
 Write-Check ($LASTEXITCODE -eq 0) "Prompt2CAD can build a simple CadQuery model"
 
+$pnpmExe = if ($env:PROMPT2CAD_PNPM) {
+    $env:PROMPT2CAD_PNPM
+}
+else {
+    "pnpm"
+}
+$pnpmCommand = Get-Command $pnpmExe -ErrorAction SilentlyContinue
+if ($pnpmCommand) {
+    & $pnpmExe --version
+    Write-Check ($LASTEXITCODE -eq 0) "pnpm is available for the React frontend"
+}
+else {
+    Write-Warn "pnpm is unavailable; set PROMPT2CAD_PNPM to the full pnpm.cmd path"
+}
+
 if ($env:OPENAI_API_KEY) {
     Write-Check $true "OPENAI_API_KEY is set for prompt generation"
 }

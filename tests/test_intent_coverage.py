@@ -138,3 +138,32 @@ def test_intent_coverage_accepts_aliases_for_support_plate():
     }
 
     assert intent_coverage_failures(design_intent) == []
+
+
+def test_intent_coverage_recognizes_ring_from_circle_and_center_hole():
+    design_intent = {
+        "required_concepts": ["base_body", "rim"],
+        "base": {
+            "id": "base",
+            "role": "base_body",
+            "profile": "circle",
+            "diameter": 100,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "center_hole",
+                "role": "hole",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": 60,
+                "depth": "through",
+                "placement": {"type": "centered"},
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    assert intent_coverage_failures(design_intent) == []
+    assert {"ring", "rim"}.issubset(covered_intent_concepts(design_intent))

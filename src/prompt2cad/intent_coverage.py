@@ -56,7 +56,30 @@ def covered_intent_concepts(design_intent: dict[str, Any]) -> set[str]:
         if treatment:
             covered.add(treatment)
 
+    covered.update(composite_geometry_concepts(design_intent))
     return covered
+
+
+def composite_geometry_concepts(design_intent: dict[str, Any]) -> set[str]:
+    """Return concepts created by combinations rather than one named feature."""
+    base = design_intent.get("base", {})
+    if base.get("profile") != "circle":
+        return set()
+
+    for feature in design_intent.get("features", []):
+        placement = feature.get("placement", {})
+        if (
+            feature.get("operation") == "cut"
+            and feature.get("shape") == "circle"
+            and feature.get("depth") == "through"
+            and placement.get("type") == "centered"
+            and feature.get("target", "").endswith(".top")
+        ):
+            # An annular ring/rim is the result of a centered through-hole in
+            # a circular plate; it need not be modeled as a separate feature.
+            return {"ring", "rim"}
+
+    return set()
 
 
 def concepts_from_item(item: dict[str, Any]) -> set[str]:
