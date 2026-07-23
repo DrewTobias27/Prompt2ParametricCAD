@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from prompt2cad.design_intent import collapse_aligned_wall_through_cuts
+
 
 INTENT_OPERATION_TYPES = {
     "extrusion": "add_extrude",
@@ -28,6 +30,7 @@ def evaluate_intent_alignment(
     model_data: dict[str, Any],
 ) -> dict[str, Any]:
     """Return failures when intent features disappear or change while lowering."""
+    design_intent = collapse_aligned_wall_through_cuts(design_intent)
     operations = model_data.get("operations", [])
     operations_by_id = {
         operation.get("id"): operation

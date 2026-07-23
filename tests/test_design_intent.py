@@ -6,6 +6,7 @@ from prompt2cad.design_intent import intent_to_model_data
 from prompt2cad.design_intent import offset_from_edge_position
 from prompt2cad.design_intent import validate_design_intent
 from prompt2cad.diagnostics import check_model_data
+from prompt2cad.operation_effects import evaluate_operation_effects
 from prompt2cad.schema import validate_model_data
 
 
@@ -325,6 +326,75 @@ def test_offset_from_edge_clamps_along_coordinate_inside_target_face():
     )
 
     assert positions == [[0, 23.5]]
+
+
+def test_aligned_through_holes_in_opposing_walls_lower_to_one_bore():
+    wall_template = {
+        "role": "wall",
+        "operation": "extrusion",
+        "target": "base.top",
+        "shape": "rectangle",
+        "width": 90,
+        "height": 8,
+        "distance": 45,
+    }
+    hole_template = {
+        "role": "hole",
+        "operation": "cut",
+        "shape": "circle",
+        "diameter": 8,
+        "depth": "through",
+        "placement": {"type": "centered"},
+    }
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 90,
+            "height": 55,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                **wall_template,
+                "id": "front_wall",
+                "placement": {
+                    "type": "offset_from_edge",
+                    "edge": "front",
+                    "offset": 0,
+                    "along": 0,
+                },
+            },
+            {
+                **wall_template,
+                "id": "back_wall",
+                "placement": {
+                    "type": "offset_from_edge",
+                    "edge": "back",
+                    "offset": 0,
+                    "along": 0,
+                },
+            },
+            {
+                **hole_template,
+                "id": "front_wall_hole",
+                "target": "front_wall.side",
+            },
+            {
+                **hole_template,
+                "id": "back_wall_hole",
+                "target": "back_wall.side",
+            },
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert [
+        operation["id"]
+        for operation in model_data["operations"]
+    ] == ["base", "front_wall", "back_wall", "front_wall_hole"]
+    assert evaluate_operation_effects(model_data)["passed"] is True
 
 
 def test_rounded_rectangle_intent_lowers_to_arc_sketch_and_builds():

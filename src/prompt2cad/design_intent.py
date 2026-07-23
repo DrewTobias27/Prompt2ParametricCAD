@@ -545,10 +545,7 @@ def validate_design_intent(intent: dict[str, Any]) -> None:
 
 def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
     """Lower design intent into executable Prompt2ParametricCAD model data."""
-    intent = remove_null_values(intent)
-    intent = normalize_intent_references(intent)
-    intent = fill_reasonable_missing_dimensions(intent)
-    validate_design_intent(intent)
+    intent = prepare_design_intent_for_lowering(intent)
 
     base = intent["base"]
     operations = [base_operation(base)]
@@ -578,6 +575,119 @@ def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
         "operations": operations,
         "relationships": relationships,
     }
+
+
+def prepare_design_intent_for_lowering(
+    intent: dict[str, Any],
+) -> dict[str, Any]:
+    """Return the canonical intent representation consumed by the lowerer."""
+    intent = remove_null_values(intent)
+    intent = normalize_intent_references(intent)
+    intent = fill_reasonable_missing_dimensions(intent)
+    intent = collapse_aligned_wall_through_cuts(intent)
+    validate_design_intent(intent)
+    return intent
+
+
+OPPOSITE_EDGES = {
+    "front": "back",
+    "back": "front",
+    "left": "right",
+    "right": "left",
+}
+
+
+def collapse_aligned_wall_through_cuts(
+    intent: dict[str, Any],
+) -> dict[str, Any]:
+    """Represent one aligned through-bore as one physical cut feature.
+
+    A centered through cut starting on one of two opposing parallel walls
+    already crosses the second wall. Keeping a second identical cut creates a
+    no-op feature without changing the requested geometry or design intent.
+    """
+    features = intent.get("features", [])
+    features_by_id = {
+        feature["id"]: feature
+        for feature in features
+        if feature.get("id")
+    }
+    retained_features = []
+    seen_edges_by_key: dict[tuple[Any, ...], list[str]] = {}
+
+    for feature in features:
+        candidate = aligned_wall_through_cut_key(feature, features_by_id)
+        if candidate is None:
+            retained_features.append(feature)
+            continue
+
+        key, parent_edge = candidate
+        prior_edges = seen_edges_by_key.setdefault(key, [])
+        if OPPOSITE_EDGES[parent_edge] in prior_edges:
+            continue
+
+        prior_edges.append(parent_edge)
+        retained_features.append(feature)
+
+    return {
+        **intent,
+        "features": retained_features,
+    }
+
+
+def aligned_wall_through_cut_key(
+    feature: dict[str, Any],
+    features_by_id: dict[str, dict[str, Any]],
+) -> tuple[tuple[Any, ...], str] | None:
+    """Return an alignment key for a simple centered cut through a wall."""
+    if (
+        feature.get("operation") != "cut"
+        or feature.get("depth") != "through"
+        or feature.get("shape")
+        not in {"circle", "rectangle", "slot", "rounded_rectangle", "polygon"}
+        or feature.get("placement", {}).get("type") != "centered"
+    ):
+        return None
+
+    parent_id, separator, _ = feature.get("target", "").partition(".")
+    if not separator:
+        return None
+    parent = features_by_id.get(parent_id)
+    parent_placement = parent.get("placement", {}) if parent else {}
+    parent_edge = parent_placement.get("edge")
+    if (
+        parent is None
+        or parent.get("role") != "wall"
+        or parent.get("operation") != "extrusion"
+        or parent_placement.get("type") != "offset_from_edge"
+        or parent_edge not in OPPOSITE_EDGES
+    ):
+        return None
+
+    edge_axis = (
+        "front_back"
+        if parent_edge in {"front", "back"}
+        else "left_right"
+    )
+    profile_signature = tuple(
+        feature.get(field)
+        for field in (
+            "shape",
+            "width",
+            "height",
+            "diameter",
+            "length",
+            "radius",
+            "sides",
+        )
+    )
+    key = (
+        edge_axis,
+        parent_placement.get("along", 0),
+        parent.get("distance"),
+        profile_signature,
+    )
+    return key, parent_edge
 
 
 def normalize_intent_references(intent: dict[str, Any]) -> dict[str, Any]:
