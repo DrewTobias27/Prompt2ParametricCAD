@@ -1,11 +1,7 @@
-"""Run a tiny, controlled comparison of prompt-generation API paths.
+"""Benchmark first-pass and production design-intent CAD generation.
 
-The default run is intentionally small:
-- 2 prompts
-- direct JSON generation vs. design-intent lowering
-- no repair loop
-
-That means 4 API calls total unless extra prompts are supplied.
+The default compares an unrepaired first pass with the geometry-aware feedback
+loop. Direct CAD JSON remains available only for explicit fallback diagnostics.
 """
 
 from __future__ import annotations
@@ -32,6 +28,7 @@ from prompt2cad.intent_coverage import intent_coverage_failures
 from prompt2cad.intent_alignment import evaluate_intent_alignment
 from prompt2cad.operation_effects import evaluate_operation_effects
 from prompt2cad.prompting import prompt_to_design_intent
+from prompt2cad.prompting import prompt_to_design_intent_with_feedback
 from prompt2cad.prompting import prompt_to_model_data
 from prompt2cad.quality import check_model_quality
 from prompt2cad.schema import validate_model_data
@@ -386,6 +383,118 @@ def run_intent(prompt: str) -> dict[str, Any]:
     }
 
 
+def run_intent_feedback(prompt: str) -> dict[str, Any]:
+    """Run the production intent path, including bounded geometry feedback."""
+    started_at = time.perf_counter()
+    performance: dict[str, float] = {}
+    api_telemetry: dict[str, Any] = {}
+    try:
+        with record_timing(performance, "api_seconds"):
+            (
+                design_intent,
+                model_data,
+                repair_history,
+                candidate_evaluation,
+            ) = prompt_to_design_intent_with_feedback(
+                prompt,
+                telemetry=api_telemetry,
+            )
+        if model_data is None:
+            raise ValueError(
+                "The design-intent feedback loop did not produce CAD model data"
+            )
+        with record_timing(performance, "intent_checks_seconds"):
+            coverage_failures = intent_coverage_failures(design_intent)
+            missing_dimensions = missing_required_intent_dimensions(design_intent)
+        with record_timing(performance, "alignment_seconds"):
+            intent_alignment = evaluate_intent_alignment(design_intent, model_data)
+        evaluation = evaluate_model_data(model_data)
+        performance.update(evaluation.pop("performance", {}))
+        performance["total_seconds"] = elapsed_seconds(started_at)
+    except Exception as error:
+        if "design_intent" in locals():
+            error.design_intent = design_intent
+        if "missing_dimensions" in locals():
+            error.intent_missing_required_dimensions = missing_dimensions
+        if "model_data" in locals():
+            error.model_data = model_data
+        error.api_telemetry = api_telemetry
+        attach_error_performance(error, performance, started_at)
+        raise
+
+    first_pass_intent = (
+        repair_history[0]["failed_design_intent"]
+        if repair_history
+        else design_intent
+    )
+    first_call_telemetry = (
+        api_telemetry.get("calls", [{}])[0]
+        if api_telemetry.get("calls")
+        else {}
+    )
+    first_pass_result = evaluate_existing_intent(
+        first_pass_intent,
+        api_telemetry={
+            **first_call_telemetry,
+            "logical_api_calls": 1,
+        },
+    )
+
+    return {
+        "design_intent": design_intent,
+        "api_telemetry": api_telemetry,
+        "repair_count": len(repair_history),
+        "recovered_after_feedback": bool(repair_history),
+        "intent_repair_history": repair_history,
+        "candidate_evaluation": candidate_evaluation,
+        "first_pass_result": first_pass_result,
+        "intent_coverage_passed": not coverage_failures,
+        "intent_coverage_failures": coverage_failures,
+        "intent_missing_required_dimensions": missing_dimensions,
+        "intent_alignment_passed": intent_alignment["passed"],
+        "intent_alignment_failures": intent_alignment["failures"],
+        "model_data": model_data,
+        **evaluation,
+        "performance": performance,
+    }
+
+
+def evaluate_existing_intent(
+    design_intent: dict[str, Any],
+    *,
+    api_telemetry: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Apply all local checks to an already-generated design intent."""
+    result: dict[str, Any] = {
+        "mode": "intent",
+        "design_intent": design_intent,
+        "api_telemetry": api_telemetry or {},
+    }
+    try:
+        coverage_failures = intent_coverage_failures(design_intent)
+        missing_dimensions = missing_required_intent_dimensions(design_intent)
+        model_data = intent_to_model_data(design_intent)
+        intent_alignment = evaluate_intent_alignment(design_intent, model_data)
+        result.update({
+            "intent_coverage_passed": not coverage_failures,
+            "intent_coverage_failures": coverage_failures,
+            "intent_missing_required_dimensions": missing_dimensions,
+            "intent_alignment_passed": intent_alignment["passed"],
+            "intent_alignment_failures": intent_alignment["failures"],
+            "model_data": model_data,
+            **evaluate_model_data(model_data),
+        })
+        result["status"] = status_for_result(result)
+    except Exception as error:  # Keep failed first-pass evidence in the report.
+        result.update(error_details(error))
+        result["status"] = "fail"
+    result["elapsed_seconds"] = round(
+        float(result["api_telemetry"].get("api_seconds", 0.0)),
+        2,
+    )
+    return result
+
+
 def run_case(prompt: str, mode: str) -> dict[str, Any]:
     """Run one prompt through one API path and return a compact result."""
     started_at = time.perf_counter()
@@ -394,6 +503,8 @@ def run_case(prompt: str, mode: str) -> dict[str, Any]:
             result = run_direct(prompt)
         elif mode == "intent":
             result = run_intent(prompt)
+        elif mode == "intent_feedback":
+            result = run_intent_feedback(prompt)
         else:
             raise ValueError(f"Unsupported mode: {mode}")
         total_seconds = elapsed_seconds(started_at)
@@ -411,6 +522,20 @@ def run_case(prompt: str, mode: str) -> dict[str, Any]:
     except Exception as error:  # noqa: BLE001 - command-line report should capture any failure.
         total_seconds = elapsed_seconds(started_at)
         details = error_details(error)
+        if mode == "intent_feedback" and isinstance(
+            details.get("design_intent"),
+            dict,
+        ):
+            aggregate_telemetry = details.get("api_telemetry", {})
+            first_call = (
+                aggregate_telemetry.get("calls", [{}])[0]
+                if aggregate_telemetry.get("calls")
+                else aggregate_telemetry
+            )
+            details["first_pass_result"] = evaluate_existing_intent(
+                details["design_intent"],
+                api_telemetry={**first_call, "logical_api_calls": 1},
+            )
         performance = finalize_performance(
             details.get("performance", {}),
             total_seconds,
@@ -560,6 +685,14 @@ def attach_eval_result(
     model_output_path: Path | None,
 ) -> dict[str, Any]:
     """Attach saved model path and eval-case result when available."""
+    first_pass_result = result.get("first_pass_result")
+    if isinstance(first_pass_result, dict):
+        attach_eval_result(
+            first_pass_result,
+            eval_case=eval_case,
+            model_output_path=None,
+        )
+
     model_data = result.get("model_data")
     if model_data is None:
         return result
@@ -591,6 +724,10 @@ def attach_prompt_case_expectations(
     prompt_case: dict[str, Any],
 ) -> dict[str, Any]:
     """Attach exploratory prompt-case concept and intent evaluations."""
+    first_pass_result = result.get("first_pass_result")
+    if isinstance(first_pass_result, dict):
+        attach_prompt_case_expectations(first_pass_result, prompt_case)
+
     expected_concepts = prompt_case.get("expected_concepts")
     model_data = result.get("model_data")
     if expected_concepts is not None and model_data is not None:
@@ -753,11 +890,12 @@ def compare_prompt_cases(
     skip_preflight: bool = False,
     modes: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Run prompt cases through direct and intent generation paths."""
-    modes = modes or ["direct", "intent"]
+    """Run cases through the selected generation paths."""
+    modes = modes or ["intent_feedback"]
     report = {
         "api_call_budget": len(prompt_cases) * len(modes),
         "modes": modes,
+        "configured_model": os.getenv("PROMPT2CAD_OPENAI_MODEL"),
         "preflight": None,
         "cases": [],
     }
@@ -819,10 +957,11 @@ def compare_eval_cases(
     modes: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run API generation paths against existing evaluator case files."""
-    modes = modes or ["direct", "intent"]
+    modes = modes or ["intent_feedback"]
     report = {
         "api_call_budget": len(case_names) * len(modes),
         "modes": modes,
+        "configured_model": os.getenv("PROMPT2CAD_OPENAI_MODEL"),
         "cases_dir": str(cases_dir),
         "preflight": None,
         "cases": [],
@@ -1026,7 +1165,9 @@ def api_usage_label(field: str) -> str:
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Run a tiny API-path comparison: direct JSON vs design intent."
+        description=(
+            "Benchmark CAD intent with optional production geometry feedback."
+        )
     )
     parser.add_argument(
         "--prompt",
@@ -1086,8 +1227,15 @@ def parse_args() -> argparse.Namespace:
         help="Skip the no-token API reachability check before generation.",
     )
     parser.add_argument(
+        "--model",
+        help=(
+            "OpenAI model for this benchmark run. Sets only the current "
+            "process, so production configuration is unchanged."
+        ),
+    )
+    parser.add_argument(
         "--reasoning-effort",
-        choices=["none", "minimal", "low", "medium", "high"],
+        choices=["none", "minimal", "low", "medium", "high", "xhigh", "max"],
         help=(
             "Optional reasoning effort for this benchmark. Omit to preserve "
             "the production default. Start with low for a latency comparison."
@@ -1096,10 +1244,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         action="append",
-        choices=["direct", "intent"],
+        choices=["direct", "intent", "intent_feedback"],
         help=(
-            "Generation mode to run. Pass once for a single mode or twice to "
-            "choose both. Omit to run direct and intent."
+            "Generation path to run. Omit to run the production feedback loop, "
+            "which records its exact first-pass candidate for paired scoring. "
+            "Direct is retained only for explicit fallback diagnostics."
         ),
     )
     parser.add_argument(
@@ -1116,6 +1265,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Run the tiny comparison from the command line."""
     args = parse_args()
+    if args.model is not None:
+        os.environ["PROMPT2CAD_OPENAI_MODEL"] = args.model
     if args.reasoning_effort is not None:
         os.environ["PROMPT2CAD_REASONING_EFFORT"] = args.reasoning_effort
     if args.rescore_report is not None:

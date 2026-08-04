@@ -41,32 +41,6 @@ OPENAI_NULLABLE_NUMBER_SCHEMA = {
     "type": ["number", "null"],
 }
 
-OPENAI_NULLABLE_INTEGER_SCHEMA = {
-    "type": ["integer", "null"],
-}
-
-OPENAI_NULLABLE_POINTS_SCHEMA = {
-    "anyOf": [
-        POINTS_SCHEMA,
-        {"type": "null"},
-    ],
-}
-
-OPENAI_ORIENTATION_SCHEMA = {
-    "anyOf": [
-        {"type": "string", "enum": ["horizontal", "vertical"]},
-        {"type": "null"},
-    ],
-}
-
-OPENAI_DEPTH_SCHEMA = {
-    "anyOf": [
-        {"type": "string", "enum": ["through"]},
-        {"type": "number"},
-        {"type": "null"},
-    ],
-}
-
 SEMANTIC_ROLE_VALUES = [
     "base_body",
     "plate",
@@ -382,135 +356,208 @@ OPENAI_PLACEMENT_SCHEMA = {
     ],
 }
 
+OPENAI_POSITIVE_NUMBER_REF = {"$ref": "#/$defs/positive_number"}
+OPENAI_POINTS_REF = {"$ref": "#/$defs/points"}
+OPENAI_ROLE_REF = {"$ref": "#/$defs/nullable_role"}
+OPENAI_PLACEMENT_REF = {"$ref": "#/$defs/placement"}
+
+def strict_openai_object(properties: dict[str, Any]) -> dict[str, Any]:
+    """Return an object schema compatible with strict Structured Outputs."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+        "required": list(properties),
+    }
+
+
+def fixed_string_schema(value: str) -> dict[str, Any]:
+    """Return a single-value string discriminator schema."""
+    return {"type": "string", "enum": [value]}
+
+
+OPENAI_BASE_COMMON_PROPERTIES = {
+    "id": {"type": "string"},
+    "role": OPENAI_ROLE_REF,
+}
+
+
+def openai_base_variant(
+    profile: str,
+    dimensions: dict[str, Any],
+) -> dict[str, Any]:
+    """Return one base-profile schema with only applicable dimensions."""
+    return strict_openai_object({
+        **OPENAI_BASE_COMMON_PROPERTIES,
+        "profile": fixed_string_schema(profile),
+        **dimensions,
+    })
+
+
 OPENAI_BASE_INTENT_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {
-        "id": {"type": "string"},
-        "role": OPENAI_ROLE_SCHEMA,
-        "profile": {
-            "type": "string",
-            "enum": [
-                "rectangle",
-                "circle",
-                "polygon",
-                "d_shape",
-                "cylinder",
-                "half_cylinder",
-                "capsule",
-            ],
-        },
-        "width": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "height": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "diameter": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "sides": OPENAI_NULLABLE_INTEGER_SCHEMA,
-        "thickness": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "length": OPENAI_NULLABLE_NUMBER_SCHEMA,
-    },
-    "required": [
-        "id",
-        "role",
-        "profile",
-        "width",
-        "height",
-        "diameter",
-        "sides",
-        "thickness",
-        "length",
+    "anyOf": [
+        openai_base_variant("rectangle", {
+            "width": OPENAI_POSITIVE_NUMBER_REF,
+            "height": OPENAI_POSITIVE_NUMBER_REF,
+            "thickness": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+        openai_base_variant("circle", {
+            "diameter": OPENAI_POSITIVE_NUMBER_REF,
+            "thickness": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+        openai_base_variant("polygon", {
+            "diameter": OPENAI_POSITIVE_NUMBER_REF,
+            "sides": {"type": "integer", "minimum": 3},
+            "thickness": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+        openai_base_variant("d_shape", {
+            "width": OPENAI_POSITIVE_NUMBER_REF,
+            "height": OPENAI_POSITIVE_NUMBER_REF,
+            "thickness": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+        openai_base_variant("cylinder", {
+            "diameter": OPENAI_POSITIVE_NUMBER_REF,
+            "length": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+        openai_base_variant("half_cylinder", {
+            "diameter": OPENAI_POSITIVE_NUMBER_REF,
+            "length": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+        openai_base_variant("capsule", {
+            "diameter": OPENAI_POSITIVE_NUMBER_REF,
+            "length": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+        openai_base_variant("capsule", {
+            "diameter": OPENAI_POSITIVE_NUMBER_REF,
+            "length": OPENAI_POSITIVE_NUMBER_REF,
+            "thickness": OPENAI_POSITIVE_NUMBER_REF,
+        }),
     ],
 }
 
-OPENAI_FEATURE_INTENT_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {
-        "id": {"type": "string"},
-        "role": OPENAI_ROLE_SCHEMA,
-        "operation": {
-            "type": "string",
-            "enum": ["extrusion", "cut", "revolved_extrusion", "revolved_cut"],
-        },
-        "target": {"type": "string"},
-        "shape": {
-            "type": "string",
-            "enum": [
-                "rectangle",
-                "circle",
-                "polygon",
-                "polyline",
-                "slot",
-                "rounded_rectangle",
-            ],
-        },
-        "placement": OPENAI_PLACEMENT_SCHEMA,
-        "width": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "height": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "diameter": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "sides": OPENAI_NULLABLE_INTEGER_SCHEMA,
-        "length": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "radius": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "points": OPENAI_NULLABLE_POINTS_SCHEMA,
-        "orientation": OPENAI_ORIENTATION_SCHEMA,
-        "distance": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "depth": OPENAI_DEPTH_SCHEMA,
+
+OPENAI_FEATURE_COMMON_PROPERTIES = {
+    "id": {"type": "string"},
+    "role": OPENAI_ROLE_REF,
+    "target": {"type": "string"},
+    "placement": OPENAI_PLACEMENT_REF,
+}
+
+OPENAI_FEATURE_SHAPE_DIMENSIONS = {
+    "rectangle": {
+        "width": OPENAI_POSITIVE_NUMBER_REF,
+        "height": OPENAI_POSITIVE_NUMBER_REF,
     },
-    "required": [
-        "id",
-        "role",
-        "operation",
-        "target",
-        "shape",
-        "placement",
-        "width",
-        "height",
-        "diameter",
-        "sides",
-        "length",
-        "radius",
-        "points",
-        "orientation",
-        "distance",
-        "depth",
+    "circle": {"diameter": OPENAI_POSITIVE_NUMBER_REF},
+    "polygon": {
+        "diameter": OPENAI_POSITIVE_NUMBER_REF,
+        "sides": {"type": "integer", "minimum": 3},
+    },
+    "polyline": {"points": OPENAI_POINTS_REF},
+    "slot": {
+        "length": OPENAI_POSITIVE_NUMBER_REF,
+        "width": OPENAI_POSITIVE_NUMBER_REF,
+        "orientation": {
+            "type": "string",
+            "enum": ["horizontal", "vertical"],
+        },
+    },
+    "rounded_rectangle": {
+        "width": OPENAI_POSITIVE_NUMBER_REF,
+        "height": OPENAI_POSITIVE_NUMBER_REF,
+        "radius": OPENAI_POSITIVE_NUMBER_REF,
+    },
+}
+
+
+OPENAI_FEATURE_SHAPE_SCHEMA = {
+    "anyOf": [
+        strict_openai_object({
+            "type": fixed_string_schema(shape),
+            **dimensions,
+        })
+        for shape, dimensions in OPENAI_FEATURE_SHAPE_DIMENSIONS.items()
     ],
+}
+
+OPENAI_FEATURE_OPERATION_SCHEMA = {
+    "anyOf": [
+        strict_openai_object({
+            "type": fixed_string_schema("extrusion"),
+            "distance": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+        strict_openai_object({
+            "type": fixed_string_schema("cut"),
+            "depth": {
+                "anyOf": [
+                    {"type": "string", "enum": ["through"]},
+                    OPENAI_POSITIVE_NUMBER_REF,
+                ],
+            },
+        }),
+        strict_openai_object({
+            "type": fixed_string_schema("revolved_extrusion"),
+        }),
+        strict_openai_object({
+            "type": fixed_string_schema("revolved_extrusion"),
+            "radius": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+        strict_openai_object({
+            "type": fixed_string_schema("revolved_cut"),
+        }),
+        strict_openai_object({
+            "type": fixed_string_schema("revolved_cut"),
+            "radius": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+    ],
+}
+
+OPENAI_FEATURE_INTENT_SCHEMA = strict_openai_object({
+    **OPENAI_FEATURE_COMMON_PROPERTIES,
+    "operation": OPENAI_FEATURE_OPERATION_SCHEMA,
+    "shape": OPENAI_FEATURE_SHAPE_SCHEMA,
+})
+
+
+OPENAI_EDGE_COMMON_PROPERTIES = {
+    "id": {"type": "string"},
+    "role": OPENAI_ROLE_REF,
+    "target_feature": {"type": "string"},
+    "edge_selector": {
+        "type": "string",
+        "enum": [
+            "top_outer_edges",
+            "bottom_outer_edges",
+            "vertical_edges",
+            "all_edges",
+        ],
+    },
 }
 
 OPENAI_EDGE_TREATMENT_INTENT_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {
-        "id": {"type": "string"},
-        "role": OPENAI_ROLE_SCHEMA,
-        "treatment": {
-            "type": "string",
-            "enum": ["chamfer", "fillet"],
-        },
-        "target_feature": {"type": "string"},
-        "edge_selector": {
-            "type": "string",
-            "enum": [
-                "top_outer_edges",
-                "bottom_outer_edges",
-                "vertical_edges",
-                "all_edges",
-            ],
-        },
-        "distance": OPENAI_NULLABLE_NUMBER_SCHEMA,
-        "radius": OPENAI_NULLABLE_NUMBER_SCHEMA,
-    },
-    "required": [
-        "id",
-        "role",
-        "treatment",
-        "target_feature",
-        "edge_selector",
-        "distance",
-        "radius",
+    "anyOf": [
+        strict_openai_object({
+            **OPENAI_EDGE_COMMON_PROPERTIES,
+            "treatment": fixed_string_schema("chamfer"),
+            "distance": OPENAI_POSITIVE_NUMBER_REF,
+        }),
+        strict_openai_object({
+            **OPENAI_EDGE_COMMON_PROPERTIES,
+            "treatment": fixed_string_schema("fillet"),
+            "radius": OPENAI_POSITIVE_NUMBER_REF,
+        }),
     ],
 }
 
 OPENAI_DESIGN_INTENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
+    "$defs": {
+        "positive_number": POSITIVE_NUMBER_SCHEMA,
+        "points": POINTS_SCHEMA,
+        "nullable_role": OPENAI_ROLE_SCHEMA,
+        "placement": OPENAI_PLACEMENT_SCHEMA,
+    },
     "properties": {
         "required_concepts": REQUIRED_CONCEPTS_SCHEMA,
         "base": OPENAI_BASE_INTENT_SCHEMA,
@@ -525,6 +572,91 @@ OPENAI_DESIGN_INTENT_SCHEMA = {
     },
     "required": ["required_concepts", "base", "features", "edge_treatments"],
 }
+
+
+def design_intent_from_openai(intent: dict[str, Any]) -> dict[str, Any]:
+    """Flatten composed API feature objects into the internal intent format."""
+    normalized = {
+        **intent,
+        "features": [
+            feature_intent_from_openai(feature)
+            for feature in intent.get("features", [])
+        ],
+    }
+    return normalized
+
+
+def feature_intent_from_openai(feature: dict[str, Any]) -> dict[str, Any]:
+    """Flatten one API operation/shape pair without mutating the response."""
+    if not isinstance(feature.get("operation"), dict):
+        return feature
+
+    operation = dict(feature["operation"])
+    shape = dict(feature["shape"])
+    return {
+        **{
+            key: value
+            for key, value in feature.items()
+            if key not in {"operation", "shape"}
+        },
+        "operation": operation.pop("type"),
+        "shape": shape.pop("type"),
+        **shape,
+        **operation,
+    }
+
+
+def design_intent_to_openai(intent: dict[str, Any]) -> dict[str, Any]:
+    """Compose internal intent into the sparse API/example representation."""
+    return {
+        "required_concepts": intent.get("required_concepts", []),
+        "base": {
+            **intent["base"],
+            "role": intent["base"].get("role"),
+        },
+        "features": [
+            feature_intent_to_openai(feature)
+            for feature in intent.get("features", [])
+        ],
+        "edge_treatments": [
+            {**treatment, "role": treatment.get("role")}
+            for treatment in intent.get("edge_treatments", [])
+        ],
+    }
+
+
+def feature_intent_to_openai(feature: dict[str, Any]) -> dict[str, Any]:
+    """Compose one internal feature into focused operation and shape objects."""
+    shape_fields = {
+        key: feature[key]
+        for key in OPENAI_FEATURE_SHAPE_DIMENSIONS[feature["shape"]]
+        if key in feature
+    }
+    operation_fields = {}
+    if feature["operation"] == "extrusion" and "distance" in feature:
+        operation_fields["distance"] = feature["distance"]
+    elif feature["operation"] == "cut" and "depth" in feature:
+        operation_fields["depth"] = feature["depth"]
+    elif (
+        feature["operation"] in {"revolved_extrusion", "revolved_cut"}
+        and "radius" in feature
+    ):
+        operation_fields["radius"] = feature["radius"]
+
+    return {
+        "id": feature["id"],
+        "role": feature.get("role"),
+        "target": feature["target"],
+        "placement": feature["placement"],
+        "operation": {
+            "type": feature["operation"],
+            **operation_fields,
+        },
+        "shape": {
+            "type": feature["shape"],
+            **shape_fields,
+        },
+    }
 
 
 def validate_design_intent(intent: dict[str, Any]) -> None:

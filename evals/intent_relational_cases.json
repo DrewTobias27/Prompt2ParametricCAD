@@ -242,20 +242,16 @@
       "expected_intent": {
         "base": {"profile": "rectangle"},
         "features": [
-          {"operation": "cut", "shape": "rectangle", "target": "base.top"},
+          {"operation": "cut", "shape": "rectangle"},
           {"role": "rim", "operation": "extrusion"},
-          {
-            "operation": "cut",
-            "shape": "circle",
-            "target": {"one_of": ["base.bottom", "base.top"]}
-          }
+          {"operation": "cut", "shape": "circle"}
         ]
       },
       "expected_concepts": {
         "base": {"type": "extrude", "profile": "rectangle"},
         "min_operation_counts": {"cut": 2, "add_extrude": 1},
         "operations": [
-          {"type": "cut", "profile": "circle", "positions": {"length": 1}}
+          {"type": "cut", "profile": "circle", "depth": "through", "positions": {"length": 1}}
         ],
         "geometry": {"solid_count": 1}
       }

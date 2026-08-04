@@ -17,7 +17,8 @@ from pydantic import BaseModel
 from prompt2cad.interpreter import build_model
 from prompt2cad.design_intent import intent_to_model_data
 from prompt2cad.generation_log import save_generation_log
-from prompt2cad.prompting import prompt_to_design_intent
+from prompt2cad.prompting import max_repair_attempts
+from prompt2cad.prompting import prompt_to_design_intent_with_feedback
 from prompt2cad.prompting import prompt_to_model_data_with_repair
 from prompt2cad.prompting import suggest_base_model_data
 from prompt2cad.prompting import suggest_feature_model_data
@@ -56,6 +57,7 @@ GENERATED_DIR = Path("generated/web")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST_DIR = REPO_ROOT / "frontend" / "dist"
 CACHE_MAX_ENTRIES = 64
+MAX_AUTOMATIC_API_CALLS = 4
 SUCCESS_RESPONSE_CACHE: OrderedDict[str, dict] = OrderedDict()
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -277,23 +279,43 @@ def generate_cad(request: CADRequest):
 
     design_intent = None
     intent_model_data = None
+    intent_repair_history = []
+    intent_evaluation = None
+    intent_repair_limit = max_repair_attempts("intent")
     intent_api_started_at = perf_counter()
     intent_api_seconds = 0.0
     lowering_seconds = 0.0
 
     try:
-        design_intent = prompt_to_design_intent(request.prompt)
+        (
+            design_intent,
+            intent_model_data,
+            intent_repair_history,
+            intent_evaluation,
+        ) = prompt_to_design_intent_with_feedback(
+            request.prompt,
+            max_repairs=intent_repair_limit,
+        )
         intent_api_seconds = seconds_since(intent_api_started_at)
 
         lowering_started_at = perf_counter()
-        intent_model_data = intent_to_model_data(design_intent)
+        if intent_model_data is None:
+            intent_model_data = intent_to_model_data(design_intent)
         lowering_seconds = seconds_since(lowering_started_at)
+
+        if not intent_evaluation.get("passed", False):
+            raise ValueError(
+                "Design-intent candidate failed feedback evaluation: "
+                + json.dumps(intent_evaluation.get("feedback", {}))
+            )
 
         response_data = export_model_data(intent_model_data, request.prompt)
         if response_data.get("quality_report", {}).get("status") == "fail":
             raise ValueError("Design-intent model failed the geometry quality gate")
 
         response_data["design_intent"] = design_intent
+        if intent_repair_history:
+            response_data["intent_repair_history"] = intent_repair_history
         response_data["generation_mode"] = "automatic"
         response_data["generation_path"] = "design_intent"
         response_data["pipeline_attempts"] = [
@@ -317,6 +339,11 @@ def generate_cad(request: CADRequest):
 
     except Exception as intent_error:
         intent_failure = intent_error
+        intent_repair_history = getattr(
+            intent_error,
+            "intent_repair_history",
+            intent_repair_history,
+        )
         if intent_api_seconds == 0.0:
             intent_api_seconds = seconds_since(intent_api_started_at)
         if "lowering_started_at" in locals() and lowering_seconds == 0.0:
@@ -328,7 +355,24 @@ def generate_cad(request: CADRequest):
         "message": str(intent_failure),
     }
 
-    if not should_try_direct_fallback(intent_failure):
+    intent_repairs_exhausted = bool(
+        intent_repair_limit > 0
+        and len(intent_repair_history) >= intent_repair_limit
+    )
+    intent_api_attempts = getattr(
+        intent_failure,
+        "intent_api_attempts",
+        1 + len(intent_repair_history),
+    )
+    remaining_api_calls = max(
+        0,
+        MAX_AUTOMATIC_API_CALLS - intent_api_attempts,
+    )
+    if (
+        not should_try_direct_fallback(intent_failure)
+        or intent_repairs_exhausted
+        or remaining_api_calls == 0
+    ):
         response_data = {
             "status": "error",
             "message": str(intent_failure),
@@ -342,6 +386,7 @@ def generate_cad(request: CADRequest):
             "generation_mode": "automatic",
             "generation_path": "design_intent",
             "pipeline_attempts": [intent_attempt],
+            "intent_repair_history": intent_repair_history,
             "performance": {
                 "api_seconds": intent_api_seconds,
                 "intent_api_seconds": intent_api_seconds,
@@ -364,7 +409,10 @@ def generate_cad(request: CADRequest):
     try:
         direct_model_data, repair_history = prompt_to_model_data_with_repair(
             request.prompt,
-            max_repairs=1,
+            max_repairs=min(
+                max_repair_attempts("direct"),
+                max(0, remaining_api_calls - 1),
+            ),
         )
         direct_api_seconds = seconds_since(direct_api_started_at)
         response_data = with_repair_history(
@@ -380,6 +428,8 @@ def generate_cad(request: CADRequest):
         ]
         if design_intent is not None:
             response_data["design_intent"] = design_intent
+        if intent_repair_history:
+            response_data["intent_repair_history"] = intent_repair_history
 
         performance = dict(response_data.get("performance", {}))
         performance.update({
@@ -428,6 +478,7 @@ def generate_cad(request: CADRequest):
                 else check_model_quality(None)
             ),
             "repair_history": repair_history,
+            "intent_repair_history": intent_repair_history,
             "generation_mode": "automatic",
             "generation_path": "failed",
             "pipeline_attempts": [

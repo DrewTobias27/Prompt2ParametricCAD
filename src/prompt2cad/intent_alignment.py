@@ -192,10 +192,10 @@ def expected_instance_count(placement: dict[str, Any]) -> int | None:
         return int(placement.get("rows", 0)) * int(placement.get("columns", 0))
     if placement_type == "mirrored":
         axes = set(placement.get("axes", []))
-        seed = placement.get("seed", [0, 0])
-        x_count = 2 if "y" in axes and float(seed[0]) != 0 else 1
-        y_count = 2 if "x" in axes and float(seed[1]) != 0 else 1
-        return x_count * y_count
+        # A mirror is meaningful only when each requested axis creates a new
+        # instance. Seeds lying on a mirror axis collapse copies; comparing
+        # against the requested 2**N count lets feedback repair that intent.
+        return 2 ** len(axes)
     if placement_type == "same_as_feature":
         return None
     return None

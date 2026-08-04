@@ -2,15 +2,24 @@
 
 import json
 import os
+from time import perf_counter
 
 from openai import APIStatusError
 from openai import OpenAI
 
+from prompt2cad.candidate_evaluation import evaluate_design_intent_candidate
+from prompt2cad.candidate_evaluation import evaluate_model_candidate
+from prompt2cad.candidate_evaluation import quality_report_needs_repair
+from prompt2cad.candidate_evaluation import REPAIRABLE_QUALITY_WARNING_CODES
 from prompt2cad.design_intent import OPENAI_DESIGN_INTENT_SCHEMA
+from prompt2cad.design_intent import design_intent_from_openai
+from prompt2cad.design_intent import design_intent_to_openai
 from prompt2cad.design_intent import intent_to_model_data
 from prompt2cad.diagnostics import check_model_data
 from prompt2cad.example_library import format_examples_for_prompt
+from prompt2cad.example_library import format_intent_examples_for_prompt
 from prompt2cad.example_library import select_relevant_examples
+from prompt2cad.example_library import select_relevant_intent_examples
 from prompt2cad.quality import check_model_quality
 from prompt2cad.schema import OPENAI_CAD_MODEL_SCHEMA
 from prompt2cad.schema import OPENAI_RELATIONAL_CAD_MODEL_SCHEMA
@@ -311,6 +320,13 @@ Supported placements:
 - circular_pattern: for bolt circles or evenly spaced radial features
 - rectangular_pattern: for row/column hole patterns
 - mirrored: for features mirrored across x and/or y axes
+  Mirror-axis geometry follows standard sketch coordinates:
+  - x axis maps [x, y] to [x, -y]; the seed y must be nonzero.
+  - y axis maps [x, y] to [-x, y]; the seed x must be nonzero.
+  - both axes normally create four distinct positions, so both seed
+    coordinates must be nonzero.
+  Never request an axis that leaves the seed unchanged. For two features at
+  positive and negative X, use axes ["y"], not ["x"].
 - offset_from_edge: for features placed a set distance from a named edge
   or described as offset upward/downward/inward from an edge. Prefer this over
   explicit coordinates when the prompt describes an edge-relative position.
@@ -341,6 +357,17 @@ profile that is not a normal edge treatment.
 Use stable ids such as "corner_holes", "center_boss", "bolt_holes", or
 "side_slot". Use target "base.top" unless a side or feature face is clearly
 requested.
+
+Target-reference rules:
+- Face targets must use "parent_id.face_name".
+- The supported semantic face names are top, bottom, front, back, left, and
+  right. Choose the face whose normal matches the requested feature direction.
+- Never invent generic names such as side, outer_face, inner_face, flat, or
+  curved. If the prompt is ambiguous, choose the most suitable supported face.
+- Only target a feature declared earlier in build order.
+- Every item in required_concepts must be visibly represented by a base role,
+  feature role, edge-treatment role, or a clear id. For example, if bracket is
+  required, use role "bracket" or include bracket in the base id.
 
 Parent-child feature rules:
 - If a feature is described as being in, on, through, or concentric with an
@@ -393,13 +420,13 @@ For compound holes:
   revolved_cut with role "o_ring_groove" on a circle base, not a shaft-like
   cylinder base. Include radius to locate the groove ring from the center.
 
-For strict schema compatibility, fill unrelated numeric/string fields with
-null. Examples:
-- A circle feature needs diameter, but width, height, length, sides,
-  radius, orientation, and unrelated distance/depth fields may be null.
+Each base, feature shape, operation, and edge treatment has its own strict
+schema. Return only fields that apply to that variant. Examples:
+- A circle feature uses diameter; do not add width, height, length, or sides.
 - A cut uses depth. An extrusion uses distance.
-- A revolved_extrusion or revolved_cut uses rectangle width and height, not
-  distance or depth.
+- A revolved_extrusion or revolved_cut uses its profile dimensions, not
+  distance or depth. A rectangle revolved feature includes radius only when
+  an explicit radial location is needed; otherwise omit it for inference.
 - A polyline feature needs at least three outline points. These points describe
   the closed sketch shape; placement describes where that sketch instance is
   located.
@@ -456,13 +483,46 @@ Important repair rules:
 - Prefer simple, robust geometry over clever fragile geometry.
 """.strip()
 
+CAD_INTENT_REPAIR_INSTRUCTIONS = """
+You repair high-level CAD design intent after deterministic lowering and
+CadQuery geometry evaluation. Return one complete replacement design-intent
+object that follows the supplied strict schema.
 
-REPAIRABLE_QUALITY_WARNING_CODES = {
-    "edge_operation_targets_face",
-    "face_operation_targets_edge",
+The input contains:
+- user_prompt: the original request, which remains authoritative
+- failed_design_intent: the previous candidate
+- evaluation_feedback: deterministic failures from intent coverage, lowering,
+  solid construction, geometry checks, and per-operation effect checks
+
+Fix the causes identified by evaluation_feedback while preserving every
+requested concept that was already represented correctly. Do not merely rename
+features to satisfy concept coverage. Correct dimensions, placements, targets,
+parent-child relationships, feature order, and feature count as needed.
+
+When missing_required_dimensions is non-empty, keep the valid design structure
+and fill every listed field. Reuse dimensions stated by the user; otherwise
+choose simple, proportional millimeter values that fit the parent geometry.
+
+Every additive feature must intersect existing material. Every cut must remove
+measurable material. Every repeated instance must affect the intended target.
+Prefer the smallest change that satisfies the original request and all reported
+failures. Return JSON only.
+""".strip()
+
+
+DEFAULT_OPENAI_MODEL = "gpt-5.5"
+DEFAULT_OPENAI_REASONING_EFFORT = "low"
+DEFAULT_MAX_REPAIRS = 3
+MAX_CONFIGURED_REPAIRS = 3
+SUPPORTED_REASONING_EFFORTS = {
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
 }
-DEFAULT_OPENAI_MODEL = "gpt-5-mini"
-SUPPORTED_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high"}
 
 
 def parse_json_response_text(response_text: str) -> dict:
@@ -516,6 +576,7 @@ def create_json_response(
     if reasoning_effort is not None:
         request_options["reasoning"] = {"effort": reasoning_effort}
 
+    api_started_at = perf_counter()
     api_attempts = 1
     used_structured_outputs = True
     try:
@@ -563,6 +624,7 @@ def create_json_response(
                 requested_reasoning_effort=reasoning_effort,
             )
         )
+        telemetry["api_seconds"] = round(perf_counter() - api_started_at, 3)
 
     return parse_json_response_text(response.output_text)
 
@@ -624,8 +686,9 @@ def openai_reasoning_effort(task: str = "generation") -> str | None:
     value = (
         os.getenv(task_specific_env)
         or os.getenv("PROMPT2CAD_REASONING_EFFORT")
+        or DEFAULT_OPENAI_REASONING_EFFORT
     )
-    if value is None or not value.strip():
+    if not value.strip():
         return None
 
     effort = value.strip().lower()
@@ -635,6 +698,27 @@ def openai_reasoning_effort(task: str = "generation") -> str | None:
             f"Unsupported reasoning effort '{effort}'. Supported values: {supported}."
         )
     return effort
+
+
+def max_repair_attempts(task: str = "generation") -> int:
+    """Return a bounded repair count, configurable without code changes."""
+    task_specific_env = f"PROMPT2CAD_{task.upper()}_MAX_REPAIRS"
+    raw_value = (
+        os.getenv(task_specific_env)
+        or os.getenv("PROMPT2CAD_MAX_REPAIRS")
+    )
+    if raw_value is None or not raw_value.strip():
+        return DEFAULT_MAX_REPAIRS
+
+    try:
+        attempts = int(raw_value)
+    except ValueError as error:
+        raise ValueError(f"{task_specific_env} must be an integer") from error
+    if not 0 <= attempts <= MAX_CONFIGURED_REPAIRS:
+        raise ValueError(
+            f"{task_specific_env} must be between 0 and {MAX_CONFIGURED_REPAIRS}"
+        )
+    return attempts
 
 
 def build_generation_input(user_prompt: str, max_examples: int = 3) -> str:
@@ -649,6 +733,27 @@ def build_generation_input(user_prompt: str, max_examples: int = 3) -> str:
     generation_input = {
         "user_prompt": user_prompt,
         "retrieved_examples": json.loads(format_examples_for_prompt(examples)),
+    }
+    return json.dumps(generation_input, indent=2)
+
+
+def build_intent_generation_input(
+    user_prompt: str,
+    max_examples: int = 2,
+) -> str:
+    """Build intent API input from matching prompt-to-intent examples."""
+    examples = select_relevant_intent_examples(
+        user_prompt,
+        max_examples=max_examples,
+    )
+    if not examples:
+        return user_prompt
+
+    generation_input = {
+        "user_prompt": user_prompt,
+        "retrieved_intent_examples": json.loads(
+            format_intent_examples_for_prompt(examples)
+        ),
     }
     return json.dumps(generation_input, indent=2)
 
@@ -681,22 +786,153 @@ def prompt_to_design_intent(
     """Convert a natural language CAD request into high-level design intent."""
     client = create_openai_client()
 
-    return create_json_response(
+    response_intent = create_json_response(
         client,
         model=openai_model("intent"),
         instructions=CAD_INTENT_INSTRUCTIONS,
-        input_text=build_generation_input(user_prompt),
+        input_text=build_intent_generation_input(user_prompt),
         schema=OPENAI_DESIGN_INTENT_SCHEMA,
         schema_name="cad_design_intent",
         telemetry=telemetry,
         reasoning_effort=openai_reasoning_effort("intent"),
     )
+    return design_intent_from_openai(response_intent)
 
 
-def prompt_to_model_data_via_intent(user_prompt: str) -> dict:
-    """Generate design intent first, then lower it into CAD model data."""
-    design_intent = prompt_to_design_intent(user_prompt)
-    return intent_to_model_data(design_intent)
+def repair_design_intent(
+    user_prompt: str,
+    failed_design_intent: dict,
+    evaluation_feedback: dict,
+    *,
+    telemetry: dict | None = None,
+) -> dict:
+    """Ask the API to repair design intent using deterministic CAD feedback."""
+    client = create_openai_client()
+    repair_request = {
+        "user_prompt": user_prompt,
+        "failed_design_intent": design_intent_to_openai(failed_design_intent),
+        "evaluation_feedback": evaluation_feedback,
+    }
+    response_intent = create_json_response(
+        client,
+        model=openai_model("intent_repair"),
+        instructions=CAD_INTENT_REPAIR_INSTRUCTIONS,
+        input_text=json.dumps(repair_request),
+        schema=OPENAI_DESIGN_INTENT_SCHEMA,
+        schema_name="cad_repaired_design_intent",
+        telemetry=telemetry,
+        reasoning_effort=openai_reasoning_effort("intent_repair"),
+    )
+    return design_intent_from_openai(response_intent)
+
+
+def prompt_to_design_intent_with_feedback(
+    user_prompt: str,
+    max_repairs: int | None = None,
+    *,
+    telemetry: dict | None = None,
+) -> tuple[dict, dict | None, list[dict], dict]:
+    """Generate intent, then conditionally complete or repair failed candidates."""
+    if max_repairs is None:
+        max_repairs = max_repair_attempts("intent")
+
+    api_calls: list[dict] = []
+    initial_telemetry = {} if telemetry is not None else None
+    design_intent = prompt_to_design_intent(
+        user_prompt,
+        telemetry=initial_telemetry,
+    ) if initial_telemetry is not None else prompt_to_design_intent(user_prompt)
+    if initial_telemetry is not None:
+        api_calls.append(initial_telemetry)
+        update_aggregate_telemetry(telemetry, api_calls)
+    repair_history = []
+
+    for attempt_number in range(max_repairs + 1):
+        evaluation = evaluate_design_intent_candidate(design_intent)
+        if evaluation["passed"] or attempt_number == max_repairs:
+            return (
+                design_intent,
+                evaluation.get("model_data"),
+                repair_history,
+                evaluation,
+            )
+
+        try:
+            repair_telemetry = {} if telemetry is not None else None
+            repaired_intent = repair_design_intent(
+                user_prompt,
+                design_intent,
+                evaluation["feedback"],
+                telemetry=repair_telemetry,
+            ) if repair_telemetry is not None else repair_design_intent(
+                user_prompt,
+                design_intent,
+                evaluation["feedback"],
+            )
+            if repair_telemetry is not None:
+                api_calls.append(repair_telemetry)
+                update_aggregate_telemetry(telemetry, api_calls)
+        except Exception as error:
+            error.intent_repair_history = repair_history
+            error.intent_api_attempts = 1 + len(repair_history) + 1
+            error.design_intent = design_intent
+            if telemetry is not None:
+                error.api_telemetry = dict(telemetry)
+            raise
+        repair_history.append({
+            "attempt": attempt_number + 1,
+            "evaluation_feedback": evaluation["feedback"],
+            "failed_design_intent": design_intent,
+            "repaired_design_intent": repaired_intent,
+        })
+        if repaired_intent == design_intent:
+            repair_history[-1]["stopped_reason"] = "unchanged_candidate"
+            return (
+                design_intent,
+                evaluation.get("model_data"),
+                repair_history,
+                evaluation,
+            )
+        design_intent = repaired_intent
+
+    raise AssertionError("Unreachable design-intent repair loop state")
+
+
+def update_aggregate_telemetry(
+    telemetry: dict,
+    api_calls: list[dict],
+) -> None:
+    """Summarize every generation/repair API call without losing call details."""
+    telemetry.clear()
+    telemetry["calls"] = [dict(call) for call in api_calls]
+    telemetry["logical_api_calls"] = len(api_calls)
+    telemetry["api_attempts"] = sum(
+        int(call.get("api_attempts", 1))
+        for call in api_calls
+    )
+    for field in (
+        "api_seconds",
+        "input_tokens",
+        "cached_input_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+    ):
+        values = [
+            call[field]
+            for call in api_calls
+            if isinstance(call.get(field), (int, float))
+        ]
+        if values:
+            telemetry[field] = sum(values)
+
+    if api_calls:
+        telemetry["requested_model"] = api_calls[0].get("requested_model")
+        telemetry["response_models"] = sorted({
+            call["response_model"]
+            for call in api_calls
+            if call.get("response_model")
+        })
 
 
 def repair_model_data(
@@ -722,17 +958,6 @@ def repair_model_data(
     )
 
 
-def quality_report_needs_repair(quality_report: dict) -> bool:
-    """Return whether quality issues should trigger an API repair attempt."""
-    if not quality_report.get("passed", False):
-        return True
-
-    return any(
-        issue.get("code") in REPAIRABLE_QUALITY_WARNING_CODES
-        for issue in quality_report.get("issues", [])
-    )
-
-
 def quality_issue_suggestions(quality_report: dict) -> list[str]:
     """Return concise repair suggestions from quality issues."""
     suggestions = []
@@ -746,11 +971,23 @@ def quality_issue_suggestions(quality_report: dict) -> list[str]:
 
 def build_repair_failure_analysis(model_data: dict) -> dict:
     """Combine build diagnostics and quality-gate output for repair."""
-    diagnostics = check_model_data(model_data)
-    quality_report = check_model_quality(model_data)
+    candidate_evaluation = evaluate_model_candidate(model_data)
+    quality_report = candidate_evaluation["quality_report"]
+    operation_effects = candidate_evaluation["operation_effects"]
+    diagnostics = (
+        check_model_data(model_data)
+        if not quality_report.get("passed", False)
+        else {
+            "passed": True,
+            "failure_type": None,
+            "reason": "Model data validated and built successfully.",
+            "suggested_fixes": [],
+        }
+    )
     needs_repair = (
         not diagnostics.get("passed", False)
         or quality_report_needs_repair(quality_report)
+        or not operation_effects.get("passed", False)
     )
 
     if not needs_repair:
@@ -767,6 +1004,10 @@ def build_repair_failure_analysis(model_data: dict) -> dict:
     for suggestion in quality_issue_suggestions(quality_report):
         if suggestion not in suggested_fixes:
             suggested_fixes.append(suggestion)
+    for failure in operation_effects.get("failures", []):
+        suggestion = f"Correct the feature so it changes the model: {failure}"
+        if suggestion not in suggested_fixes:
+            suggested_fixes.append(suggestion)
 
     repairable_quality_codes = [
         issue.get("code")
@@ -779,30 +1020,42 @@ def build_repair_failure_analysis(model_data: dict) -> dict:
         "passed": False,
         "failure_type": (
             diagnostics.get("failure_type")
-            or "quality_gate_failed"
+            or (
+                "operation_effect_failed"
+                if not operation_effects.get("passed", False)
+                else "quality_gate_failed"
+            )
         ),
-        "reason": diagnostics.get(
-            "reason",
-            "The model failed diagnostics or quality-gate checks.",
+        "reason": (
+            "; ".join(operation_effects.get("failures", []))
+            if not operation_effects.get("passed", False)
+            else diagnostics.get(
+                "reason",
+                "The model failed diagnostics or quality-gate checks.",
+            )
         ),
         "suggested_fixes": suggested_fixes,
         "repairable_quality_codes": repairable_quality_codes,
         "diagnostics": diagnostics,
         "quality_report": quality_report,
+        "operation_effects": operation_effects,
+        "evaluation_feedback": candidate_evaluation["feedback"],
     }
 
 
 def prompt_to_model_data_with_repair(
     user_prompt: str,
-    max_repairs: int = 1,
+    max_repairs: int | None = None,
 ) -> tuple[dict, list[dict]]:
-    """Generate CAD JSON and use at most a small number of repair attempts."""
+    """Generate CAD JSON and repair failed built candidates up to a safe cap."""
+    if max_repairs is None:
+        max_repairs = max_repair_attempts("direct")
     model_data = prompt_to_model_data(user_prompt)
     repair_history = []
 
-    for _ in range(max_repairs):
+    for attempt_number in range(max_repairs + 1):
         failure_analysis = build_repair_failure_analysis(model_data)
-        if failure_analysis["passed"]:
+        if failure_analysis["passed"] or attempt_number == max_repairs:
             return model_data, repair_history
 
         repaired_model_data = repair_model_data(
@@ -812,14 +1065,18 @@ def prompt_to_model_data_with_repair(
         )
         repair_history.append(
             {
+                "attempt": attempt_number + 1,
                 "failure_analysis": failure_analysis,
                 "failed_model_data": model_data,
                 "repaired_model_data": repaired_model_data,
             }
         )
+        if repaired_model_data == model_data:
+            repair_history[-1]["stopped_reason"] = "unchanged_candidate"
+            return model_data, repair_history
         model_data = repaired_model_data
 
-    return model_data, repair_history
+    raise AssertionError("Unreachable direct repair loop state")
 
 
 def suggest_base_model_data(

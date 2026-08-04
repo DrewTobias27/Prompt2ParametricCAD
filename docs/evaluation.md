@@ -52,13 +52,17 @@ lowering.
 
 ## API stress benchmarks
 
-The focused comparison runner records API latency, token usage, local stage
-timings, quality reports, intent coverage, concept assertions, and
-operation-effect results.
+The focused runner records API latency, token usage, local stage timings,
+quality reports, intent coverage, concept assertions, operation effects, and
+feedback-loop recovery. By default it runs the production geometry-feedback
+path and stores the exact first-pass candidate inside the same result for paired
+scoring. Direct JSON generation is an explicit fallback diagnostic, not the
+default benchmark.
 
 ```powershell
 $env:PYTHONPATH = "src"
 python -m prompt2cad.tiny_api_compare --help
+python -m prompt2cad.model_matrix_eval --help
 ```
 
 Use tracked case files and write reports under `generated/tiny_api_compare/`.

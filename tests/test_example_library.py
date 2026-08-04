@@ -5,6 +5,7 @@ import json
 from prompt2cad.example_library import format_examples_for_prompt
 from prompt2cad.example_library import load_example_library
 from prompt2cad.example_library import select_relevant_examples
+from prompt2cad.example_library import select_relevant_intent_examples
 from prompt2cad.interpreter import build_model
 from prompt2cad.schema import validate_model_data
 
@@ -61,3 +62,23 @@ def test_example_library_models_are_valid_and_buildable():
 
         validate_model_data(model_data)
         build_model(model_data)
+
+
+def test_intent_examples_match_the_preferred_generation_format():
+    examples = select_relevant_intent_examples(
+        "Create a circular flange with six holes on a bolt circle.",
+        max_examples=2,
+    )
+
+    assert examples[0]["name"] == "circular_flange_bolt_circle"
+    assert examples[0]["prompt"]
+    assert examples[0]["design_intent"]["base"]["profile"] == "circle"
+
+
+def test_intent_retrieval_omits_unrelated_examples():
+    examples = select_relevant_intent_examples(
+        "Create an involute gear with helical teeth.",
+        max_examples=2,
+    )
+
+    assert examples == []

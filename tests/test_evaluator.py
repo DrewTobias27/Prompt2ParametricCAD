@@ -282,3 +282,54 @@ def test_evaluator_reports_missing_part_for_bounding_box_check():
 
     assert result.passed is False
     assert result.failures == ["Bounding box check requires a built CAD part."]
+
+
+def test_evaluator_accepts_repeated_instances_as_separate_operations():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 100,
+                "height": 60,
+                "distance": 6,
+            },
+            {
+                "type": "cut",
+                "id": "center_hole",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "diameter": 20,
+                "depth": "through",
+            },
+            {
+                "type": "add_extrude",
+                "id": "left_post",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[-25, 0]],
+                "diameter": 10,
+                "distance": 12,
+            },
+            {
+                "type": "add_extrude",
+                "id": "right_post",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[25, 0]],
+                "diameter": 10,
+                "distance": 12,
+            },
+        ]
+    }
+    eval_case = load_json(
+        PROJECT_ROOT / "evals" / "cases" / "mixed_plate_hole_and_posts.json"
+    )
+
+    result = evaluate_model_data(model_data, eval_case, build_model(model_data))
+
+    assert result.passed is True
+    assert result.failures == []

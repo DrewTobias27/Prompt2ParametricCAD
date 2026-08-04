@@ -81,6 +81,44 @@ def operation_matches_expected(
     return failures == []
 
 
+def operations_collectively_match_expected(
+    operations: list[dict],
+    expected_operation: dict,
+) -> bool:
+    """Accept repeated instances encoded as one pattern or separate features.
+
+    A model may represent two identical posts as one operation with two
+    positions or as two operations with one position each. Both describe the
+    same requested feature instances, so exact evaluation should compare the
+    aggregate position count rather than enforce one implementation shape.
+    """
+    if any(
+        operation_matches_expected(operation, expected_operation)
+        for operation in operations
+    ):
+        return True
+
+    expected_position_count = expected_operation.get("position_count")
+    if not isinstance(expected_position_count, int) or expected_position_count <= 1:
+        return False
+
+    expected_fields = {
+        key: value
+        for key, value in expected_operation.items()
+        if key != "position_count"
+    }
+    matching_operations = [
+        operation
+        for operation in operations
+        if operation_matches_expected(operation, expected_fields)
+    ]
+    return (
+        len(matching_operations) > 1
+        and sum(count_positions(operation) for operation in matching_operations)
+        == expected_position_count
+    )
+
+
 def describe_expected_operation(expected_operation: dict) -> str:
     """Return a compact text description of an expected operation."""
     expected_parts = []
@@ -316,14 +354,10 @@ def evaluate_model_data(
     )
 
     for expected_operation in expected.get("required_operations", []):
-        matching_operation = None
-
-        for operation in operations[1:]:
-            if operation_matches_expected(operation, expected_operation):
-                matching_operation = operation
-                break
-
-        if matching_operation is None:
+        if not operations_collectively_match_expected(
+            operations[1:],
+            expected_operation,
+        ):
             failures.append(
                 "Missing expected operation: "
                 f"{describe_expected_operation(expected_operation)}."

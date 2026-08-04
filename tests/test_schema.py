@@ -1,6 +1,7 @@
 """Tests for CAD model schema validation."""
 
 import pytest
+from jsonschema import ValidationError
 from jsonschema import validate
 
 from prompt2cad.design_intent import OPENAI_DESIGN_INTENT_SCHEMA
@@ -493,6 +494,9 @@ def test_openai_schema_object_properties_are_all_required():
         for child_schema in schema.get("properties", {}).values():
             check_schema(child_schema)
 
+        for child_schema in schema.get("$defs", {}).values():
+            check_schema(child_schema)
+
         items = schema.get("items")
         if isinstance(items, dict):
             check_schema(items)
@@ -500,6 +504,93 @@ def test_openai_schema_object_properties_are_all_required():
     check_schema(OPENAI_CAD_MODEL_SCHEMA)
     check_schema(OPENAI_RELATIONAL_CAD_MODEL_SCHEMA)
     check_schema(OPENAI_DESIGN_INTENT_SCHEMA)
+
+
+def test_openai_intent_schema_accepts_sparse_shape_specific_objects():
+    design_intent = {
+        "required_concepts": ["plate", "hole"],
+        "base": {
+            "id": "base",
+            "role": "plate",
+            "profile": "circle",
+            "diameter": 80,
+            "thickness": 8,
+        },
+        "features": [{
+            "id": "center_hole",
+            "role": "hole",
+            "target": "base.top",
+            "placement": {"type": "centered"},
+            "operation": {"type": "cut", "depth": "through"},
+            "shape": {"type": "circle", "diameter": 10},
+        }],
+        "edge_treatments": [{
+            "id": "outer_chamfer",
+            "role": "chamfer",
+            "target_feature": "base",
+            "edge_selector": "top_outer_edges",
+            "treatment": "chamfer",
+            "distance": 1,
+        }],
+    }
+
+    validate(instance=design_intent, schema=OPENAI_DESIGN_INTENT_SCHEMA)
+
+
+def test_openai_intent_schema_rejects_irrelevant_circle_dimensions():
+    design_intent = {
+        "required_concepts": [],
+        "base": {
+            "id": "base",
+            "role": None,
+            "profile": "circle",
+            "diameter": 80,
+            "thickness": 8,
+            "width": None,
+        },
+        "features": [],
+        "edge_treatments": [],
+    }
+
+    with pytest.raises(ValidationError):
+        validate(instance=design_intent, schema=OPENAI_DESIGN_INTENT_SCHEMA)
+
+
+def test_openai_intent_schema_supports_revolve_radius_only_when_used():
+    common = {
+        "required_concepts": ["plate", "o_ring_groove"],
+        "base": {
+            "id": "base",
+            "role": "plate",
+            "profile": "circle",
+            "diameter": 100,
+            "thickness": 8,
+        },
+        "edge_treatments": [],
+    }
+    groove = {
+        "id": "groove",
+        "role": "o_ring_groove",
+        "target": "base.top",
+        "placement": {"type": "centered"},
+        "operation": {"type": "revolved_cut"},
+        "shape": {"type": "rectangle", "width": 2, "height": 2},
+    }
+
+    validate(
+        instance={**common, "features": [groove]},
+        schema=OPENAI_DESIGN_INTENT_SCHEMA,
+    )
+    validate(
+        instance={
+            **common,
+            "features": [{
+                **groove,
+                "operation": {"type": "revolved_cut", "radius": 30},
+            }],
+        },
+        schema=OPENAI_DESIGN_INTENT_SCHEMA,
+    )
 
 
 def test_validate_model_data_rejects_missing_width():

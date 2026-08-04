@@ -83,6 +83,40 @@ def test_intent_alignment_reports_collapsed_pattern():
     assert any("duplicate positions" in failure for failure in result["failures"])
 
 
+def test_intent_alignment_reports_mirror_seed_on_requested_axis():
+    intent = {
+        "base": {"id": "base", "profile": "rectangle"},
+        "features": [{
+            "id": "posts",
+            "operation": "extrusion",
+            "target": "base.top",
+            "shape": "circle",
+            "placement": {
+                "type": "mirrored",
+                "seed": [25, 0],
+                "axes": ["x"],
+            },
+        }],
+        "edge_treatments": [],
+    }
+    model_data = {
+        "operations": [
+            {"type": "extrude", "id": "base"},
+            {
+                "type": "add_extrude",
+                "id": "posts",
+                "profile": "circle",
+                "positions": [[25, 0]],
+            },
+        ]
+    }
+
+    result = evaluate_intent_alignment(intent, model_data)
+
+    assert result["passed"] is False
+    assert any("expected 2 instance" in failure for failure in result["failures"])
+
+
 def test_intent_alignment_accepts_same_as_feature_positions():
     intent = {
         "base": {"id": "base", "profile": "rectangle"},

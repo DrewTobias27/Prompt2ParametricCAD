@@ -59,13 +59,13 @@ def test_generate_cad_prefers_design_intent_and_returns_model(monkeypatch):
 
     monkeypatch.setattr(
         web_app,
-        "prompt_to_design_intent",
-        lambda prompt: design_intent,
-    )
-    monkeypatch.setattr(
-        web_app,
-        "intent_to_model_data",
-        lambda intent: model_data,
+        "prompt_to_design_intent_with_feedback",
+        lambda prompt, max_repairs: (
+            design_intent,
+            model_data,
+            [],
+            {"passed": True, "feedback": {}},
+        ),
     )
     monkeypatch.setattr(
         web_app,
@@ -132,9 +132,14 @@ def test_generate_cad_caches_successful_automatic_responses(monkeypatch):
     }
     calls = {"api": 0, "export": 0}
 
-    def fake_prompt_to_design_intent(prompt):
+    def fake_prompt_to_design_intent(prompt, max_repairs):
         calls["api"] += 1
-        return design_intent
+        return (
+            design_intent,
+            model_data,
+            [],
+            {"passed": True, "feedback": {}},
+        )
 
     def fake_export_model_data(generated_model_data, filename_hint):
         calls["export"] += 1
@@ -146,8 +151,11 @@ def test_generate_cad_caches_successful_automatic_responses(monkeypatch):
             "performance": {"cache_hit": False},
         }
 
-    monkeypatch.setattr(web_app, "prompt_to_design_intent", fake_prompt_to_design_intent)
-    monkeypatch.setattr(web_app, "intent_to_model_data", lambda intent: model_data)
+    monkeypatch.setattr(
+        web_app,
+        "prompt_to_design_intent_with_feedback",
+        fake_prompt_to_design_intent,
+    )
     monkeypatch.setattr(web_app, "export_model_data", fake_export_model_data)
 
     first_response = web_app.generate_cad(
@@ -182,21 +190,29 @@ def test_generate_cad_uses_direct_fallback_after_intent_failure(monkeypatch):
             }
         ]
     }
+    direct_repair_limits = []
+
+    def fake_direct_fallback(prompt, max_repairs):
+        direct_repair_limits.append(max_repairs)
+        return direct_model_data, []
 
     monkeypatch.setattr(
         web_app,
-        "prompt_to_design_intent",
-        lambda prompt: design_intent,
-    )
-    monkeypatch.setattr(
-        web_app,
-        "intent_to_model_data",
-        lambda intent: (_ for _ in ()).throw(ValueError("unsupported relationship")),
+        "prompt_to_design_intent_with_feedback",
+        lambda prompt, max_repairs: (
+            design_intent,
+            None,
+            [],
+            {
+                "passed": False,
+                "feedback": {"lowering_error": "unsupported relationship"},
+            },
+        ),
     )
     monkeypatch.setattr(
         web_app,
         "prompt_to_model_data_with_repair",
-        lambda prompt, max_repairs: (direct_model_data, []),
+        fake_direct_fallback,
     )
     monkeypatch.setattr(
         web_app,
@@ -232,6 +248,7 @@ def test_generate_cad_uses_direct_fallback_after_intent_failure(monkeypatch):
     assert response["performance"]["intent_api_seconds"] >= 0
     assert response["performance"]["direct_api_seconds"] >= 0
     assert response["performance"]["lowering_seconds"] >= 0
+    assert direct_repair_limits == [2]
 
 
 def test_generate_cad_does_not_retry_missing_credentials(monkeypatch):
@@ -240,8 +257,8 @@ def test_generate_cad_does_not_retry_missing_credentials(monkeypatch):
 
     monkeypatch.setattr(
         web_app,
-        "prompt_to_design_intent",
-        lambda prompt: (_ for _ in ()).throw(
+        "prompt_to_design_intent_with_feedback",
+        lambda prompt, max_repairs: (_ for _ in ()).throw(
             RuntimeError("Missing credentials. Set OPENAI_API_KEY.")
         ),
     )
@@ -262,6 +279,45 @@ def test_generate_cad_does_not_retry_missing_credentials(monkeypatch):
 
     assert response["status"] == "error"
     assert response["generation_path"] == "design_intent"
+    assert direct_calls == []
+
+
+def test_generate_cad_stops_after_intent_repair_budget_is_exhausted(monkeypatch):
+    web_app.SUCCESS_RESPONSE_CACHE.clear()
+    direct_calls = []
+    repair_history = [
+        {"attempt": attempt, "evaluation_feedback": {"failed": True}}
+        for attempt in range(1, 4)
+    ]
+    monkeypatch.setattr(web_app, "max_repair_attempts", lambda task: 3)
+    monkeypatch.setattr(
+        web_app,
+        "prompt_to_design_intent_with_feedback",
+        lambda prompt, max_repairs: (
+            {"base": {"id": "base"}, "features": []},
+            None,
+            repair_history,
+            {"passed": False, "feedback": {"still_invalid": True}},
+        ),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "prompt_to_model_data_with_repair",
+        lambda *args, **kwargs: direct_calls.append(True),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "save_generation_log",
+        lambda **kwargs: web_app.Path("generated/log.json"),
+    )
+
+    response = web_app.generate_cad(
+        web_app.CADRequest(prompt="make a persistently invalid part")
+    )
+
+    assert response["status"] == "error"
+    assert response["generation_path"] == "design_intent"
+    assert response["intent_repair_history"] == repair_history
     assert direct_calls == []
 
 
@@ -291,13 +347,8 @@ def test_generate_cad_logs_repaired_prompt_generation(monkeypatch, tmp_path):
 
     monkeypatch.setattr(
         web_app,
-        "prompt_to_design_intent",
-        lambda prompt: {"base": {"id": "base"}, "features": []},
-    )
-    monkeypatch.setattr(
-        web_app,
-        "intent_to_model_data",
-        lambda intent: (_ for _ in ()).throw(
+        "prompt_to_design_intent_with_feedback",
+        lambda prompt, max_repairs: (_ for _ in ()).throw(
             ValueError("intent lowering needs compatibility fallback")
         ),
     )

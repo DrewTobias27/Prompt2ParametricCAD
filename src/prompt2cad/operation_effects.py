@@ -2,9 +2,9 @@
 
 Final-solid validation can miss a semantically absent feature.  For example, a
 cut that misses the body or an extrusion fully buried inside existing material
-can still leave one valid solid.  These checks rebuild operation prefixes only
-for evaluation runs, then compare measurable geometry before and after every
-operation.  Normal web generation does not pay this extra cost.
+can still leave one valid solid. These checks rebuild operation prefixes for
+evaluation runs and geometry-aware generation feedback, then compare measurable
+geometry before and after every operation.
 """
 
 from __future__ import annotations

@@ -87,6 +87,7 @@ def test_create_json_response_collects_non_secret_usage_telemetry():
         "total_tokens": 165,
         "cached_input_tokens": 80,
         "reasoning_tokens": 30,
+        "api_seconds": 0.0,
     }
 
 
@@ -115,7 +116,7 @@ def test_openai_model_uses_task_specific_then_general_override(monkeypatch):
     monkeypatch.delenv("PROMPT2CAD_OPENAI_MODEL", raising=False)
     monkeypatch.delenv("PROMPT2CAD_REPAIR_MODEL", raising=False)
 
-    assert prompting.openai_model("repair") == "gpt-5-mini"
+    assert prompting.openai_model("repair") == "gpt-5.5"
 
     monkeypatch.setenv("PROMPT2CAD_OPENAI_MODEL", "gpt-5.5")
     assert prompting.openai_model("repair") == "gpt-5.5"
@@ -130,13 +131,196 @@ def test_openai_reasoning_effort_uses_task_specific_then_general_override(
     monkeypatch.delenv("PROMPT2CAD_REASONING_EFFORT", raising=False)
     monkeypatch.delenv("PROMPT2CAD_INTENT_REASONING_EFFORT", raising=False)
 
-    assert prompting.openai_reasoning_effort("intent") is None
+    assert prompting.openai_reasoning_effort("intent") == "low"
 
     monkeypatch.setenv("PROMPT2CAD_REASONING_EFFORT", "medium")
     assert prompting.openai_reasoning_effort("intent") == "medium"
 
     monkeypatch.setenv("PROMPT2CAD_INTENT_REASONING_EFFORT", "LOW")
     assert prompting.openai_reasoning_effort("intent") == "low"
+
+
+def test_max_repair_attempts_defaults_to_three_and_is_bounded(monkeypatch):
+    monkeypatch.delenv("PROMPT2CAD_MAX_REPAIRS", raising=False)
+    monkeypatch.delenv("PROMPT2CAD_INTENT_MAX_REPAIRS", raising=False)
+    assert prompting.max_repair_attempts("intent") == 3
+
+    monkeypatch.setenv("PROMPT2CAD_INTENT_MAX_REPAIRS", "2")
+    assert prompting.max_repair_attempts("intent") == 2
+
+    monkeypatch.setenv("PROMPT2CAD_INTENT_MAX_REPAIRS", "4")
+    try:
+        prompting.max_repair_attempts("intent")
+    except ValueError as error:
+        assert "between 0 and 3" in str(error)
+    else:
+        raise AssertionError("Expected repair cap validation")
+
+
+def test_design_intent_feedback_loop_repairs_failed_candidate(monkeypatch):
+    failed_intent = {"candidate": "failed"}
+    repaired_intent = {"candidate": "repaired"}
+    evaluations = {
+        "failed": {
+            "passed": False,
+            "model_data": None,
+            "feedback": {"lowering_error": "missing diameter"},
+        },
+        "repaired": {
+            "passed": True,
+            "model_data": {"operations": [{"id": "base"}]},
+            "feedback": {},
+        },
+    }
+    repair_calls = []
+
+    monkeypatch.setattr(
+        prompting,
+        "prompt_to_design_intent",
+        lambda prompt: failed_intent,
+    )
+    monkeypatch.setattr(
+        prompting,
+        "evaluate_design_intent_candidate",
+        lambda intent: evaluations[intent["candidate"]],
+    )
+
+    def fake_repair(prompt, intent, feedback):
+        repair_calls.append((prompt, intent, feedback))
+        return repaired_intent
+
+    monkeypatch.setattr(prompting, "repair_design_intent", fake_repair)
+
+    intent, model_data, history, evaluation = (
+        prompting.prompt_to_design_intent_with_feedback(
+            "make a plate with a hole",
+            max_repairs=3,
+        )
+    )
+
+    assert intent == repaired_intent
+    assert model_data == {"operations": [{"id": "base"}]}
+    assert evaluation["passed"] is True
+    assert len(history) == 1
+    assert repair_calls[0][2] == {"lowering_error": "missing diameter"}
+
+
+def test_design_intent_feedback_loop_does_not_repair_valid_candidate(monkeypatch):
+    intent = {"candidate": "valid"}
+    evaluation = {
+        "passed": True,
+        "model_data": {"operations": [{"id": "base"}]},
+        "feedback": {},
+    }
+    monkeypatch.setattr(prompting, "prompt_to_design_intent", lambda prompt: intent)
+    monkeypatch.setattr(
+        prompting,
+        "evaluate_design_intent_candidate",
+        lambda candidate: evaluation,
+    )
+    monkeypatch.setattr(
+        prompting,
+        "repair_design_intent",
+        lambda *args: (_ for _ in ()).throw(
+            AssertionError("A passing candidate must not spend a repair call")
+        ),
+    )
+
+    result_intent, model_data, history, final_evaluation = (
+        prompting.prompt_to_design_intent_with_feedback(
+            "make a valid plate",
+            max_repairs=3,
+        )
+    )
+
+    assert result_intent is intent
+    assert model_data == evaluation["model_data"]
+    assert history == []
+    assert final_evaluation is evaluation
+
+
+def test_design_intent_feedback_loop_stops_on_unchanged_repair(monkeypatch):
+    intent = {"candidate": "unchanged"}
+    evaluation = {
+        "passed": False,
+        "model_data": None,
+        "feedback": {"lowering_error": "still invalid"},
+    }
+    monkeypatch.setattr(prompting, "prompt_to_design_intent", lambda prompt: intent)
+    monkeypatch.setattr(
+        prompting,
+        "evaluate_design_intent_candidate",
+        lambda candidate: evaluation,
+    )
+    monkeypatch.setattr(
+        prompting,
+        "repair_design_intent",
+        lambda *args: intent,
+    )
+
+    _, _, history, final_evaluation = prompting.prompt_to_design_intent_with_feedback(
+        "make an impossible part",
+        max_repairs=3,
+    )
+
+    assert final_evaluation is evaluation
+    assert len(history) == 1
+    assert history[0]["stopped_reason"] == "unchanged_candidate"
+
+
+def test_design_intent_feedback_loop_aggregates_generation_and_repair_usage(
+    monkeypatch,
+):
+    failed_intent = {"candidate": "failed"}
+    repaired_intent = {"candidate": "repaired"}
+
+    def fake_generate(prompt, telemetry=None):
+        telemetry.update({
+            "requested_model": "test-model",
+            "response_model": "test-model-snapshot",
+            "api_attempts": 1,
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "total_tokens": 120,
+        })
+        return failed_intent
+
+    def fake_repair(prompt, intent, feedback, telemetry=None):
+        telemetry.update({
+            "requested_model": "test-model",
+            "response_model": "test-model-snapshot",
+            "api_attempts": 1,
+            "input_tokens": 150,
+            "output_tokens": 30,
+            "total_tokens": 180,
+        })
+        return repaired_intent
+
+    monkeypatch.setattr(prompting, "prompt_to_design_intent", fake_generate)
+    monkeypatch.setattr(prompting, "repair_design_intent", fake_repair)
+    monkeypatch.setattr(
+        prompting,
+        "evaluate_design_intent_candidate",
+        lambda intent: {
+            "passed": intent is repaired_intent,
+            "model_data": {"operations": []} if intent is repaired_intent else None,
+            "feedback": {} if intent is repaired_intent else {"error": "repair me"},
+        },
+    )
+    telemetry = {}
+
+    prompting.prompt_to_design_intent_with_feedback(
+        "make a part",
+        max_repairs=1,
+        telemetry=telemetry,
+    )
+
+    assert telemetry["logical_api_calls"] == 2
+    assert telemetry["api_attempts"] == 2
+    assert telemetry["input_tokens"] == 250
+    assert telemetry["output_tokens"] == 50
+    assert telemetry["total_tokens"] == 300
+    assert telemetry["response_models"] == ["test-model-snapshot"]
 
 
 def test_prompt_to_model_data_with_repair_repairs_once(monkeypatch):
@@ -207,6 +391,25 @@ def test_prompt_to_model_data_with_repair_repairs_once(monkeypatch):
     )
     monkeypatch.setattr(
         prompting,
+        "evaluate_model_candidate",
+        lambda model_data: {
+            "passed": model_data == repaired_model_data,
+            "quality_report": {
+                "passed": model_data == repaired_model_data,
+                "status": "pass" if model_data == repaired_model_data else "fail",
+                "issues": [],
+            },
+            "operation_effects": {
+                "passed": True,
+                "failures": [],
+                "warnings": [],
+                "trace": [],
+            },
+            "feedback": {},
+        },
+    )
+    monkeypatch.setattr(
+        prompting,
         "repair_model_data",
         fake_repair_model_data,
     )
@@ -227,7 +430,7 @@ def test_prompt_to_model_data_with_repair_repairs_once(monkeypatch):
         "reason": "Disconnected",
         "suggested_fixes": ["Move the feature."],
     }
-    assert failure_analysis["quality_report"]["passed"] is True
+    assert failure_analysis["quality_report"]["passed"] is False
     assert repair_history[0]["repaired_model_data"] == repaired_model_data
 
 
@@ -332,6 +535,29 @@ def test_prompt_to_model_data_with_repair_uses_repairable_quality_warnings(
             "suggested_fixes": [],
         },
     )
+    monkeypatch.setattr(
+        prompting,
+        "evaluate_model_candidate",
+        lambda model_data: {
+            "passed": model_data == repaired_model_data,
+            "quality_report": {
+                "passed": True,
+                "status": "pass" if model_data == repaired_model_data else "warning",
+                "issues": [] if model_data == repaired_model_data else [{
+                    "severity": "warning",
+                    "code": "face_operation_targets_edge",
+                    "suggestion": "Target a face instead of an edge selector.",
+                }],
+            },
+            "operation_effects": {
+                "passed": True,
+                "failures": [],
+                "warnings": [],
+                "trace": [],
+            },
+            "feedback": {},
+        },
+    )
 
     def fake_repair_model_data(
         user_prompt: str,
@@ -405,101 +631,107 @@ def test_build_generation_input_includes_retrieved_examples(monkeypatch):
     assert "source_file" not in generation_input["retrieved_examples"][0]
 
 
-def test_prompt_to_model_data_via_intent_lowers_generated_intent(monkeypatch):
-    intent = {
-        "base": {
-            "id": "base",
-            "profile": "rectangle",
-            "width": 100,
-            "height": 70,
-            "thickness": 8,
-        },
-        "features": [
-            {
-                "id": "corner_holes",
-                "operation": "cut",
-                "target": "base.top",
-                "shape": "circle",
-                "diameter": 6,
-                "depth": "through",
-                "placement": {
-                    "type": "near_corners",
-                    "count": 4,
-                    "margin": 7,
-                },
-            }
-        ],
-    }
-
-    monkeypatch.setattr(
-        prompting,
-        "prompt_to_design_intent",
-        lambda user_prompt: intent,
-    )
-
-    model_data = prompting.prompt_to_model_data_via_intent(
-        "make a plate with four corner holes"
-    )
-
-    assert model_data["operations"][1]["id"] == "corner_holes"
-    assert model_data["operations"][1]["positions"] == [
-        [-40, 25],
-        [40, 25],
-        [-40, -25],
-        [40, -25],
-    ]
-
-
-def test_prompt_to_model_data_via_intent_fills_reasonable_missing_dimensions(
-    monkeypatch,
-):
-    intent = {
-        "base": {
-            "id": "base",
-            "profile": "rectangle",
-            "width": 100,
-            "height": 60,
-            "thickness": 8,
-        },
-        "features": [
-            {
-                "id": "corner_holes",
-                "operation": "cut",
-                "target": "base.top",
-                "shape": "circle",
-                "depth": "through",
-                "placement": {
-                    "type": "near_corners",
-                    "count": 4,
-                    "margin": 5,
-                },
+def test_build_intent_generation_input_uses_prompt_to_intent_pairs(monkeypatch):
+    example = {
+        "name": "centered_boss",
+        "prompt": "Create a plate with a centered circular boss.",
+        "tags": ["plate", "boss", "centered"],
+        "design_intent": {
+            "base": {
+                "id": "base",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "thickness": 6,
             },
-            {
-                "id": "center_boss",
+            "features": [{
+                "id": "boss",
                 "operation": "extrusion",
                 "target": "base.top",
-                "shape": "rectangle",
-                "placement": {
-                    "type": "centered",
-                },
-            },
-        ],
+                "shape": "circle",
+                "diameter": 20,
+                "distance": 8,
+                "placement": {"type": "centered"},
+            }],
+        },
+        "source_file": "centered_boss.json",
     }
-
     monkeypatch.setattr(
         prompting,
-        "prompt_to_design_intent",
-        lambda user_prompt: intent,
+        "select_relevant_intent_examples",
+        lambda user_prompt, max_examples: [example],
     )
 
-    model_data = prompting.prompt_to_model_data_via_intent(
-        "make a plate with four holes and a centered boss"
+    generation_input = json.loads(
+        prompting.build_intent_generation_input("make a centered boss")
     )
 
-    assert model_data["operations"][1]["diameter"] == 8
-    assert model_data["operations"][2]["width"] == 20
-    assert model_data["operations"][2]["height"] == 15
-    assert model_data["operations"][2]["distance"] == 10
+    retrieved = generation_input["retrieved_intent_examples"][0]
+    assert retrieved["prompt"] == example["prompt"]
+    retrieved_feature = retrieved["design_intent"]["features"][0]
+    assert retrieved_feature["operation"] == {
+        "type": "extrusion",
+        "distance": 8,
+    }
+    assert retrieved_feature["shape"] == {
+        "type": "circle",
+        "diameter": 20,
+    }
+    assert "model_data" not in retrieved
+    assert "source_file" not in retrieved
+
+
+def test_prompt_to_design_intent_uses_intent_examples_not_operation_examples(
+    monkeypatch,
+):
+    calls = []
+    monkeypatch.setattr(prompting, "create_openai_client", lambda: object())
+    monkeypatch.setattr(
+        prompting,
+        "build_intent_generation_input",
+        lambda prompt: "intent-specific-input",
+    )
+    monkeypatch.setattr(
+        prompting,
+        "build_generation_input",
+        lambda prompt: (_ for _ in ()).throw(
+            AssertionError("The intent path must not use operation examples")
+        ),
+    )
+
+    def fake_create_json_response(client, **kwargs):
+        calls.append(kwargs)
+        return {
+            "required_concepts": ["plate", "boss"],
+            "base": {
+                "id": "base",
+                "role": "plate",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "thickness": 6,
+            },
+            "features": [{
+                "id": "boss",
+                "role": "boss",
+                "target": "base.top",
+                "placement": {"type": "centered"},
+                "operation": {"type": "extrusion", "distance": 8},
+                "shape": {"type": "circle", "diameter": 20},
+            }],
+            "edge_treatments": [],
+        }
+
+    monkeypatch.setattr(prompting, "create_json_response", fake_create_json_response)
+
+    result = prompting.prompt_to_design_intent("make a flange")
+
+    assert calls[0]["input_text"] == "intent-specific-input"
+    assert calls[0]["schema_name"] == "cad_design_intent"
+    assert result["features"][0]["operation"] == "extrusion"
+    assert result["features"][0]["shape"] == "circle"
+    assert result["features"][0]["diameter"] == 20
+    assert result["features"][0]["distance"] == 8
 
 
 def test_missing_required_intent_dimensions_reports_api_omissions():

@@ -49,8 +49,36 @@ Optional model overrides:
 
 ```powershell
 $env:PROMPT2CAD_OPENAI_MODEL = "gpt-5-mini"
-$env:PROMPT2CAD_REPAIR_MODEL = "gpt-5-mini"
+$env:PROMPT2CAD_INTENT_REPAIR_MODEL = "gpt-5-mini"
+$env:PROMPT2CAD_REASONING_EFFORT = "low"
 ```
+
+### Compare generation models safely
+
+The production default is `gpt-5.5` with low reasoning effort. It won the
+repeated model matrix on production success, repair recovery, latency, and token
+use. The model-matrix runner compares candidate models using the same prompts,
+reasoning effort, strict schema, intent checks, geometry checks, and
+operation-effect checks. Each production run records and scores its exact
+unrepaired first-pass candidate before conditionally repairing it, so repairs do
+not hide weak initial interpretation and the comparison does not spend a
+duplicate sampling call:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m prompt2cad.model_matrix_eval --reasoning-effort low
+```
+
+Use one run to screen every model. Then rerun the strongest two with
+`--repetitions 3` so one lucky or unlucky sample does not decide production
+routing.
+
+The default matrix includes `gpt-5.5`, `gpt-5.6-sol`, `gpt-5.6-terra`, and
+`gpt-5.6-luna`. Its correctness-first ranking uses strict pass/warn/fail counts,
+then first-pass success, repair count, latency, and token use. Promote a model
+through `PROMPT2CAD_INTENT_MODEL` only after it wins that representative matrix.
+A stronger repair model can be configured separately with
+`PROMPT2CAD_INTENT_REPAIR_MODEL`.
 
 ## Verify the environment
 

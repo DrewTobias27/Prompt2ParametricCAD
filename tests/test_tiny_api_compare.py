@@ -1,10 +1,24 @@
 """Tests for tiny API comparison utilities."""
 
 import json
+import sys
 
 import pytest
 
 from prompt2cad import tiny_api_compare
+
+
+def test_parse_args_accepts_isolated_model_override(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["tiny_api_compare", "--model", "gpt-test", "--mode", "intent"],
+    )
+
+    args = tiny_api_compare.parse_args()
+
+    assert args.model == "gpt-test"
+    assert args.mode == ["intent"]
 
 
 def test_load_prompt_cases_from_named_case_file(tmp_path):
@@ -38,7 +52,10 @@ def test_load_prompt_cases_from_named_case_file(tmp_path):
     ]
 
 
-def test_compare_prompt_cases_saves_direct_and_intent_outputs(tmp_path, monkeypatch):
+def test_compare_prompt_cases_saves_first_pass_and_feedback_outputs(
+    tmp_path,
+    monkeypatch,
+):
     calls = []
 
     def fake_run_case(prompt, mode):
@@ -84,16 +101,16 @@ def test_compare_prompt_cases_saves_direct_and_intent_outputs(tmp_path, monkeypa
     )
 
     assert calls == [
-        ("Create a rounded box.", "direct"),
-        ("Create a rounded box.", "intent"),
+        ("Create a rounded box.", "intent_feedback"),
     ]
-    assert report["api_call_budget"] == 2
+    assert report["api_call_budget"] == 1
     assert output_path.exists()
-    assert (tmp_path / "models" / "direct" / "rounded_box.json").exists()
-    assert (tmp_path / "models" / "intent" / "rounded_box.json").exists()
+    assert (
+        tmp_path / "models" / "intent_feedback" / "rounded_box.json"
+    ).exists()
     assert report["cases"][0]["focus"] == "rounded vocabulary"
-    assert report["summary"]["result_count"] == 2
-    assert report["summary"]["status_counts"]["pass"] == 2
+    assert report["summary"]["result_count"] == 1
+    assert report["summary"]["status_counts"]["pass"] == 1
     assert report["summary"]["average_elapsed_seconds"] == 0.01
 
 
@@ -314,6 +331,57 @@ def test_run_intent_preserves_api_telemetry_when_local_lowering_fails(monkeypatc
         tiny_api_compare.run_intent("Create an invalid test part.")
 
     assert caught.value.api_telemetry == {"reasoning_tokens": 123}
+
+
+def test_run_intent_feedback_reports_repairs_and_aggregate_telemetry(monkeypatch):
+    def fake_feedback(prompt, telemetry=None):
+        telemetry.update({
+            "logical_api_calls": 2,
+            "total_tokens": 250,
+        })
+        intent = {
+            "required_concepts": ["plate"],
+            "base": {
+                "id": "base",
+                "role": "plate",
+                "profile": "rectangle",
+                "width": 20,
+                "height": 12,
+                "thickness": 3,
+            },
+            "features": [],
+            "edge_treatments": [],
+        }
+        model_data = {
+            "operations": [{
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 20,
+                "height": 12,
+                "distance": 3,
+            }],
+        }
+        return (
+            intent,
+            model_data,
+            [{"attempt": 1, "failed_design_intent": intent}],
+            {"passed": True},
+        )
+
+    monkeypatch.setattr(
+        tiny_api_compare,
+        "prompt_to_design_intent_with_feedback",
+        fake_feedback,
+    )
+
+    result = tiny_api_compare.run_intent_feedback("Create a plate.")
+
+    assert result["repair_count"] == 1
+    assert result["recovered_after_feedback"] is True
+    assert result["api_telemetry"]["logical_api_calls"] == 2
+    assert result["quality_passed"] is True
 
 
 def test_attach_report_summary_aggregates_api_usage():
