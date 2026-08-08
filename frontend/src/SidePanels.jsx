@@ -37,10 +37,12 @@ export function DesignReview({ base, features, usesApiAssistance }) {
 }
 
 export function OutputPanel({ status, result, downloadUrl }) {
+  const hasRequestError = status.startsWith("Error:");
+
   return (
     <section className="result-card">
       <h2>Output</h2>
-      <p className={result?.status === "error" ? "status error" : "status"}>
+      <p className={hasRequestError || result?.status === "error" ? "status error" : "status"}>
         {status || "No output yet."}
       </p>
 

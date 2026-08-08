@@ -510,6 +510,32 @@ failures. Return JSON only.
 """.strip()
 
 
+CAD_INTENT_REFINEMENT_INSTRUCTIONS = """
+You revise an existing high-level CAD design intent in response to a user's
+correction. Return one complete replacement design-intent object that follows
+the supplied strict schema.
+
+The input contains:
+- original_user_prompt: the original CAD request
+- user_correction: what the user wants changed in the most recent result
+- previous_design_intent: the complete current design intent
+
+Treat the correction as the requested change to the current model, not as a
+new request from scratch. Preserve the base, feature ids, feature order,
+relationships, dimensions, and edge treatments that the correction does not
+affect. Keep existing ids whenever a feature remains; assign a new unique id
+only for a genuinely new feature. Remove a feature only when the correction
+explicitly requests its removal.
+
+Return a complete, buildable design intent. Every additive feature must
+intersect existing material, every cut must remove measurable material, and
+all target/parent-child references must remain valid after the revision. Use
+the original prompt to retain design requirements that the correction does not
+mention. If the correction asks for an imprecise change, choose reasonable
+proportional dimensions rather than omitting required fields.
+""".strip()
+
+
 DEFAULT_OPENAI_MODEL = "gpt-5.5"
 DEFAULT_OPENAI_REASONING_EFFORT = "low"
 DEFAULT_MAX_REPAIRS = 3
@@ -826,27 +852,51 @@ def repair_design_intent(
     return design_intent_from_openai(response_intent)
 
 
-def prompt_to_design_intent_with_feedback(
+def refine_design_intent(
     user_prompt: str,
-    max_repairs: int | None = None,
+    previous_design_intent: dict,
+    correction: str,
     *,
     telemetry: dict | None = None,
-) -> tuple[dict, dict | None, list[dict], dict]:
-    """Generate intent, then conditionally complete or repair failed candidates."""
-    if max_repairs is None:
-        max_repairs = max_repair_attempts("intent")
+) -> dict:
+    """Revise a saved design intent using a focused user correction."""
+    client = create_openai_client()
+    refinement_request = {
+        "original_user_prompt": user_prompt,
+        "user_correction": correction,
+        "previous_design_intent": design_intent_to_openai(
+            previous_design_intent
+        ),
+    }
+    response_intent = create_json_response(
+        client,
+        model=openai_model("intent_refinement"),
+        instructions=CAD_INTENT_REFINEMENT_INSTRUCTIONS,
+        input_text=json.dumps(refinement_request),
+        schema=OPENAI_DESIGN_INTENT_SCHEMA,
+        schema_name="cad_refined_design_intent",
+        telemetry=telemetry,
+        reasoning_effort=openai_reasoning_effort("intent_refinement"),
+    )
+    return design_intent_from_openai(response_intent)
 
+
+def evaluate_design_intent_with_feedback(
+    repair_prompt: str,
+    design_intent: dict,
+    max_repairs: int,
+    *,
+    telemetry: dict | None = None,
+    initial_telemetry: dict | None = None,
+) -> tuple[dict, dict | None, list[dict], dict]:
+    """Evaluate one intent and repair it only when deterministic checks fail."""
     api_calls: list[dict] = []
-    initial_telemetry = {} if telemetry is not None else None
-    design_intent = prompt_to_design_intent(
-        user_prompt,
-        telemetry=initial_telemetry,
-    ) if initial_telemetry is not None else prompt_to_design_intent(user_prompt)
     if initial_telemetry is not None:
         api_calls.append(initial_telemetry)
-        update_aggregate_telemetry(telemetry, api_calls)
-    repair_history = []
+        if telemetry is not None:
+            update_aggregate_telemetry(telemetry, api_calls)
 
+    repair_history = []
     for attempt_number in range(max_repairs + 1):
         evaluation = evaluate_design_intent_candidate(design_intent)
         if evaluation["passed"] or attempt_number == max_repairs:
@@ -860,12 +910,12 @@ def prompt_to_design_intent_with_feedback(
         try:
             repair_telemetry = {} if telemetry is not None else None
             repaired_intent = repair_design_intent(
-                user_prompt,
+                repair_prompt,
                 design_intent,
                 evaluation["feedback"],
                 telemetry=repair_telemetry,
             ) if repair_telemetry is not None else repair_design_intent(
-                user_prompt,
+                repair_prompt,
                 design_intent,
                 evaluation["feedback"],
             )
@@ -879,6 +929,7 @@ def prompt_to_design_intent_with_feedback(
             if telemetry is not None:
                 error.api_telemetry = dict(telemetry)
             raise
+
         repair_history.append({
             "attempt": attempt_number + 1,
             "evaluation_feedback": evaluation["feedback"],
@@ -896,6 +947,68 @@ def prompt_to_design_intent_with_feedback(
         design_intent = repaired_intent
 
     raise AssertionError("Unreachable design-intent repair loop state")
+
+
+def prompt_to_design_intent_with_feedback(
+    user_prompt: str,
+    max_repairs: int | None = None,
+    *,
+    telemetry: dict | None = None,
+) -> tuple[dict, dict | None, list[dict], dict]:
+    """Generate intent, then conditionally complete or repair failed candidates."""
+    if max_repairs is None:
+        max_repairs = max_repair_attempts("intent")
+
+    initial_telemetry = {} if telemetry is not None else None
+    design_intent = prompt_to_design_intent(
+        user_prompt,
+        telemetry=initial_telemetry,
+    ) if initial_telemetry is not None else prompt_to_design_intent(user_prompt)
+    return evaluate_design_intent_with_feedback(
+        user_prompt,
+        design_intent,
+        max_repairs,
+        telemetry=telemetry,
+        initial_telemetry=initial_telemetry,
+    )
+
+
+def refine_design_intent_with_feedback(
+    user_prompt: str,
+    previous_design_intent: dict,
+    correction: str,
+    max_repairs: int | None = None,
+    *,
+    telemetry: dict | None = None,
+) -> tuple[dict, dict | None, list[dict], dict]:
+    """Revise saved intent, then run the normal deterministic repair loop."""
+    correction = correction.strip()
+    if not correction:
+        raise ValueError("Correction must not be empty")
+    if max_repairs is None:
+        max_repairs = max_repair_attempts("intent")
+
+    initial_telemetry = {} if telemetry is not None else None
+    design_intent = refine_design_intent(
+        user_prompt,
+        previous_design_intent,
+        correction,
+        telemetry=initial_telemetry,
+    ) if initial_telemetry is not None else refine_design_intent(
+        user_prompt,
+        previous_design_intent,
+        correction,
+    )
+    repair_prompt = (
+        f"{user_prompt}\n\nUser-requested revision: {correction}"
+    )
+    return evaluate_design_intent_with_feedback(
+        repair_prompt,
+        design_intent,
+        max_repairs,
+        telemetry=telemetry,
+        initial_telemetry=initial_telemetry,
+    )
 
 
 def update_aggregate_telemetry(

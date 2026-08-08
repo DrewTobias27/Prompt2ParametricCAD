@@ -205,6 +205,123 @@ def test_design_intent_feedback_loop_repairs_failed_candidate(monkeypatch):
     assert repair_calls[0][2] == {"lowering_error": "missing diameter"}
 
 
+def test_refine_design_intent_sends_saved_intent_and_focused_correction(
+    monkeypatch,
+):
+    previous_intent = {
+        "required_concepts": ["plate", "boss"],
+        "base": {
+            "id": "base",
+            "role": "plate",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "thickness": 6,
+        },
+        "features": [
+            {
+                "id": "center_boss",
+                "role": "boss",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "circle",
+                "placement": {"type": "centered"},
+                "diameter": 20,
+                "distance": 8,
+            }
+        ],
+        "edge_treatments": [],
+    }
+    captured = {}
+
+    monkeypatch.setattr(prompting, "create_openai_client", lambda: object())
+
+    def fake_create_json_response(client, **kwargs):
+        captured.update(kwargs)
+        return {
+            "required_concepts": ["plate", "boss"],
+            "base": {
+                "id": "base",
+                "role": "plate",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "thickness": 6,
+            },
+            "features": [
+                {
+                    "id": "center_boss",
+                    "role": "boss",
+                    "target": "base.top",
+                    "placement": {"type": "centered"},
+                    "operation": {"type": "extrusion", "distance": 12},
+                    "shape": {"type": "circle", "diameter": 20},
+                }
+            ],
+            "edge_treatments": [],
+        }
+
+    monkeypatch.setattr(prompting, "create_json_response", fake_create_json_response)
+
+    refined = prompting.refine_design_intent(
+        "Create a plate with a centered circular boss.",
+        previous_intent,
+        "Make the boss 12 mm tall.",
+    )
+
+    request = json.loads(captured["input_text"])
+    assert request["original_user_prompt"].startswith("Create a plate")
+    assert request["user_correction"] == "Make the boss 12 mm tall."
+    assert request["previous_design_intent"]["features"][0]["id"] == "center_boss"
+    assert captured["schema_name"] == "cad_refined_design_intent"
+    assert refined["features"][0]["id"] == "center_boss"
+    assert refined["features"][0]["distance"] == 12
+
+
+def test_refinement_feedback_loop_repairs_an_invalid_revision(monkeypatch):
+    initial_intent = {"candidate": "initial"}
+    repaired_intent = {"candidate": "repaired"}
+    repair_calls = []
+
+    monkeypatch.setattr(
+        prompting,
+        "refine_design_intent",
+        lambda prompt, previous, correction: initial_intent,
+    )
+    monkeypatch.setattr(
+        prompting,
+        "evaluate_design_intent_candidate",
+        lambda intent: {
+            "passed": intent is repaired_intent,
+            "model_data": {"operations": [{"id": "base"}]}
+            if intent is repaired_intent
+            else None,
+            "feedback": {} if intent is repaired_intent else {"error": "repair me"},
+        },
+    )
+
+    def fake_repair(prompt, intent, feedback):
+        repair_calls.append((prompt, intent, feedback))
+        return repaired_intent
+
+    monkeypatch.setattr(prompting, "repair_design_intent", fake_repair)
+
+    intent, model_data, history, evaluation = (
+        prompting.refine_design_intent_with_feedback(
+            "Create a plate with a centered boss.",
+            {"candidate": "previous"},
+            "Make the boss taller.",
+            max_repairs=1,
+        )
+    )
+
+    assert intent is repaired_intent
+    assert model_data == {"operations": [{"id": "base"}]}
+    assert evaluation["passed"] is True
+    assert len(history) == 1
+    assert "User-requested revision: Make the boss taller." in repair_calls[0][0]
+
+
 def test_design_intent_feedback_loop_does_not_repair_valid_candidate(monkeypatch):
     intent = {"candidate": "valid"}
     evaluation = {

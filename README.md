@@ -19,6 +19,7 @@ and represented as a dependency graph for future editable CAD export.
 - CadQuery solid construction and STEP export
 - Feature graph with stable IDs, parents, children, sketches, faces, and edges
 - Automatic repair fallback with structured diagnostics
+- Focused result refinement that preserves prior design intent and validates each revision
 - Deterministic fixtures and API benchmarks for semantic and geometric quality
 - React drawing preview and live design-review warnings
 
@@ -58,6 +59,12 @@ The automatic path tries the relationship-aware design-intent pipeline first.
 If that representation cannot express or lower a request, a bounded direct-JSON
 compatibility path is available. Both paths produce the same validated operation
 format before geometry is built.
+
+After a successful intent-based result, the description builder can apply a
+focused correction such as “move the holes inward” or “make the boss taller.”
+The application revises the saved design intent, runs the same geometry checks,
+exports a new STEP revision only when valid, and leaves the prior revision
+available to restore if the correction does not succeed.
 
 ## Quick start
 

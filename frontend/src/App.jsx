@@ -3,6 +3,7 @@ import {
   buildFromModelData,
   generateFromPrompt,
   getDownloadUrl,
+  refineGeneratedDesign,
 } from "./api.js";
 import { DrawingPreview } from "./DrawingPreview.jsx";
 import { FeatureTreePanel } from "./FeatureTreePanel.jsx";
@@ -33,6 +34,8 @@ export default function App() {
   const [status, setStatus] = useState("");
   const [result, setResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [correction, setCorrection] = useState("");
+  const [revisionHistory, setRevisionHistory] = useState([]);
 
   const usesApiAssistance = hasApiAssistedFields({ base, features });
   const manualModelData = useMemo(
@@ -47,6 +50,11 @@ export default function App() {
     () => modelDataToTreeView(result?.model_data),
     [result],
   );
+  const canRefine = result?.status === "success"
+    && Boolean(result?.design_intent)
+    && ["design_intent", "design_intent_refinement"].includes(
+      result?.generation_path,
+    );
 
   const updateBase = useCallback((update) => {
     setBase(update);
@@ -64,6 +72,8 @@ export default function App() {
     setPrompt(value);
     setResult(null);
     setStatus("");
+    setCorrection("");
+    setRevisionHistory([]);
   }, []);
 
   function handleModeChange(nextMode) {
@@ -74,20 +84,39 @@ export default function App() {
     setMode(nextMode);
     setResult(null);
     setStatus("");
+    setCorrection("");
+    setRevisionHistory([]);
   }
 
-  async function runRequest(request) {
+  async function runRequest(request, {
+    loadingMessage = "Generating CAD model...",
+    clearResult = true,
+    preserveResultOnError = false,
+    onSuccess = null,
+  } = {}) {
     setIsLoading(true);
-    setStatus("Generating CAD model...");
-    setResult(null);
+    setStatus(loadingMessage);
+    if (clearResult) {
+      setResult(null);
+    }
 
     try {
       const data = await request();
-      setResult(data);
-      setStatus(data.status === "success" ? "Success" : `Error: ${data.message}`);
+      if (data.status === "success") {
+        setResult(data);
+        setStatus("Success");
+        onSuccess?.(data);
+      } else {
+        if (!preserveResultOnError) {
+          setResult(data);
+        }
+        setStatus(`Error: ${data.message}`);
+      }
     } catch (error) {
       setStatus(`Error: ${error.message}`);
-      setResult({ status: "error", message: error.message });
+      if (!preserveResultOnError) {
+        setResult({ status: "error", message: error.message });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +124,50 @@ export default function App() {
 
   function handlePromptSubmit(event) {
     event.preventDefault();
+    setCorrection("");
+    setRevisionHistory([]);
     runRequest(() => generateFromPrompt(prompt));
+  }
+
+  function handleRefinement() {
+    const correctionText = correction.trim();
+    const previousResult = result;
+    if (!canRefine || !correctionText || !previousResult) {
+      return;
+    }
+
+    runRequest(
+      () => refineGeneratedDesign({
+        originalPrompt: prompt,
+        correction: correctionText,
+        designIntent: previousResult.design_intent,
+        revision: previousResult.revision ?? 1,
+      }),
+      {
+        loadingMessage: "Applying correction...",
+        clearResult: false,
+        preserveResultOnError: true,
+        onSuccess: () => {
+          setRevisionHistory((history) => [
+            ...history,
+            { correction: correctionText, result: previousResult },
+          ]);
+          setCorrection("");
+        },
+      },
+    );
+  }
+
+  function handleRestorePreviousRevision() {
+    const previousRevision = revisionHistory.at(-1);
+    if (!previousRevision || isLoading) {
+      return;
+    }
+
+    setResult(previousRevision.result);
+    setRevisionHistory((history) => history.slice(0, -1));
+    setCorrection("");
+    setStatus(`Restored revision ${previousRevision.result.revision ?? 1}.`);
   }
 
   function handleManualSubmit(event) {
@@ -204,6 +276,13 @@ export default function App() {
               prompt={prompt}
               setPrompt={updatePrompt}
               onSubmit={handlePromptSubmit}
+              correction={correction}
+              setCorrection={setCorrection}
+              onRefine={handleRefinement}
+              onRestorePreviousRevision={handleRestorePreviousRevision}
+              canRefine={canRefine}
+              canRestorePreviousRevision={revisionHistory.length > 0}
+              revision={result?.revision ?? 1}
               isLoading={isLoading}
             />
           )}
@@ -260,6 +339,13 @@ function PromptBuilder({
   prompt,
   setPrompt,
   onSubmit,
+  correction,
+  setCorrection,
+  onRefine,
+  onRestorePreviousRevision,
+  canRefine,
+  canRestorePreviousRevision,
+  revision,
   isLoading,
 }) {
   return (
@@ -279,6 +365,45 @@ function PromptBuilder({
       <button type="submit" disabled={isLoading}>
         {isLoading ? "Generating..." : "Generate CAD"}
       </button>
+      {canRefine && (
+        <section className="refinement-panel" aria-label="Refine generated CAD">
+          <div className="refinement-heading">
+            <div>
+              <h3>Refine this result</h3>
+              <p>Describe only what should change.</p>
+            </div>
+            <span>Revision {revision}</span>
+          </div>
+          <label>
+            Correction
+            <textarea
+              rows={3}
+              value={correction}
+              placeholder="For example: move the four holes 5 mm farther from the corners."
+              onChange={(event) => setCorrection(event.target.value)}
+            />
+          </label>
+          <div className="refinement-actions">
+            <button
+              type="button"
+              onClick={onRefine}
+              disabled={isLoading || !correction.trim()}
+            >
+              {isLoading ? "Applying correction..." : "Apply correction"}
+            </button>
+            {canRestorePreviousRevision && (
+              <button
+                className="secondary"
+                type="button"
+                onClick={onRestorePreviousRevision}
+                disabled={isLoading}
+              >
+                Restore previous revision
+              </button>
+            )}
+          </div>
+        </section>
+      )}
     </form>
   );
 }

@@ -20,6 +20,7 @@ from prompt2cad.generation_log import save_generation_log
 from prompt2cad.prompting import max_repair_attempts
 from prompt2cad.prompting import prompt_to_design_intent_with_feedback
 from prompt2cad.prompting import prompt_to_model_data_with_repair
+from prompt2cad.prompting import refine_design_intent_with_feedback
 from prompt2cad.prompting import suggest_base_model_data
 from prompt2cad.prompting import suggest_feature_model_data
 from prompt2cad.quality import check_model_quality
@@ -28,6 +29,13 @@ from prompt2cad.schema import validate_model_data
 
 class CADRequest(BaseModel):
     prompt: str
+
+
+class CADRefineRequest(BaseModel):
+    original_prompt: str
+    correction: str
+    design_intent: dict
+    revision: int = 1
 
 
 class CADBuildRequest(BaseModel):
@@ -318,6 +326,7 @@ def generate_cad(request: CADRequest):
             response_data["intent_repair_history"] = intent_repair_history
         response_data["generation_mode"] = "automatic"
         response_data["generation_path"] = "design_intent"
+        response_data["revision"] = 1
         response_data["pipeline_attempts"] = [
             {"path": "design_intent", "status": "success"}
         ]
@@ -421,6 +430,7 @@ def generate_cad(request: CADRequest):
         )
         response_data["generation_mode"] = "automatic"
         response_data["generation_path"] = "direct_fallback"
+        response_data["revision"] = 1
         response_data["fallback_reason"] = str(intent_failure)
         response_data["pipeline_attempts"] = [
             intent_attempt,
@@ -508,6 +518,154 @@ def generate_cad(request: CADRequest):
             error_message=combined_error,
             generation_mode="automatic",
         )
+
+
+@app.post("/refine")
+def refine_cad(request: CADRefineRequest):
+    """Apply a focused correction to a previously generated design intent."""
+    started_at = perf_counter()
+    correction = request.correction.strip()
+    revision = max(1, request.revision)
+    if not correction:
+        return {
+            "status": "error",
+            "message": "Enter a correction before applying it.",
+            "design_intent": request.design_intent,
+            "revision": revision,
+            "performance": {
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
+        }
+
+    key = cache_key(
+        "refine",
+        {
+            "original_prompt": request.original_prompt,
+            "correction": correction,
+            "design_intent": request.design_intent,
+            "revision": revision,
+        },
+    )
+    cached_response = get_cached_success_response(key)
+    if cached_response is not None:
+        cached_response["performance"]["total_seconds"] = seconds_since(started_at)
+        return cached_response
+
+    design_intent = request.design_intent
+    refined_model_data = None
+    refinement_history = []
+    refinement_evaluation = None
+    refinement_telemetry: dict = {}
+    api_started_at = perf_counter()
+
+    try:
+        (
+            design_intent,
+            refined_model_data,
+            refinement_history,
+            refinement_evaluation,
+        ) = refine_design_intent_with_feedback(
+            request.original_prompt,
+            request.design_intent,
+            correction,
+            max_repairs=max_repair_attempts("intent"),
+            telemetry=refinement_telemetry,
+        )
+        api_seconds = seconds_since(api_started_at)
+
+        if not refinement_evaluation.get("passed", False):
+            raise ValueError(
+                "Refined design-intent candidate failed feedback evaluation: "
+                + json.dumps(refinement_evaluation.get("feedback", {}))
+            )
+
+        lowering_started_at = perf_counter()
+        if refined_model_data is None:
+            refined_model_data = intent_to_model_data(design_intent)
+        lowering_seconds = seconds_since(lowering_started_at)
+
+        response_data = export_model_data(
+            refined_model_data,
+            f"revision-{revision + 1} {request.original_prompt}",
+        )
+        if response_data.get("quality_report", {}).get("status") == "fail":
+            raise ValueError("Refined model failed the geometry quality gate")
+
+        response_data["design_intent"] = design_intent
+        if refinement_history:
+            response_data["intent_repair_history"] = refinement_history
+        response_data["generation_mode"] = "automatic_refinement"
+        response_data["generation_path"] = "design_intent_refinement"
+        response_data["revision"] = revision + 1
+        response_data["refinement"] = {
+            "from_revision": revision,
+            "correction": correction,
+        }
+        response_data["pipeline_attempts"] = [
+            {
+                "path": "design_intent_refinement",
+                "status": "success",
+            }
+        ]
+        performance = dict(response_data.get("performance", {}))
+        performance.update({
+            "api_seconds": refinement_telemetry.get("api_seconds", api_seconds),
+            "intent_api_seconds": refinement_telemetry.get(
+                "api_seconds",
+                api_seconds,
+            ),
+            "lowering_seconds": lowering_seconds,
+            "logical_api_calls": refinement_telemetry.get("logical_api_calls"),
+            "total_seconds": seconds_since(started_at),
+            "cache_hit": False,
+        })
+        response_data["performance"] = {
+            key: value
+            for key, value in performance.items()
+            if value is not None
+        }
+        cache_success_response(key, response_data)
+        return response_data
+
+    except Exception as error:
+        api_seconds = seconds_since(api_started_at)
+        refinement_history = getattr(
+            error,
+            "intent_repair_history",
+            refinement_history,
+        )
+        return {
+            "status": "error",
+            "message": str(error),
+            "design_intent": design_intent,
+            "model_data": refined_model_data,
+            "intent_repair_history": refinement_history,
+            "generation_mode": "automatic_refinement",
+            "generation_path": "design_intent_refinement",
+            "revision": revision,
+            "refinement": {
+                "from_revision": revision,
+                "correction": correction,
+            },
+            "quality_report": (
+                check_model_quality(refined_model_data, build_error=str(error))
+                if refined_model_data is not None
+                else check_model_quality(None)
+            ),
+            "performance": {
+                "api_seconds": refinement_telemetry.get("api_seconds", api_seconds),
+                "intent_api_seconds": refinement_telemetry.get(
+                    "api_seconds",
+                    api_seconds,
+                ),
+                "logical_api_calls": refinement_telemetry.get(
+                    "logical_api_calls"
+                ),
+                "total_seconds": seconds_since(started_at),
+                "cache_hit": False,
+            },
+        }
 
 
 @app.post("/build")

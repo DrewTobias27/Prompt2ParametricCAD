@@ -152,6 +152,45 @@ h4 {
   gap: 16px;
 }
 
+.refinement-panel {
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+  border-top: 1px solid #dbe3ef;
+}
+
+.refinement-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.refinement-heading h3 {
+  margin: 0 0 4px;
+}
+
+.refinement-heading p {
+  margin: 0;
+  color: #64748b;
+}
+
+.refinement-heading span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.refinement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .form-section {
   padding: 18px;
   border: 1px solid #e2e8f0;

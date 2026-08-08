@@ -390,6 +390,142 @@ def test_generate_cad_logs_repaired_prompt_generation(monkeypatch, tmp_path):
     assert log_calls[0]["quality_report"] == {"status": "pass"}
 
 
+def test_refine_cad_reuses_saved_intent_and_returns_next_revision(monkeypatch):
+    web_app.SUCCESS_RESPONSE_CACHE.clear()
+    previous_intent = {
+        "required_concepts": ["plate", "boss"],
+        "base": {
+            "id": "base",
+            "role": "plate",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "thickness": 6,
+        },
+        "features": [],
+        "edge_treatments": [],
+    }
+    refined_intent = {
+        **previous_intent,
+        "required_concepts": ["plate", "boss"],
+    }
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            }
+        ]
+    }
+    calls = {}
+
+    def fake_refine(prompt, intent, correction, max_repairs, telemetry):
+        calls["refine_count"] = calls.get("refine_count", 0) + 1
+        calls["refine"] = (prompt, intent, correction, max_repairs)
+        telemetry.update({"api_seconds": 0.4, "logical_api_calls": 1})
+        return refined_intent, model_data, [], {"passed": True, "feedback": {}}
+
+    def fake_export(generated_model_data, filename_hint):
+        calls["filename_hint"] = filename_hint
+        return {
+            "status": "success",
+            "model_data": generated_model_data,
+            "quality_report": {"status": "pass"},
+            "step_file": "generated/web/refined.step",
+            "download_url": "/download/refined.step",
+            "performance": {"export_model_total_seconds": 0.1},
+        }
+
+    monkeypatch.setattr(
+        web_app,
+        "refine_design_intent_with_feedback",
+        fake_refine,
+    )
+    monkeypatch.setattr(web_app, "export_model_data", fake_export)
+
+    response = web_app.refine_cad(
+        web_app.CADRefineRequest(
+            original_prompt="Create a plate with a centered boss.",
+            correction="Make the boss taller.",
+            design_intent=previous_intent,
+            revision=1,
+        )
+    )
+
+    assert calls["refine"][0] == "Create a plate with a centered boss."
+    assert calls["refine"][1] == previous_intent
+    assert calls["refine"][2] == "Make the boss taller."
+    assert calls["filename_hint"].startswith("revision-2")
+    assert response["status"] == "success"
+    assert response["design_intent"] == refined_intent
+    assert response["generation_path"] == "design_intent_refinement"
+    assert response["revision"] == 2
+    assert response["refinement"] == {
+        "from_revision": 1,
+        "correction": "Make the boss taller.",
+    }
+    assert response["performance"]["logical_api_calls"] == 1
+
+    cached_response = web_app.refine_cad(
+        web_app.CADRefineRequest(
+            original_prompt="Create a plate with a centered boss.",
+            correction="Make the boss taller.",
+            design_intent=previous_intent,
+            revision=1,
+        )
+    )
+
+    assert calls["refine_count"] == 1
+    assert cached_response["performance"]["cache_hit"] is True
+
+
+def test_refine_cad_keeps_the_last_valid_revision_when_refinement_fails(
+    monkeypatch,
+):
+    web_app.SUCCESS_RESPONSE_CACHE.clear()
+    previous_intent = {
+        "required_concepts": ["plate"],
+        "base": {
+            "id": "base",
+            "role": "plate",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "thickness": 6,
+        },
+        "features": [],
+        "edge_treatments": [],
+    }
+
+    monkeypatch.setattr(
+        web_app,
+        "refine_design_intent_with_feedback",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            ValueError("Refinement could not preserve a connected solid")
+        ),
+    )
+
+    response = web_app.refine_cad(
+        web_app.CADRefineRequest(
+            original_prompt="Create a plate.",
+            correction="Add an unsupported feature.",
+            design_intent=previous_intent,
+            revision=2,
+        )
+    )
+
+    assert response["status"] == "error"
+    assert response["design_intent"] == previous_intent
+    assert response["model_data"] is None
+    assert response["revision"] == 2
+    assert response["generation_path"] == "design_intent_refinement"
+
+
 def test_export_model_data_returns_quality_report(monkeypatch, tmp_path):
     web_app.SUCCESS_RESPONSE_CACHE.clear()
     model_data = {

@@ -32,6 +32,20 @@ export function generateFromPrompt(prompt) {
   return postJson("/generate", { prompt });
 }
 
+export function refineGeneratedDesign({
+  originalPrompt,
+  correction,
+  designIntent,
+  revision,
+}) {
+  return postJson("/refine", {
+    original_prompt: originalPrompt,
+    correction,
+    design_intent: designIntent,
+    revision,
+  });
+}
+
 export function buildFromModelData(modelData, filenameHint) {
   return postJson("/build", {
     model_data: modelData,
