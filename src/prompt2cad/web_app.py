@@ -264,6 +264,69 @@ def combined_seconds(*values: float) -> float:
     return round(sum(values), 3)
 
 
+def operation_label(operation: dict, index: int) -> str:
+    """Return a stable, readable label for a lowered CAD operation."""
+    operation_id = operation.get("id")
+    return str(operation_id) if operation_id else f"operation_{index + 1}"
+
+
+def summarize_operation_changes(
+    previous_model_data: dict,
+    revised_model_data: dict,
+) -> dict:
+    """Summarize meaningful operation-level changes between two revisions."""
+    previous_operations = previous_model_data.get("operations", [])
+    revised_operations = revised_model_data.get("operations", [])
+    previous_operation_order = [
+        operation_label(operation, index)
+        for index, operation in enumerate(previous_operations)
+    ]
+    revised_operation_order = [
+        operation_label(operation, index)
+        for index, operation in enumerate(revised_operations)
+    ]
+    previous_by_label = {
+        operation_label(operation, index): operation
+        for index, operation in enumerate(previous_operations)
+    }
+    revised_by_label = {
+        operation_label(operation, index): operation
+        for index, operation in enumerate(revised_operations)
+    }
+
+    added_operations = [
+        operation_label(operation, index)
+        for index, operation in enumerate(revised_operations)
+        if operation_label(operation, index) not in previous_by_label
+    ]
+    removed_operations = [
+        operation_label(operation, index)
+        for index, operation in enumerate(previous_operations)
+        if operation_label(operation, index) not in revised_by_label
+    ]
+    changed_operations = [
+        operation_label(operation, index)
+        for index, operation in enumerate(revised_operations)
+        if operation_label(operation, index) in previous_by_label
+        and operation != previous_by_label[operation_label(operation, index)]
+    ]
+    operation_order_changed = (
+        set(previous_operation_order) == set(revised_operation_order)
+        and previous_operation_order != revised_operation_order
+    )
+    change_count = len(
+        added_operations + removed_operations + changed_operations
+    ) + int(operation_order_changed)
+    return {
+        "has_operation_changes": change_count > 0,
+        "change_count": change_count,
+        "added_operations": added_operations,
+        "removed_operations": removed_operations,
+        "changed_operations": changed_operations,
+        "operation_order_changed": operation_order_changed,
+    }
+
+
 @app.get("/download/{filename}")
 def download_step_file(filename: str):
     """Download a generated STEP file."""
@@ -553,13 +616,16 @@ def refine_cad(request: CADRefineRequest):
         return cached_response
 
     design_intent = request.design_intent
+    previous_model_data = None
     refined_model_data = None
+    revision_summary = None
     refinement_history = []
     refinement_evaluation = None
     refinement_telemetry: dict = {}
     api_started_at = perf_counter()
 
     try:
+        previous_model_data = intent_to_model_data(request.design_intent)
         (
             design_intent,
             refined_model_data,
@@ -584,6 +650,15 @@ def refine_cad(request: CADRefineRequest):
         if refined_model_data is None:
             refined_model_data = intent_to_model_data(design_intent)
         lowering_seconds = seconds_since(lowering_started_at)
+        revision_summary = summarize_operation_changes(
+            previous_model_data,
+            refined_model_data,
+        )
+        if not revision_summary["has_operation_changes"]:
+            raise ValueError(
+                "The correction did not change the generated CAD operations. "
+                "Try a more specific correction."
+            )
 
         response_data = export_model_data(
             refined_model_data,
@@ -602,6 +677,7 @@ def refine_cad(request: CADRefineRequest):
             "from_revision": revision,
             "correction": correction,
         }
+        response_data["revision_summary"] = revision_summary
         response_data["pipeline_attempts"] = [
             {
                 "path": "design_intent_refinement",
@@ -640,6 +716,7 @@ def refine_cad(request: CADRefineRequest):
             "message": str(error),
             "design_intent": design_intent,
             "model_data": refined_model_data,
+            "revision_summary": revision_summary,
             "intent_repair_history": refinement_history,
             "generation_mode": "automatic_refinement",
             "generation_path": "design_intent_refinement",

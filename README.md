@@ -63,8 +63,9 @@ format before geometry is built.
 After a successful intent-based result, the description builder can apply a
 focused correction such as “move the holes inward” or “make the boss taller.”
 The application revises the saved design intent, runs the same geometry checks,
-exports a new STEP revision only when valid, and leaves the prior revision
-available to restore if the correction does not succeed.
+rejects no-op responses that leave the CAD operations unchanged, exports a new
+STEP revision only when valid, and leaves the prior revision available to
+restore if the correction does not succeed.
 
 ## Quick start
 

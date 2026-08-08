@@ -409,7 +409,7 @@ def test_refine_cad_reuses_saved_intent_and_returns_next_revision(monkeypatch):
         **previous_intent,
         "required_concepts": ["plate", "boss"],
     }
-    model_data = {
+    previous_model_data = {
         "operations": [
             {
                 "type": "extrude",
@@ -419,6 +419,19 @@ def test_refine_cad_reuses_saved_intent_and_returns_next_revision(monkeypatch):
                 "width": 80,
                 "height": 50,
                 "distance": 6,
+            }
+        ]
+    }
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 8,
             }
         ]
     }
@@ -446,6 +459,11 @@ def test_refine_cad_reuses_saved_intent_and_returns_next_revision(monkeypatch):
         "refine_design_intent_with_feedback",
         fake_refine,
     )
+    monkeypatch.setattr(
+        web_app,
+        "intent_to_model_data",
+        lambda intent: previous_model_data,
+    )
     monkeypatch.setattr(web_app, "export_model_data", fake_export)
 
     response = web_app.refine_cad(
@@ -470,6 +488,14 @@ def test_refine_cad_reuses_saved_intent_and_returns_next_revision(monkeypatch):
         "correction": "Make the boss taller.",
     }
     assert response["performance"]["logical_api_calls"] == 1
+    assert response["revision_summary"] == {
+        "has_operation_changes": True,
+        "change_count": 1,
+        "added_operations": [],
+        "removed_operations": [],
+        "changed_operations": ["base"],
+        "operation_order_changed": False,
+    }
 
     cached_response = web_app.refine_cad(
         web_app.CADRefineRequest(
@@ -482,6 +508,89 @@ def test_refine_cad_reuses_saved_intent_and_returns_next_revision(monkeypatch):
 
     assert calls["refine_count"] == 1
     assert cached_response["performance"]["cache_hit"] is True
+
+
+def test_refine_cad_rejects_a_revision_with_no_cad_operation_changes(
+    monkeypatch,
+):
+    web_app.SUCCESS_RESPONSE_CACHE.clear()
+    previous_intent = {
+        "required_concepts": ["plate"],
+        "base": {
+            "id": "base",
+            "role": "plate",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "thickness": 6,
+        },
+        "features": [],
+        "edge_treatments": [],
+    }
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 6,
+            }
+        ]
+    }
+    export_calls = []
+
+    monkeypatch.setattr(
+        web_app,
+        "refine_design_intent_with_feedback",
+        lambda *args, **kwargs: (
+            previous_intent,
+            model_data,
+            [],
+            {"passed": True, "feedback": {}},
+        ),
+    )
+    monkeypatch.setattr(
+        web_app,
+        "intent_to_model_data",
+        lambda intent: model_data,
+    )
+    monkeypatch.setattr(
+        web_app,
+        "export_model_data",
+        lambda *args: export_calls.append(args),
+    )
+
+    response = web_app.refine_cad(
+        web_app.CADRefineRequest(
+            original_prompt="Create a rectangular plate.",
+            correction="Make it more robust.",
+            design_intent=previous_intent,
+            revision=1,
+        )
+    )
+
+    assert response["status"] == "error"
+    assert "did not change the generated CAD operations" in response["message"]
+    assert response["revision_summary"]["has_operation_changes"] is False
+    assert export_calls == []
+
+
+def test_summarize_operation_changes_detects_feature_order_changes():
+    base = {"type": "extrude", "id": "base"}
+    first_feature = {"type": "add_extrude", "id": "feature_1"}
+    second_feature = {"type": "cut", "id": "feature_2"}
+
+    summary = web_app.summarize_operation_changes(
+        {"operations": [base, first_feature, second_feature]},
+        {"operations": [base, second_feature, first_feature]},
+    )
+
+    assert summary["has_operation_changes"] is True
+    assert summary["change_count"] == 1
+    assert summary["operation_order_changed"] is True
 
 
 def test_refine_cad_keeps_the_last_valid_revision_when_refinement_fails(

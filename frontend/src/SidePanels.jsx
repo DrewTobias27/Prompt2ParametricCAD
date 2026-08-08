@@ -55,10 +55,32 @@ export function OutputPanel({ status, result, downloadUrl }) {
         </a>
       )}
 
+      {result?.revision_summary && (
+        <RevisionSummary
+          revision={result.revision}
+          summary={result.revision_summary}
+        />
+      )}
+
       {result?.performance && <PerformanceSummary performance={result.performance} />}
 
       {result && <pre>{JSON.stringify(result, null, 2)}</pre>}
     </section>
+  );
+}
+
+function RevisionSummary({ revision, summary }) {
+  const changeCount = Number(summary.change_count ?? 0);
+  const noun = changeCount === 1 ? "operation" : "operations";
+  const summaryText = summary.operation_order_changed && changeCount === 1
+    ? "Feature build order changed"
+    : `${changeCount} CAD ${noun} changed`;
+
+  return (
+    <div className="revision-summary">
+      <strong>Revision {revision}</strong>
+      <span>{summaryText}</span>
+    </div>
   );
 }
 
