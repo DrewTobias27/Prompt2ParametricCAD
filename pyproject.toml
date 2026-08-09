@@ -30,6 +30,7 @@ prompt2cad-eval = "prompt2cad.eval_runner:main"
 prompt2cad-feature-tree = "prompt2cad.feature_tree_export:main"
 prompt2cad-training-data = "prompt2cad.training_data:main"
 prompt2cad-model-matrix = "prompt2cad.model_matrix_eval:main"
+prompt2cad-showcase = "prompt2cad.showcase:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

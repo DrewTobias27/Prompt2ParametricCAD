@@ -23,6 +23,14 @@ and represented as a dependency graph for future editable CAD export.
 - Deterministic fixtures and API benchmarks for semantic and geometric quality
 - React drawing preview and live design-review warnings
 
+## Portfolio showcase
+
+A concise, reproducible set of five verified mechanical parts demonstrates the
+current vocabulary across patterned plates, flanges, partial and full revolves,
+grooves, edge treatments, and non-rectangular outlines. See the
+[portfolio showcase](docs/showcase.md) and run `python -m prompt2cad.showcase`
+to regenerate its STEP files locally.
+
 ## Supported CAD vocabulary
 
 | Area | Current support |

@@ -1,0 +1,61 @@
+{
+  "title": "Prompt2ParametricCAD portfolio showcase",
+  "description": "Five deterministic design-intent examples chosen to demonstrate the project's current mechanical CAD vocabulary.",
+  "cases": [
+    {
+      "id": "patterned_mounting_plate",
+      "title": "Patterned mounting plate",
+      "intent_example": "rectangular_grid_holes",
+      "prompt": "Create a 100 mm by 70 mm rectangular plate that is 8 mm thick with a 2 by 3 grid of 5 mm through holes centered on the top face.",
+      "capabilities": [
+        "Prismatic base extrusion",
+        "Rectangular feature pattern",
+        "Through-cut holes"
+      ]
+    },
+    {
+      "id": "sealed_circular_flange",
+      "title": "Sealed circular flange",
+      "intent_example": "flat_flange_o_ring_groove",
+      "prompt": "Create a circular flange with eight bolt holes and a shallow circular O-ring groove around the center opening.",
+      "capabilities": [
+        "Circular base profile",
+        "Bolt-circle pattern",
+        "Concentric opening and revolved groove"
+      ]
+    },
+    {
+      "id": "half_cylinder_cradle",
+      "title": "Half-cylinder cradle",
+      "intent_example": "half_cylinder_cradle_mounting_plate",
+      "prompt": "Create a half-cylinder cradle sitting on a separate rectangular mounting plate with two circular through holes in the plate and a shallow groove along the curved cradle.",
+      "capabilities": [
+        "Partial revolve base",
+        "Multi-feature construction",
+        "Mounting features and shallow groove"
+      ]
+    },
+    {
+      "id": "turned_shaft",
+      "title": "Turned shaft with collars and grooves",
+      "intent_example": "shaft_collars_grooves_chamfers",
+      "prompt": "Create a cylindrical shaft with two narrow grooves near one end, a larger collar near the other end, and a chamfer on both shaft ends.",
+      "capabilities": [
+        "Full revolve base",
+        "Revolved additive and subtractive features",
+        "Edge chamfers"
+      ]
+    },
+    {
+      "id": "d_shaped_mounting_plate",
+      "title": "D-shaped mounting plate",
+      "intent_example": "d_shaped_plate_tabs_holes",
+      "prompt": "Create a D-shaped plate with a flat back edge and rounded front, two rectangular side tabs, and three circular through holes along the centerline.",
+      "capabilities": [
+        "Non-rectangular base outline",
+        "Explicit multi-instance extrusions",
+        "Linear hole pattern"
+      ]
+    }
+  ]
+}
