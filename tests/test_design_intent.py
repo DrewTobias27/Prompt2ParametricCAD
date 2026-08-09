@@ -162,6 +162,54 @@ def test_centered_extrusion_intent_adds_relationships():
     assert check_model_data(model_data)["passed"] is True
 
 
+def test_centered_side_face_feature_skips_global_centered_relationship():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 90,
+            "height": 55,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "wall",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "rectangle",
+                "width": 8,
+                "height": 55,
+                "distance": 45,
+                "placement": {
+                    "type": "explicit",
+                    "positions": [[-41, 0]],
+                },
+            },
+            {
+                "id": "wall_hole",
+                "operation": "cut",
+                "target": "wall.left",
+                "shape": "circle",
+                "diameter": 8,
+                "depth": 8.1,
+                "placement": {
+                    "type": "centered",
+                },
+            },
+        ],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][2]["positions"] == [[0, 0]]
+    assert not any(
+        relationship["type"] == "centered_on"
+        and relationship["feature"] == "wall_hole"
+        for relationship in model_data["relationships"]
+    )
+    assert check_model_data(model_data)["passed"] is True
+
+
 def test_slot_intent_lowers_to_arc_sketch_and_builds():
     intent = {
         "base": {

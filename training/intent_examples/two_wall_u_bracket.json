@@ -1,0 +1,93 @@
+{
+  "name": "two_wall_u_bracket",
+  "prompt": "Create a U bracket from a 90 mm by 55 mm by 8 mm base plate with two 8 mm thick vertical side walls, each 45 mm tall. Put one 8 mm through hole through the center of each wall.",
+  "source_name": "Prompt2ParametricCAD internal U-bracket example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "bracket",
+    "symmetric_walls",
+    "side_holes",
+    "face_targets",
+    "concept_coverage"
+  ],
+  "design_intent": {
+    "required_concepts": [
+      "bracket",
+      "wall",
+      "hole"
+    ],
+    "base": {
+      "id": "base",
+      "role": "bracket",
+      "profile": "rectangle",
+      "width": 90,
+      "height": 55,
+      "thickness": 8
+    },
+    "features": [
+      {
+        "id": "left_wall",
+        "role": "wall",
+        "operation": "extrusion",
+        "target": "base.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [
+              -41,
+              0
+            ]
+          ]
+        },
+        "width": 8,
+        "height": 55,
+        "distance": 45
+      },
+      {
+        "id": "right_wall",
+        "role": "wall",
+        "operation": "extrusion",
+        "target": "base.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [
+              41,
+              0
+            ]
+          ]
+        },
+        "width": 8,
+        "height": 55,
+        "distance": 45
+      },
+      {
+        "id": "left_wall_hole",
+        "role": "hole",
+        "operation": "cut",
+        "target": "left_wall.left",
+        "shape": "circle",
+        "placement": {
+          "type": "centered"
+        },
+        "diameter": 8,
+        "depth": 8.1
+      },
+      {
+        "id": "right_wall_hole",
+        "role": "hole",
+        "operation": "cut",
+        "target": "right_wall.right",
+        "shape": "circle",
+        "placement": {
+          "type": "centered"
+        },
+        "diameter": 8,
+        "depth": 8.1
+      }
+    ],
+    "edge_treatments": []
+  }
+}

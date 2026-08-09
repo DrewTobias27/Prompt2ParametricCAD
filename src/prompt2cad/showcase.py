@@ -1,4 +1,4 @@
-"""Validate and export the curated five-part portfolio showcase."""
+"""Validate and export the curated eleven-part portfolio showcase."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ DEFAULT_OUTPUT_DIR = REPO_ROOT / "generated" / "showcase"
 DEFAULT_SVG_DIR = REPO_ROOT / "docs" / "assets" / "showcase"
 REQUIRED_CASE_FIELDS = {"id", "title", "intent_example", "prompt", "capabilities"}
 CASE_ID_PATTERN = re.compile(r"[a-z][a-z0-9_]*\Z")
-SHOWCASE_CASE_COUNT = 5
+SHOWCASE_CASE_COUNT = 11
 SHOWCASE_SVG_OPTIONS = {
     "width": 900,
     "height": 560,
@@ -121,17 +121,20 @@ def validate_showcase(
 
         candidate = evaluate_design_intent_candidate(intent_example["design_intent"])
         failures = candidate_failure_messages(candidate)
-        results.append(
-            {
-                "id": case["id"],
-                "title": case["title"],
-                "intent_example": case["intent_example"],
-                "capabilities": case["capabilities"],
-                "passed": candidate["passed"],
-                "failures": failures,
-                "model_data": candidate.get("model_data"),
-            }
-        )
+        result = {
+            "id": case["id"],
+            "title": case["title"],
+            "intent_example": case["intent_example"],
+            "capabilities": case["capabilities"],
+            "passed": candidate["passed"],
+            "failures": failures,
+            "model_data": candidate.get("model_data"),
+        }
+        if "svg_projection" in case:
+            result["svg_projection"] = case["svg_projection"]
+        if "svg_show_hidden" in case:
+            result["svg_show_hidden"] = case["svg_show_hidden"]
+        results.append(result)
 
     return {
         "passed": not errors and all(result["passed"] for result in results),
@@ -170,7 +173,40 @@ def validate_case_metadata(
             f"Showcase case '{case_id}' must include at least one capability."
         ]
 
+    svg_projection = case.get("svg_projection")
+    if svg_projection is not None and not valid_svg_projection(svg_projection):
+        return [
+            f"Showcase case '{case_id}' has invalid svg_projection. "
+            "Use a non-zero numeric [x, y, z] vector."
+        ]
+    svg_show_hidden = case.get("svg_show_hidden")
+    if svg_show_hidden is not None and not isinstance(svg_show_hidden, bool):
+        return [
+            f"Showcase case '{case_id}' has invalid svg_show_hidden. "
+            "Use true or false."
+        ]
+
     return []
+
+
+def valid_svg_projection(value: Any) -> bool:
+    """Return whether an optional case-specific SVG view direction is usable."""
+    if not isinstance(value, list) or len(value) != 3:
+        return False
+    if not all(isinstance(component, (int, float)) for component in value):
+        return False
+    return any(component != 0 for component in value)
+
+
+def showcase_svg_options(case: dict[str, Any]) -> dict[str, Any]:
+    """Return default SVG styling plus an optional curated camera direction."""
+    options = dict(SHOWCASE_SVG_OPTIONS)
+    projection = case.get("svg_projection")
+    if projection is not None:
+        options["projectionDir"] = tuple(projection)
+    if "svg_show_hidden" in case:
+        options["showHidden"] = case["svg_show_hidden"]
+    return options
 
 
 def candidate_failure_messages(candidate: dict[str, Any]) -> list[str]:
@@ -237,10 +273,19 @@ def export_showcase_svg(
             build_model(case["model_data"]),
             str(path),
             exportType=cq.exporters.ExportTypes.SVG,
-            opt=SHOWCASE_SVG_OPTIONS,
+            opt=showcase_svg_options(case),
         )
+        normalize_showcase_svg(path)
         exported_paths.append(path)
     return exported_paths
+
+
+def normalize_showcase_svg(path: Path) -> None:
+    """Remove generator whitespace noise from a tracked SVG artifact."""
+    original = path.read_text(encoding="utf-8")
+    normalized = re.sub(r"[\t ]+(?=\r?$)", "", original, flags=re.MULTILINE)
+    if normalized != original:
+        path.write_text(normalized, encoding="utf-8")
 
 
 def verified_showcase_report(
@@ -270,7 +315,7 @@ def failure_lines(cases: list[dict[str, Any]]) -> list[str]:
 def parse_args() -> argparse.Namespace:
     """Parse showcase validation and export options."""
     parser = argparse.ArgumentParser(
-        description="Validate or export the five Prompt2ParametricCAD showcase models."
+        description="Validate or export the eight Prompt2ParametricCAD showcase models."
     )
     parser.add_argument(
         "--output-dir",
@@ -310,7 +355,7 @@ def main() -> None:
         raise SystemExit(1)
 
     if args.validate_only:
-        print("Validated 5 showcase cases without exporting STEP files.")
+        print("Validated 8 showcase cases without exporting STEP files.")
         return
 
     for path in export_showcase(args.output_dir, validation_report=report):

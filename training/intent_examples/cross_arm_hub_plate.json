@@ -1,0 +1,94 @@
+{
+  "name": "cross_arm_hub_plate",
+  "prompt": "Create a 120 mm by 120 mm cross-arm fixture plate, 8 mm thick, with four square corner cutouts. Add a centered 42 mm diameter circular hub 18 mm tall, a 18 mm hexagonal through bore through the hub, and four 7 mm through holes centered in the arms.",
+  "source_name": "Prompt2ParametricCAD internal cross-arm fixture example",
+  "source_license": "Project-authored example inspired by general compositional CAD concepts; not copied from an external model or dataset.",
+  "tags": [
+    "cross_arm_plate",
+    "hierarchical_features",
+    "polygon_bore",
+    "face_targets",
+    "concept_coverage"
+  ],
+  "design_intent": {
+    "required_concepts": [
+      "plate",
+      "cutout",
+      "hub",
+      "hole"
+    ],
+    "base": {
+      "id": "cross_plate",
+      "role": "plate",
+      "profile": "rectangle",
+      "width": 120,
+      "height": 120,
+      "thickness": 8
+    },
+    "features": [
+      {
+        "id": "corner_cutouts",
+        "role": "cutout",
+        "operation": "cut",
+        "target": "cross_plate.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [-42, -42],
+            [-42, 42],
+            [42, -42],
+            [42, 42]
+          ]
+        },
+        "width": 36,
+        "height": 36,
+        "depth": "through"
+      },
+      {
+        "id": "central_hub",
+        "role": "hub",
+        "operation": "extrusion",
+        "target": "cross_plate.top",
+        "shape": "circle",
+        "placement": {
+          "type": "centered"
+        },
+        "diameter": 42,
+        "distance": 18
+      },
+      {
+        "id": "hex_bore",
+        "role": "hole",
+        "operation": "cut",
+        "target": "central_hub.top",
+        "shape": "polygon",
+        "placement": {
+          "type": "centered"
+        },
+        "sides": 6,
+        "diameter": 18,
+        "depth": "through"
+      },
+      {
+        "id": "arm_holes",
+        "role": "hole",
+        "operation": "cut",
+        "target": "cross_plate.top",
+        "shape": "circle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [0, -44],
+            [0, 44],
+            [-44, 0],
+            [44, 0]
+          ]
+        },
+        "diameter": 7,
+        "depth": "through"
+      }
+    ],
+    "edge_treatments": []
+  }
+}

@@ -1,6 +1,6 @@
 {
   "title": "Prompt2ParametricCAD portfolio showcase",
-  "description": "Five deterministic design-intent examples chosen to demonstrate the project's current mechanical CAD vocabulary.",
+  "description": "Eleven deterministic design-intent examples chosen to demonstrate the project's current mechanical CAD vocabulary.",
   "cases": [
     {
       "id": "patterned_mounting_plate",
@@ -25,14 +25,14 @@
       ]
     },
     {
-      "id": "half_cylinder_cradle",
-      "title": "Half-cylinder cradle",
-      "intent_example": "half_cylinder_cradle_mounting_plate",
-      "prompt": "Create a half-cylinder cradle sitting on a separate rectangular mounting plate with two circular through holes in the plate and a shallow groove along the curved cradle.",
+      "id": "hexagonal_hub_plate",
+      "title": "Hexagonal hub-and-bolt plate",
+      "intent_example": "hexagonal_hub_plate",
+      "prompt": "Create a 110 mm hexagonal plate, 8 mm thick, with a centered 38 mm diameter circular hub 12 mm tall, a 16 mm through bore through the hub, and six 6 mm through holes on a 86 mm bolt circle.",
       "capabilities": [
-        "Partial revolve base",
-        "Multi-feature construction",
-        "Mounting features and shallow groove"
+        "Polygon base profile",
+        "Nested centered hub and bore",
+        "Circular bolt-hole pattern"
       ]
     },
     {
@@ -40,6 +40,12 @@
       "title": "Turned shaft with collars and grooves",
       "intent_example": "shaft_collars_grooves_chamfers",
       "prompt": "Create a cylindrical shaft with two narrow grooves near one end, a larger collar near the other end, and a chamfer on both shaft ends.",
+      "svg_projection": [
+        1,
+        -3,
+        4
+      ],
+      "svg_show_hidden": false,
       "capabilities": [
         "Full revolve base",
         "Revolved additive and subtractive features",
@@ -55,6 +61,82 @@
         "Non-rectangular base outline",
         "Explicit multi-instance extrusions",
         "Linear hole pattern"
+      ]
+    },
+    {
+      "id": "counterbored_bolt_circle",
+      "title": "Counterbored bolt-circle flange",
+      "intent_example": "counterbored_bolt_circle",
+      "prompt": "Create a 110 mm diameter circular flange, 12 mm thick, with six equally spaced counterbored bolt holes on a 78 mm bolt circle. Each through hole is 6 mm diameter and each counterbore is 12 mm diameter by 4 mm deep.",
+      "capabilities": [
+        "Concentric feature dependencies",
+        "Circular patterns",
+        "Through holes and blind counterbores"
+      ]
+    },
+    {
+      "id": "nested_boss_cross_hole",
+      "title": "Nested boss with side cross-hole",
+      "intent_example": "nested_boss_cross_hole",
+      "prompt": "Create a 90 mm by 60 mm by 10 mm rectangular base. Add a centered 42 mm by 28 mm rectangular boss 14 mm tall, add a centered 22 mm diameter circular boss 10 mm tall on top of it, then cut an 8 mm horizontal through hole through the side of the rectangular boss.",
+      "capabilities": [
+        "Parent-child feature order",
+        "Features built on prior features",
+        "Side-face through cut"
+      ]
+    },
+    {
+      "id": "two_wall_u_bracket",
+      "title": "Two-wall U-bracket",
+      "intent_example": "two_wall_u_bracket",
+      "prompt": "Create a U bracket from a 90 mm by 55 mm by 8 mm base plate with two 8 mm thick vertical side walls, each 45 mm tall. Put one 8 mm through hole through the center of each wall.",
+      "svg_projection": [
+        4,
+        -1,
+        4
+      ],
+      "svg_show_hidden": false,
+      "capabilities": [
+        "Symmetric multi-feature construction",
+        "Face-aware wall features",
+        "Side-wall hole targets"
+      ]
+    },
+    {
+      "id": "cross_arm_hub_plate",
+      "title": "Cross-arm fixture plate with hex drive",
+      "intent_example": "cross_arm_hub_plate",
+      "prompt": "Create a 120 mm by 120 mm cross-arm fixture plate, 8 mm thick, with four square corner cutouts. Add a centered 42 mm diameter circular hub 18 mm tall, a 18 mm hexagonal through bore through the hub, and four 7 mm through holes centered in the arms.",
+      "svg_show_hidden": false,
+      "capabilities": [
+        "Boolean-created cross-arm base",
+        "Nested hub and polygonal bore",
+        "Distributed arm holes"
+      ]
+    },
+    {
+      "id": "open_top_drainage_tray",
+      "title": "Open-top drainage tray",
+      "intent_example": "open_top_drainage_tray",
+      "prompt": "Create a 120 mm by 80 mm open-top drainage tray with a 5 mm thick floor and four 25 mm tall walls. Add an 18 mm circular drain through the floor at the center.",
+      "svg_show_hidden": false,
+      "capabilities": [
+        "Ordered floor, drain, and wall construction",
+        "Four connected wall features",
+        "Open-top enclosure geometry"
+      ]
+    },
+    {
+      "id": "ribbed_support_bracket",
+      "title": "Ribbed support bracket",
+      "intent_example": "ribbed_support_bracket",
+      "prompt": "Create a 120 mm by 70 mm by 8 mm mounting plate with two 8 mm mounting holes near the front corners. Add a 100 mm wide vertical support wall along the back edge, two reinforcing support blocks, and a centered 40 mm by 12 mm rounded slot through the wall.",
+      "svg_projection": [4, -1, 4],
+      "svg_show_hidden": false,
+      "capabilities": [
+        "Layered bracket construction",
+        "Face-aware side-wall slot",
+        "Mounting holes and reinforcing blocks"
       ]
     }
   ]

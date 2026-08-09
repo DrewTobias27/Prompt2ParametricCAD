@@ -1,0 +1,68 @@
+{
+  "name": "nested_boss_cross_hole",
+  "prompt": "Create a 90 mm by 60 mm by 10 mm rectangular base. Add a centered 42 mm by 28 mm rectangular boss 14 mm tall, add a centered 22 mm diameter circular boss 10 mm tall on top of it, then cut an 8 mm horizontal through hole through the side of the rectangular boss.",
+  "source_name": "Prompt2ParametricCAD internal nested-boss example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "nested_features",
+    "boss",
+    "side_hole",
+    "child_target",
+    "concept_coverage"
+  ],
+  "design_intent": {
+    "required_concepts": [
+      "base_body",
+      "boss",
+      "hole"
+    ],
+    "base": {
+      "id": "base",
+      "role": "base_body",
+      "profile": "rectangle",
+      "width": 90,
+      "height": 60,
+      "thickness": 10
+    },
+    "features": [
+      {
+        "id": "rect_boss",
+        "role": "boss",
+        "operation": "extrusion",
+        "target": "base.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "centered"
+        },
+        "width": 42,
+        "height": 28,
+        "distance": 14
+      },
+      {
+        "id": "circ_boss",
+        "role": "boss",
+        "operation": "extrusion",
+        "target": "rect_boss.top",
+        "shape": "circle",
+        "placement": {
+          "type": "centered"
+        },
+        "diameter": 22,
+        "distance": 10
+      },
+      {
+        "id": "cross_hole",
+        "role": "hole",
+        "operation": "cut",
+        "target": "rect_boss.front",
+        "shape": "circle",
+        "placement": {
+          "type": "centered"
+        },
+        "diameter": 8,
+        "depth": "through"
+      }
+    ],
+    "edge_treatments": []
+  }
+}

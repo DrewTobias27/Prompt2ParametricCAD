@@ -25,9 +25,9 @@ and represented as a dependency graph for future editable CAD export.
 
 ## Portfolio showcase
 
-A concise, reproducible set of five verified mechanical parts demonstrates the
-current vocabulary across patterned plates, flanges, partial and full revolves,
-grooves, edge treatments, and non-rectangular outlines. See the
+A concise, reproducible set of eleven verified mechanical parts demonstrates the
+current vocabulary across patterned plates, flanges, full revolves, grooves,
+edge treatments, and non-rectangular outlines. See the
 [portfolio showcase](docs/showcase.md) and run `python -m prompt2cad.showcase`
 to regenerate its STEP files locally.
 

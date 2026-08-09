@@ -1,0 +1,107 @@
+{
+  "name": "open_top_drainage_tray",
+  "prompt": "Create a 120 mm by 80 mm open-top drainage tray with a 5 mm thick floor and four 25 mm tall walls. Add an 18 mm circular drain through the floor at the center.",
+  "source_name": "Prompt2ParametricCAD internal open-top tray example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "tray",
+    "multi_wall",
+    "open_top",
+    "drain",
+    "concept_coverage"
+  ],
+  "design_intent": {
+    "required_concepts": [
+      "plate",
+      "wall",
+      "drain"
+    ],
+    "base": {
+      "id": "tray_floor",
+      "role": "plate",
+      "profile": "rectangle",
+      "width": 120,
+      "height": 80,
+      "thickness": 5
+    },
+    "features": [
+      {
+        "id": "center_drain",
+        "role": "drain",
+        "operation": "cut",
+        "target": "tray_floor.top",
+        "shape": "circle",
+        "placement": {
+          "type": "centered"
+        },
+        "diameter": 18,
+        "depth": "through"
+      },
+      {
+        "id": "front_wall",
+        "role": "wall",
+        "operation": "extrusion",
+        "target": "tray_floor.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [0, -35]
+          ]
+        },
+        "width": 120,
+        "height": 10,
+        "distance": 25
+      },
+      {
+        "id": "back_wall",
+        "role": "wall",
+        "operation": "extrusion",
+        "target": "tray_floor.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [0, 35]
+          ]
+        },
+        "width": 120,
+        "height": 10,
+        "distance": 25
+      },
+      {
+        "id": "left_wall",
+        "role": "wall",
+        "operation": "extrusion",
+        "target": "tray_floor.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [-55, 0]
+          ]
+        },
+        "width": 10,
+        "height": 60,
+        "distance": 25
+      },
+      {
+        "id": "right_wall",
+        "role": "wall",
+        "operation": "extrusion",
+        "target": "tray_floor.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [55, 0]
+          ]
+        },
+        "width": 10,
+        "height": 60,
+        "distance": 25
+      }
+    ],
+    "edge_treatments": []
+  }
+}

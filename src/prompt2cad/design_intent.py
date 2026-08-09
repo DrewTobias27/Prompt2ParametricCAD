@@ -2019,7 +2019,7 @@ def feature_relationships(base: dict[str, Any], feature: dict[str, Any]) -> list
     relationships = []
     placement_type = feature["placement"]["type"]
     target_parent, _, target_reference = feature["target"].partition(".")
-    planar_target = target_reference in {"top", "bottom", "front", "back", "left", "right"}
+    global_planar_target = target_reference in {"top", "bottom"}
     simple_base_target = target_parent == "base" and base["profile"] not in {
         "half_cylinder",
         "capsule",
@@ -2027,7 +2027,11 @@ def feature_relationships(base: dict[str, Any], feature: dict[str, Any]) -> list
 
     if (
         placement_type == "centered"
-        and planar_target
+        # The relationship evaluator compares operation positions in the
+        # parent feature's global 2D workplane. A centered sketch on a front,
+        # back, left, or right face is centered in that face's local frame,
+        # so emitting a global centered_on constraint would be misleading.
+        and global_planar_target
         and (target_parent != "base" or simple_base_target)
         and feature["operation"] not in {
             "revolved_extrusion",

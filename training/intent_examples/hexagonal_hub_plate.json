@@ -1,0 +1,72 @@
+{
+  "name": "hexagonal_hub_plate",
+  "prompt": "Create a 110 mm hexagonal plate, 8 mm thick, with a centered 38 mm diameter circular hub 12 mm tall, a 16 mm through bore through the hub, and six 6 mm through holes on a 86 mm bolt circle.",
+  "source_name": "Prompt2ParametricCAD internal hexagonal hub example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "polygon",
+    "hexagon",
+    "hub",
+    "bolt_circle",
+    "nested_features",
+    "concept_coverage"
+  ],
+  "design_intent": {
+    "required_concepts": [
+      "plate",
+      "hub",
+      "hole",
+      "bolt_hole"
+    ],
+    "base": {
+      "id": "hex_plate",
+      "role": "plate",
+      "profile": "polygon",
+      "sides": 6,
+      "diameter": 110,
+      "thickness": 8
+    },
+    "features": [
+      {
+        "id": "central_hub",
+        "role": "hub",
+        "operation": "extrusion",
+        "target": "hex_plate.top",
+        "shape": "circle",
+        "placement": {
+          "type": "centered"
+        },
+        "diameter": 38,
+        "distance": 12
+      },
+      {
+        "id": "center_bore",
+        "role": "hole",
+        "operation": "cut",
+        "target": "central_hub.top",
+        "shape": "circle",
+        "placement": {
+          "type": "centered"
+        },
+        "diameter": 16,
+        "depth": "through"
+      },
+      {
+        "id": "bolt_holes",
+        "role": "bolt_hole",
+        "operation": "cut",
+        "target": "hex_plate.top",
+        "shape": "circle",
+        "placement": {
+          "type": "circular_pattern",
+          "count": 6,
+          "radius": 43,
+          "start_angle_degrees": 0
+        },
+        "diameter": 6,
+        "depth": "through"
+      }
+    ],
+    "edge_treatments": []
+  }
+}

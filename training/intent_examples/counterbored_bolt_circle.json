@@ -1,0 +1,58 @@
+{
+  "name": "counterbored_bolt_circle",
+  "prompt": "Create a 110 mm diameter circular flange, 12 mm thick, with six equally spaced counterbored bolt holes on a 78 mm bolt circle. Each through hole is 6 mm diameter and each counterbore is 12 mm diameter by 4 mm deep.",
+  "source_name": "Prompt2ParametricCAD internal counterbored flange example",
+  "source_license": "Project-authored example; not from an external dataset.",
+  "tags": [
+    "flange",
+    "bolt_circle",
+    "counterbore",
+    "concentric_features",
+    "concept_coverage"
+  ],
+  "design_intent": {
+    "required_concepts": [
+      "plate",
+      "bolt_hole",
+      "counterbore"
+    ],
+    "base": {
+      "id": "flange",
+      "role": "plate",
+      "profile": "circle",
+      "diameter": 110,
+      "thickness": 12
+    },
+    "features": [
+      {
+        "id": "bolt_holes",
+        "role": "bolt_hole",
+        "operation": "cut",
+        "target": "flange.top",
+        "shape": "circle",
+        "placement": {
+          "type": "circular_pattern",
+          "count": 6,
+          "radius": 39,
+          "start_angle_degrees": 0
+        },
+        "diameter": 6,
+        "depth": "through"
+      },
+      {
+        "id": "counterbores",
+        "role": "counterbore",
+        "operation": "cut",
+        "target": "flange.top",
+        "shape": "circle",
+        "placement": {
+          "type": "same_as_feature",
+          "source_feature": "bolt_holes"
+        },
+        "diameter": 12,
+        "depth": 4
+      }
+    ],
+    "edge_treatments": []
+  }
+}

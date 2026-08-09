@@ -1,0 +1,110 @@
+{
+  "name": "ribbed_support_bracket",
+  "prompt": "Create a 120 mm by 70 mm by 8 mm mounting plate with two 8 mm mounting holes near the front corners. Add a 100 mm wide vertical support wall along the back edge, two reinforcing support blocks, and a centered 40 mm by 12 mm rounded slot through the wall.",
+  "source_name": "Prompt2ParametricCAD internal ribbed support bracket example",
+  "source_license": "Project-authored example inspired by general feature-hierarchy CAD concepts; not copied from an external model or dataset.",
+  "tags": [
+    "bracket",
+    "multi_feature",
+    "side_face_cut",
+    "slot",
+    "concept_coverage"
+  ],
+  "design_intent": {
+    "required_concepts": [
+      "plate",
+      "wall",
+      "hole",
+      "slot"
+    ],
+    "base": {
+      "id": "mounting_plate",
+      "role": "plate",
+      "profile": "rectangle",
+      "width": 120,
+      "height": 70,
+      "thickness": 8
+    },
+    "features": [
+      {
+        "id": "mounting_holes",
+        "role": "hole",
+        "operation": "cut",
+        "target": "mounting_plate.top",
+        "shape": "circle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [-48, -23],
+            [48, -23]
+          ]
+        },
+        "diameter": 8,
+        "depth": "through"
+      },
+      {
+        "id": "support_wall",
+        "role": "wall",
+        "operation": "extrusion",
+        "target": "mounting_plate.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [0, 29]
+          ]
+        },
+        "width": 100,
+        "height": 8,
+        "distance": 45
+      },
+      {
+        "id": "left_support",
+        "role": "wall",
+        "operation": "extrusion",
+        "target": "mounting_plate.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [-36, 18]
+          ]
+        },
+        "width": 12,
+        "height": 30,
+        "distance": 25
+      },
+      {
+        "id": "right_support",
+        "role": "wall",
+        "operation": "extrusion",
+        "target": "mounting_plate.top",
+        "shape": "rectangle",
+        "placement": {
+          "type": "explicit",
+          "positions": [
+            [36, 18]
+          ]
+        },
+        "width": 12,
+        "height": 30,
+        "distance": 25
+      },
+      {
+        "id": "wall_slot",
+        "role": "slot",
+        "operation": "cut",
+        "target": "support_wall.back",
+        "shape": "slot",
+        "placement": {
+          "type": "centered"
+        },
+        "length": 40,
+        "width": 12,
+        "orientation": "horizontal",
+        "depth": 8.1
+      }
+    ],
+    "edge_treatments": []
+  }
+}
