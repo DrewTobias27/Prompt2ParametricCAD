@@ -19,6 +19,8 @@ holes.
 > Create a 100 mm by 70 mm rectangular plate that is 8 mm thick with a 2 by 3
 > grid of 5 mm through holes centered on the top face.
 
+![Hidden-line isometric drawing of the patterned mounting plate](assets/showcase/patterned_mounting_plate.svg)
+
 ### 2. Sealed circular flange
 
 **Shows:** circular profiles, bolt-circle placement, concentric openings, and
@@ -26,6 +28,8 @@ a revolved O-ring groove.
 
 > Create a circular flange with eight bolt holes and a shallow circular O-ring
 > groove around the center opening.
+
+![Hidden-line isometric drawing of the sealed circular flange](assets/showcase/sealed_circular_flange.svg)
 
 ### 3. Half-cylinder cradle
 
@@ -36,12 +40,16 @@ shallow groove on the cradle.
 > plate with two circular through holes in the plate and a shallow groove along
 > the curved cradle.
 
+![Hidden-line isometric drawing of the half-cylinder cradle](assets/showcase/half_cylinder_cradle.svg)
+
 ### 4. Turned shaft with collars and grooves
 
 **Shows:** full revolves, revolved additions and cuts, and end chamfers.
 
 > Create a cylindrical shaft with two narrow grooves near one end, a larger
 > collar near the other end, and a chamfer on both shaft ends.
+
+![Hidden-line isometric drawing of the turned shaft](assets/showcase/turned_shaft.svg)
 
 ### 5. D-shaped mounting plate
 
@@ -50,6 +58,8 @@ linear hole pattern.
 
 > Create a D-shaped plate with a flat back edge and rounded front, two
 > rectangular side tabs, and three circular through holes along the centerline.
+
+![Hidden-line isometric drawing of the D-shaped mounting plate](assets/showcase/d_shaped_mounting_plate.svg)
 
 ## Reproduce the STEP files
 
@@ -66,6 +76,12 @@ stale committed artifacts. To run the same checks without exporting files:
 
 ```powershell
 python -m prompt2cad.showcase --validate-only
+```
+
+To regenerate the tracked SVG portfolio drawings along with fresh STEP files:
+
+```powershell
+python -m prompt2cad.showcase --svg-dir docs\assets\showcase
 ```
 
 The underlying prompt-to-intent records live in

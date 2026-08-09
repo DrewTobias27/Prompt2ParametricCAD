@@ -1,6 +1,7 @@
 *.step
 *.stl
 *.svg
+!docs/assets/showcase/*.svg
 *.png
 .env
 .env.*

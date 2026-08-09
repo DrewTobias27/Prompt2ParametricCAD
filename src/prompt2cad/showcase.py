@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import cadquery as cq
+
 from prompt2cad.candidate_evaluation import evaluate_design_intent_candidate
 from prompt2cad.exporter import export_step
 from prompt2cad.interpreter import build_model
@@ -18,9 +20,21 @@ from prompt2cad.training_data import load_intent_examples
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SHOWCASE_PATH = REPO_ROOT / "docs" / "showcase.json"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "generated" / "showcase"
+DEFAULT_SVG_DIR = REPO_ROOT / "docs" / "assets" / "showcase"
 REQUIRED_CASE_FIELDS = {"id", "title", "intent_example", "prompt", "capabilities"}
 CASE_ID_PATTERN = re.compile(r"[a-z][a-z0-9_]*\Z")
 SHOWCASE_CASE_COUNT = 5
+SHOWCASE_SVG_OPTIONS = {
+    "width": 900,
+    "height": 560,
+    "marginLeft": 35,
+    "marginTop": 35,
+    "projectionDir": (-1.75, 1.1, 5),
+    "showAxes": False,
+    "showHidden": True,
+    "strokeColor": (21, 45, 80),
+    "hiddenColor": (140, 157, 178),
+}
 
 
 def load_showcase(path: Path = DEFAULT_SHOWCASE_PATH) -> dict[str, Any]:
@@ -188,12 +202,11 @@ def export_showcase(
     validation_report: dict[str, Any] | None = None,
 ) -> list[Path]:
     """Validate the showcase, then export one STEP file per verified case."""
-    report = validation_report or validate_showcase(showcase_path, examples_dir)
-    if not report["passed"]:
-        details = "\n".join(
-            [*report["errors"], *failure_lines(report["cases"])]
-        )
-        raise ValueError(f"Showcase validation failed:\n{details}")
+    report = verified_showcase_report(
+        showcase_path,
+        examples_dir,
+        validation_report,
+    )
 
     exported_paths = []
     for case in report["cases"]:
@@ -201,6 +214,48 @@ def export_showcase(
         path = export_step(part, output_dir / f"{case['id']}.step")
         exported_paths.append(path)
     return exported_paths
+
+
+def export_showcase_svg(
+    output_dir: Path = DEFAULT_SVG_DIR,
+    showcase_path: Path = DEFAULT_SHOWCASE_PATH,
+    examples_dir: Path = DEFAULT_INTENT_EXAMPLES_DIR,
+    validation_report: dict[str, Any] | None = None,
+) -> list[Path]:
+    """Export clean hidden-line isometric SVGs from the verified solids."""
+    report = verified_showcase_report(
+        showcase_path,
+        examples_dir,
+        validation_report,
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    exported_paths = []
+    for case in report["cases"]:
+        path = output_dir / f"{case['id']}.svg"
+        cq.exporters.export(
+            build_model(case["model_data"]),
+            str(path),
+            exportType=cq.exporters.ExportTypes.SVG,
+            opt=SHOWCASE_SVG_OPTIONS,
+        )
+        exported_paths.append(path)
+    return exported_paths
+
+
+def verified_showcase_report(
+    showcase_path: Path,
+    examples_dir: Path,
+    validation_report: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Return a passing report or stop before exporting unverified artifacts."""
+    report = validation_report or validate_showcase(showcase_path, examples_dir)
+    if not report["passed"]:
+        details = "\n".join(
+            [*report["errors"], *failure_lines(report["cases"])]
+        )
+        raise ValueError(f"Showcase validation failed:\n{details}")
+    return report
 
 
 def failure_lines(cases: list[dict[str, Any]]) -> list[str]:
@@ -228,6 +283,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Validate every case without writing STEP files.",
     )
+    parser.add_argument(
+        "--svg-dir",
+        type=Path,
+        help=(
+            "Optional directory for hidden-line SVG projections generated "
+            "from the verified solids."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -252,6 +315,12 @@ def main() -> None:
 
     for path in export_showcase(args.output_dir, validation_report=report):
         print(f"EXPORTED {path}")
+    if args.svg_dir:
+        for path in export_showcase_svg(
+            args.svg_dir,
+            validation_report=report,
+        ):
+            print(f"RENDERED {path}")
 
 
 if __name__ == "__main__":
