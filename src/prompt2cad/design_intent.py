@@ -265,7 +265,14 @@ OPENAI_NEAR_CORNERS_PLACEMENT_SCHEMA = {
     "properties": {
         "type": {"type": "string", "enum": ["near_corners"]},
         "count": {"type": "integer", "minimum": 1, "maximum": 24},
-        "margin": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "margin": {
+            **OPENAI_NULLABLE_NUMBER_SCHEMA,
+            "description": (
+                "Clearance from the feature's outside edge to the parent "
+                "outline. A larger margin moves the feature inward toward "
+                "the center."
+            ),
+        },
     },
     "required": ["type", "count", "margin"],
 }
@@ -276,7 +283,13 @@ OPENAI_CIRCULAR_PATTERN_PLACEMENT_SCHEMA = {
     "properties": {
         "type": {"type": "string", "enum": ["circular_pattern"]},
         "count": {"type": "integer", "minimum": 1},
-        "radius": OPENAI_NULLABLE_NUMBER_SCHEMA,
+        "radius": {
+            **OPENAI_NULLABLE_NUMBER_SCHEMA,
+            "description": (
+                "Distance from the parent center to each feature center. A "
+                "smaller radius moves the pattern inward."
+            ),
+        },
         "margin": OPENAI_NULLABLE_NUMBER_SCHEMA,
         "start_angle_degrees": OPENAI_NULLABLE_NUMBER_SCHEMA,
     },
@@ -328,7 +341,13 @@ OPENAI_OFFSET_FROM_EDGE_PLACEMENT_SCHEMA = {
             "type": "string",
             "enum": ["front", "back", "left", "right"],
         },
-        "offset": {"type": "number"},
+        "offset": {
+            "type": "number",
+            "description": (
+                "Inward distance from the named parent edge. Increasing the "
+                "offset moves the feature farther inward."
+            ),
+        },
         "along": {"type": "number"},
     },
     "required": ["type", "edge", "offset", "along"],

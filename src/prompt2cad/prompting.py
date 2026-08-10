@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from time import perf_counter
 
 from openai import APIStatusError
@@ -533,6 +534,19 @@ all target/parent-child references must remain valid after the revision. Use
 the original prompt to retain design requirements that the correction does not
 mention. If the correction asks for an imprecise change, choose reasonable
 proportional dimensions rather than omitting required fields.
+
+Placement distance semantics are directional and relative to the previous
+intent:
+- near_corners.margin is clearance between the feature's outside edge and the
+  parent outline. Increasing it moves the feature inward; decreasing it moves
+  the feature toward the edge.
+- offset_from_edge.offset is inward distance from the named edge. Increasing
+  it moves the feature inward.
+- circular_pattern.radius is center-to-center radius. Decreasing it moves the
+  pattern inward toward the parent center.
+- When a correction says to move a feature inward or outward by a distance,
+  apply that distance as a delta to the existing placement value. Do not
+  replace the existing value with the requested movement distance.
 """.strip()
 
 
@@ -888,6 +902,7 @@ def evaluate_design_intent_with_feedback(
     *,
     telemetry: dict | None = None,
     initial_telemetry: dict | None = None,
+    additional_evaluator=None,
 ) -> tuple[dict, dict | None, list[dict], dict]:
     """Evaluate one intent and repair it only when deterministic checks fail."""
     api_calls: list[dict] = []
@@ -899,6 +914,17 @@ def evaluate_design_intent_with_feedback(
     repair_history = []
     for attempt_number in range(max_repairs + 1):
         evaluation = evaluate_design_intent_candidate(design_intent)
+        if additional_evaluator is not None:
+            additional_feedback = additional_evaluator(design_intent)
+            if additional_feedback:
+                evaluation = dict(evaluation)
+                evaluation["passed"] = False
+                evaluation["feedback"] = dict(
+                    evaluation.get("feedback", {})
+                )
+                evaluation["feedback"]["refinement_semantics"] = (
+                    additional_feedback
+                )
         if evaluation["passed"] or attempt_number == max_repairs:
             return (
                 design_intent,
@@ -1008,7 +1034,133 @@ def refine_design_intent_with_feedback(
         max_repairs,
         telemetry=telemetry,
         initial_telemetry=initial_telemetry,
+        additional_evaluator=lambda candidate: (
+            refinement_direction_feedback(
+                previous_design_intent,
+                candidate,
+                correction,
+            )
+        ),
     )
+
+
+def refinement_direction_feedback(
+    previous_design_intent: dict,
+    candidate_design_intent: dict,
+    correction: str,
+) -> dict | None:
+    """Reject placement revisions that move opposite the requested direction."""
+    direction = requested_refinement_direction(correction)
+    if direction is None:
+        return None
+
+    previous_features = {
+        feature.get("id"): feature
+        for feature in previous_design_intent.get("features", [])
+        if feature.get("id")
+    }
+    changed_controls = []
+    wrong_controls = []
+    for candidate_feature in candidate_design_intent.get("features", []):
+        feature_id = candidate_feature.get("id")
+        previous_feature = previous_features.get(feature_id)
+        if previous_feature is None:
+            continue
+
+        previous_control = placement_direction_control(previous_feature)
+        candidate_control = placement_direction_control(candidate_feature)
+        if (
+            previous_control is None
+            or candidate_control is None
+            or previous_control[0] != candidate_control[0]
+        ):
+            continue
+
+        control_name, previous_value, inward_sign = previous_control
+        _, candidate_value, _ = candidate_control
+        delta = candidate_value - previous_value
+        if abs(delta) <= 1e-9:
+            continue
+
+        changed_controls.append(feature_id)
+        expected_sign = inward_sign if direction == "inward" else -inward_sign
+        if delta * expected_sign <= 0:
+            wrong_controls.append({
+                "feature": feature_id,
+                "control": control_name,
+                "previous": previous_value,
+                "candidate": candidate_value,
+            })
+
+    if wrong_controls:
+        return {
+            "code": "wrong_directional_placement_change",
+            "message": (
+                f"The correction requested movement {direction}, but one or "
+                "more placement controls moved in the opposite direction."
+            ),
+            "requested_direction": direction,
+            "wrong_changes": wrong_controls,
+            "suggestion": (
+                "Apply the direction using the documented placement-control "
+                "semantics and preserve unrelated feature values."
+            ),
+        }
+    if not changed_controls:
+        return {
+            "code": "missing_directional_placement_change",
+            "message": (
+                f"The correction requested movement {direction}, but no "
+                "recognized placement distance changed."
+            ),
+            "requested_direction": direction,
+            "suggestion": (
+                "Change near_corners.margin, offset_from_edge.offset, or "
+                "circular_pattern.radius in the requested direction."
+            ),
+        }
+    return None
+
+
+def requested_refinement_direction(correction: str) -> str | None:
+    """Return a clear inward/outward direction expressed by a correction."""
+    normalized = " ".join(correction.lower().split())
+    inward = bool(re.search(
+        r"\b(?:inward|towards? (?:the )?(?:center|centre)|"
+        r"farther from (?:the )?(?:edges?|corners?)|"
+        r"increase (?:the )?(?:edge )?clearance)\b",
+        normalized,
+    ))
+    outward = bool(re.search(
+        r"\b(?:outward|away from (?:the )?(?:center|centre)|"
+        r"closer to (?:the )?(?:edges?|corners?)|(?:decrease|reduce) "
+        r"(?:the )?(?:edge )?clearance)\b",
+        normalized,
+    ))
+    if inward == outward:
+        return None
+    return "inward" if inward else "outward"
+
+
+def placement_direction_control(feature: dict) -> tuple[str, float, int] | None:
+    """Return placement field, numeric value, and its inward delta sign."""
+    placement = feature.get("placement")
+    if not isinstance(placement, dict):
+        return None
+    placement_type = placement.get("type")
+    control_by_type = {
+        "near_corners": ("margin", 1),
+        "offset_from_edge": ("offset", 1),
+        "circular_pattern": ("radius", -1),
+    }
+    control = control_by_type.get(placement_type)
+    if control is None:
+        return None
+    field, inward_sign = control
+    value = placement.get(field)
+    if not isinstance(value, (int, float)):
+        return None
+    return f"{placement_type}.{field}", float(value), inward_sign
 
 
 def update_aggregate_telemetry(

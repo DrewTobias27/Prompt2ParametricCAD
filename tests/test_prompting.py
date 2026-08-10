@@ -322,6 +322,104 @@ def test_refinement_feedback_loop_repairs_an_invalid_revision(monkeypatch):
     assert "User-requested revision: Make the boss taller." in repair_calls[0][0]
 
 
+def test_refinement_direction_feedback_rejects_inward_margin_decrease():
+    previous = {
+        "features": [{
+            "id": "corner_holes",
+            "placement": {"type": "near_corners", "count": 4, "margin": 10},
+        }],
+    }
+    candidate = {
+        "features": [{
+            "id": "corner_holes",
+            "placement": {"type": "near_corners", "count": 4, "margin": 5},
+        }],
+    }
+
+    feedback = prompting.refinement_direction_feedback(
+        previous,
+        candidate,
+        "Move the holes 5 mm inward from both plate edges.",
+    )
+
+    assert feedback["code"] == "wrong_directional_placement_change"
+    assert feedback["wrong_changes"][0]["control"] == "near_corners.margin"
+
+
+def test_refinement_direction_feedback_accepts_inward_margin_increase():
+    previous = {
+        "features": [{
+            "id": "corner_holes",
+            "placement": {"type": "near_corners", "count": 4, "margin": 10},
+        }],
+    }
+    candidate = {
+        "features": [{
+            "id": "corner_holes",
+            "placement": {"type": "near_corners", "count": 4, "margin": 15},
+        }],
+    }
+
+    assert prompting.refinement_direction_feedback(
+        previous,
+        candidate,
+        "Move the holes 5 mm inward from both plate edges.",
+    ) is None
+
+
+def test_refinement_feedback_repairs_wrong_directional_change(monkeypatch):
+    previous = {
+        "features": [{
+            "id": "corner_holes",
+            "placement": {"type": "near_corners", "count": 4, "margin": 10},
+        }],
+    }
+    wrong = {
+        "features": [{
+            "id": "corner_holes",
+            "placement": {"type": "near_corners", "count": 4, "margin": 5},
+        }],
+    }
+    repaired = {
+        "features": [{
+            "id": "corner_holes",
+            "placement": {"type": "near_corners", "count": 4, "margin": 15},
+        }],
+    }
+    repair_feedback = []
+
+    monkeypatch.setattr(prompting, "refine_design_intent", lambda *args: wrong)
+    monkeypatch.setattr(
+        prompting,
+        "evaluate_design_intent_candidate",
+        lambda intent: {
+            "passed": True,
+            "model_data": {"operations": [{"id": "base"}]},
+            "feedback": {},
+        },
+    )
+
+    def fake_repair(prompt, intent, feedback):
+        repair_feedback.append(feedback)
+        return repaired
+
+    monkeypatch.setattr(prompting, "repair_design_intent", fake_repair)
+
+    intent, _, history, evaluation = prompting.refine_design_intent_with_feedback(
+        "Create a plate with four corner holes.",
+        previous,
+        "Move the holes 5 mm inward from both plate edges.",
+        max_repairs=1,
+    )
+
+    assert intent is repaired
+    assert evaluation["passed"] is True
+    assert len(history) == 1
+    assert repair_feedback[0]["refinement_semantics"]["code"] == (
+        "wrong_directional_placement_change"
+    )
+
+
 def test_design_intent_feedback_loop_does_not_repair_valid_candidate(monkeypatch):
     intent = {"candidate": "valid"}
     evaluation = {
