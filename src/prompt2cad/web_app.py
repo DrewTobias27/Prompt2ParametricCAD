@@ -14,6 +14,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.interpreter import build_model
 from prompt2cad.design_intent import intent_to_model_data
 from prompt2cad.generation_log import save_generation_log
@@ -41,6 +43,16 @@ class CADRefineRequest(BaseModel):
 class CADBuildRequest(BaseModel):
     model_data: dict
     filename_hint: str = "manual-builder-model"
+
+
+class CADEditableModelRequest(BaseModel):
+    model_data: dict
+
+
+class CADParameterEditRequest(BaseModel):
+    model_data: dict
+    updates: dict[str, Any]
+    filename_hint: str = "edited-model"
 
 
 class CADSuggestBaseRequest(BaseModel):
@@ -162,14 +174,19 @@ def cache_success_response(key: str, response_data: dict) -> None:
         SUCCESS_RESPONSE_CACHE.popitem(last=False)
 
 
-def export_model_data(model_data: dict, filename_hint: str) -> dict:
+def export_model_data(
+    model_data: dict,
+    filename_hint: str,
+    *,
+    built_part: cq.Workplane | None = None,
+) -> dict:
     """Validate, build, export, and return web response data for a CAD model."""
     started_at = perf_counter()
     validate_model_data(model_data)
     validation_seconds = seconds_since(started_at)
 
     build_started_at = perf_counter()
-    part = build_model(model_data)
+    part = built_part if built_part is not None else build_model(model_data)
     build_seconds = seconds_since(build_started_at)
 
     export_started_at = perf_counter()
@@ -202,6 +219,7 @@ def export_model_data(model_data: dict, filename_hint: str) -> dict:
             "export_model_total_seconds": export_model_total_seconds,
             "local_processing_seconds": export_model_total_seconds,
             "cache_hit": False,
+            "build_reused": built_part is not None,
         },
     }
 
@@ -770,6 +788,69 @@ def build_cad(request: CADBuildRequest):
             "performance": {
                 "total_seconds": seconds_since(started_at),
                 "cache_hit": False,
+            },
+        }
+
+
+@app.post("/editable-model")
+def editable_model(request: CADEditableModelRequest):
+    """Return named editable features and parameters for valid model data."""
+    started_at = perf_counter()
+    try:
+        document = model_data_to_editable_document(request.model_data)
+        return {
+            "status": "success",
+            "editable_model": document.to_dict(),
+            "performance": {
+                "total_seconds": seconds_since(started_at),
+            },
+        }
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error),
+            "editable_model": None,
+            "performance": {
+                "total_seconds": seconds_since(started_at),
+            },
+        }
+
+
+@app.post("/edit-parameters")
+def edit_parameters(request: CADParameterEditRequest):
+    """Apply named parameter changes and export only a validated rebuild."""
+    started_at = perf_counter()
+    document = None
+    try:
+        document = model_data_to_editable_document(request.model_data)
+        rebuild_started_at = perf_counter()
+        part, updated_document = rebuild_with_parameter_updates(
+            document,
+            request.updates,
+        )
+        rebuild_seconds = seconds_since(rebuild_started_at)
+        response_data = export_model_data(
+            updated_document.source_model_data,
+            request.filename_hint,
+            built_part=part,
+        )
+        response_data["editable_model"] = updated_document.to_dict()
+        performance = dict(response_data.get("performance", {}))
+        performance.update({
+            "editable_rebuild_seconds": rebuild_seconds,
+            "total_seconds": seconds_since(started_at),
+        })
+        response_data["performance"] = performance
+        return response_data
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": str(error),
+            "model_data": request.model_data,
+            "editable_model": document.to_dict() if document is not None else None,
+            "edit_rejected": True,
+            "performance": {
+                "total_seconds": seconds_since(started_at),
             },
         }
 

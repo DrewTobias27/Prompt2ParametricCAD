@@ -106,7 +106,9 @@ from one origin.
 
 The public workflow uses `/generate` for automatic prompt generation and
 `/build` for supplied operation JSON. Manual-builder assistance uses
-`/suggest-base` and `/suggest-feature`.
+`/suggest-base` and `/suggest-feature`. `/editable-model` returns the named
+feature parameters for a validated model, while `/edit-parameters` applies
+transactional updates and exports only a successful rebuild.
 
 ## Current constraints
 

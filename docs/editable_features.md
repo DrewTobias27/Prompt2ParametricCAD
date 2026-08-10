@@ -103,7 +103,12 @@ The achievable first milestone is:
 - report which features still need constraints, explicit IDs, or true pattern
   nodes before native replay.
 
-After this layer is proven, the next increment is a small editor API and UI for
-changing dimensions. A narrow SolidWorks replay prototype should then start
-with rectangle/circle sketches plus extrude and cut, before adding revolves,
-patterns, and topology-sensitive edge treatments.
+The backend now exposes this layer through `/editable-model` and
+`/edit-parameters`. The edit endpoint keeps the supplied model as the last
+known-good revision and exports a new STEP file only after the parameter update,
+schema, rebuild, operation-effect checks, and quality checks succeed.
+
+The next increment is a focused UI for changing these named values and choosing
+whether to keep or discard a rebuilt revision. A narrow SolidWorks replay
+prototype should then start with rectangle/circle sketches plus extrude and cut,
+before adding revolves, patterns, and topology-sensitive edge treatments.

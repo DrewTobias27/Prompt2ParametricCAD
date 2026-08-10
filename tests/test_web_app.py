@@ -10,6 +10,13 @@ def test_health_reports_backend_ready():
     assert web_app.health() == {"status": "ok"}
 
 
+def test_editable_routes_are_exposed_in_the_api_contract():
+    paths = web_app.app.openapi()["paths"]
+
+    assert "post" in paths["/editable-model"]
+    assert "post" in paths["/edit-parameters"]
+
+
 def test_home_reports_when_frontend_is_not_built(monkeypatch, tmp_path):
     monkeypatch.setattr(web_app, "FRONTEND_DIST_DIR", tmp_path)
 
@@ -675,6 +682,115 @@ def test_export_model_data_returns_quality_report(monkeypatch, tmp_path):
     assert response["performance"]["build_seconds"] >= 0
     assert response["performance"]["export_model_total_seconds"] >= 0
     assert response["performance"]["local_processing_seconds"] >= 0
+    assert response["performance"]["build_reused"] is False
+
+
+def editable_web_model_data():
+    return {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 80,
+                "height": 50,
+                "distance": 8,
+            },
+            {
+                "type": "add_extrude",
+                "id": "boss",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "width": 20,
+                "height": 12,
+                "distance": 10,
+            },
+        ]
+    }
+
+
+def test_editable_model_route_returns_named_parameters_and_dependencies():
+    response = web_app.editable_model(
+        web_app.CADEditableModelRequest(model_data=editable_web_model_data())
+    )
+
+    assert response["status"] == "success"
+    editable_model = response["editable_model"]
+    assert editable_model["format"] == "prompt2cad.editable-model"
+    assert editable_model["build_order"] == ["base", "boss"]
+    assert editable_model["features"][1]["parent_feature_ids"] == ["base"]
+    parameter_ids = {
+        parameter["id"]
+        for feature in editable_model["features"]
+        for parameter in feature["parameters"]
+    }
+    assert "base.sketch.width" in parameter_ids
+    assert "boss.feature.distance" in parameter_ids
+
+
+def test_edit_parameters_route_exports_only_the_valid_rebuilt_revision(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(web_app, "GENERATED_DIR", tmp_path)
+    monkeypatch.setattr(
+        web_app.cq.exporters,
+        "export",
+        lambda part, path: web_app.Path(path).write_text(
+            "STEP DATA",
+            encoding="utf-8",
+        ),
+    )
+
+    response = web_app.edit_parameters(
+        web_app.CADParameterEditRequest(
+            model_data=editable_web_model_data(),
+            updates={
+                "base.sketch.width": 100,
+                "boss.feature.distance": 15,
+            },
+            filename_hint="wider plate",
+        )
+    )
+
+    assert response["status"] == "success"
+    assert response["model_data"]["operations"][0]["width"] == 100
+    assert response["model_data"]["operations"][1]["distance"] == 15
+    assert response["editable_model"]["build_order"] == ["base", "boss"]
+    assert response["performance"]["build_reused"] is True
+    assert response["performance"]["editable_rebuild_seconds"] >= 0
+    assert (tmp_path / "wider-plate.step").exists()
+
+
+def test_edit_parameters_route_preserves_last_good_model_when_edit_fails(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(web_app, "GENERATED_DIR", tmp_path)
+    model_data = editable_web_model_data()
+
+    response = web_app.edit_parameters(
+        web_app.CADParameterEditRequest(
+            model_data=model_data,
+            updates={"boss.placement.inst001.x": 100},
+            filename_hint="disconnected boss",
+        )
+    )
+
+    assert response["status"] == "error"
+    assert response["edit_rejected"] is True
+    assert response["model_data"] == model_data
+    assert response["editable_model"]["source_model_data"] == model_data
+    boss_parameters = response["editable_model"]["features"][1]["parameters"]
+    original_x = next(
+        parameter["value"]
+        for parameter in boss_parameters
+        if parameter["id"] == "boss.placement.inst001.x"
+    )
+    assert original_x == 0
+    assert list(tmp_path.glob("*.step")) == []
 
 
 def test_build_cad_error_response_localizes_build_failure(monkeypatch):
