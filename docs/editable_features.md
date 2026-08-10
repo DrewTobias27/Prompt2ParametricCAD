@@ -107,17 +107,17 @@ constraints or selection rules:
 The runner temporarily disables SolidWorks' interactive dimension-entry prompt
 and restores the user's prior setting after replay. It uses the configured part
 template when available and falls back to the newest installed standard part
-template. Two real-application smoke models verify both profile types, boss and
-cut features, through and blind end conditions, and multi-level feature
-dependencies.
+template. Five real-application smoke models cover every supported profile as
+well as boss/cut features, through and blind end conditions, patterns,
+revolves, edge treatments, and multi-level feature dependencies.
 
 Legacy repeated source positions remain exact contours so existing JSON keeps
 working. Operations with canonical pattern metadata instead create one seed
 feature followed by a native circular, linear, or sketch-driven mirror pattern.
 The replay planner also emits native Hole Wizard countersinks and
-topology-resolved chamfer and fillet operations. These additions are statically
-compiled and regression-tested; an installed-version SolidWorks smoke run is
-still required before treating a release build as certified.
+topology-resolved chamfer and fillet operations. The suite compares SolidWorks
+body count, volume, and bounding-box spans against the CadQuery result instead
+of treating a saved file as proof of geometry parity.
 
 ## Predicted failure modes and mitigations
 
@@ -152,7 +152,10 @@ The backend now exposes this layer through `/editable-model` and
 known-good revision and exports a new STEP file only after the parameter update,
 schema, rebuild, operation-effect checks, and quality checks succeed.
 
-The next native increments should add complete locating dimensions and sketch
-relations, plus installed-version smoke fixtures for patterns, Hole Wizard
-features, side-face dependencies, revolves, chamfers, and fillets. CadQuery
-remains the geometry oracle for every native replay expansion.
+The next native increment should add complete locating dimensions and sketch
+relations. CadQuery remains the geometry oracle for every native replay
+expansion.
+
+Run `prompt2cad-solidworks-smoke` for the CadQuery build and native-plan phase.
+On a configured Windows workstation, add `--execute` to replay the same five
+fixtures into `SLDPRT` files and record per-fixture failures in one report.

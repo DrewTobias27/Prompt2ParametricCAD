@@ -1,0 +1,35 @@
+{
+  "operations": [
+    {
+      "type": "extrude",
+      "id": "base",
+      "plane": "XY",
+      "profile": "rectangle",
+      "width": 80,
+      "height": 50,
+      "distance": 12
+    },
+    {
+      "type": "fillet",
+      "id": "corner_fillets",
+      "target": "base.vertical_edges",
+      "radius": 4
+    },
+    {
+      "type": "add_extrude",
+      "id": "boss",
+      "target": "base.top",
+      "profile": "rectangle",
+      "positions": [[0, 0]],
+      "width": 30,
+      "height": 20,
+      "distance": 8
+    },
+    {
+      "type": "chamfer",
+      "id": "boss_chamfer",
+      "target": "boss.top_outer_edges",
+      "distance": 1
+    }
+  ]
+}

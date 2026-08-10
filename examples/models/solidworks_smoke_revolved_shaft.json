@@ -1,0 +1,49 @@
+{
+  "operations": [
+    {
+      "type": "revolve",
+      "id": "shaft",
+      "plane": "XY",
+      "profile": "rectangle",
+      "positions": [[5, 0]],
+      "width": 10,
+      "height": 80,
+      "axis_start": [0, -1],
+      "axis_end": [0, 1],
+      "angle": 360
+    },
+    {
+      "type": "add_revolve",
+      "id": "collar",
+      "plane": "XY",
+      "profile": "rectangle",
+      "positions": [[11, 0]],
+      "width": 4,
+      "height": 12,
+      "axis_start": [0, -1],
+      "axis_end": [0, 1],
+      "angle": 360
+    },
+    {
+      "type": "cut_revolve",
+      "id": "groove",
+      "plane": "XY",
+      "profile": "rectangle",
+      "positions": [[10.5, 20]],
+      "width": 3,
+      "height": 6,
+      "axis_start": [0, -1],
+      "axis_end": [0, 1],
+      "angle": 360
+    },
+    {
+      "type": "cut",
+      "id": "end_bore",
+      "target": "shaft.front",
+      "profile": "circle",
+      "positions": [[0, 0]],
+      "diameter": 6,
+      "depth": "through"
+    }
+  ]
+}

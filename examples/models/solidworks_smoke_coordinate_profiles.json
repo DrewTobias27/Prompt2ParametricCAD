@@ -1,0 +1,38 @@
+{
+  "operations": [
+    {
+      "type": "extrude",
+      "id": "base",
+      "plane": "XY",
+      "profile": "polyline",
+      "points": [[-50, -30], [20, -30], [40, -10], [40, 30], [-50, 30]],
+      "distance": 8
+    },
+    {
+      "type": "add_extrude",
+      "id": "hex_boss",
+      "target": "base.top",
+      "profile": "polygon",
+      "positions": [[-20, 0]],
+      "sides": 6,
+      "diameter": 24,
+      "distance": 10
+    },
+    {
+      "type": "cut",
+      "id": "rounded_slot",
+      "target": "base.top",
+      "profile": "sketch",
+      "positions": [[18, 0]],
+      "start": [-12, -5],
+      "segments": [
+        {"type": "line", "to": [12, -5]},
+        {"type": "arc", "through": [17, 0], "to": [12, 5]},
+        {"type": "line", "to": [-12, 5]},
+        {"type": "arc", "through": [-17, 0], "to": [-12, -5]}
+      ],
+      "close": true,
+      "depth": "through"
+    }
+  ]
+}

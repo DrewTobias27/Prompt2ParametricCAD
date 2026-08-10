@@ -226,6 +226,7 @@ def export_solidworks_part(
     *,
     visible: bool = False,
     template_path: Path | None = None,
+    result_output_path: Path | None = None,
     powershell_executable: str = "powershell.exe",
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> Path:
@@ -293,6 +294,20 @@ def export_solidworks_part(
     if not output_path.is_file():
         raise SolidWorksExecutionError(
             f"SOLIDWORKS reported success but did not create {output_path}"
+        )
+
+    if result_output_path is not None:
+        try:
+            result = json.loads(completed.stdout.strip())
+        except json.JSONDecodeError as error:
+            raise SolidWorksExecutionError(
+                "SOLIDWORKS returned an unreadable native replay result"
+            ) from error
+        result_output_path = result_output_path.resolve()
+        result_output_path.parent.mkdir(parents=True, exist_ok=True)
+        result_output_path.write_text(
+            json.dumps(result, indent=2) + "\n",
+            encoding="utf-8",
         )
 
     return output_path

@@ -300,12 +300,29 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "verified_dimension_count")]
         public int VerifiedDimensionCount { get; set; }
+
+        [DataMember(Name = "geometry")]
+        public NativeGeometryResult Geometry { get; set; }
+    }
+
+    [DataContract]
+    public sealed class NativeGeometryResult
+    {
+        [DataMember(Name = "solid_body_count")]
+        public int SolidBodyCount { get; set; }
+
+        [DataMember(Name = "volume_mm3")]
+        public double VolumeCubicMillimeters { get; set; }
+
+        [DataMember(Name = "bounding_box_mm")]
+        public double[] BoundingBoxMillimeters { get; set; }
     }
 
     public static class NativeReplayRunner
     {
         private const double MillimetersPerMeter = 1000.0;
         private const string ReplayFormat = "prompt2cad.solidworks-replay-plan";
+        private const int ReplayVersion = 3;
         private static string tracePath;
 
         public static string Execute(
@@ -321,7 +338,7 @@ namespace Prompt2Cad.SolidWorks
             }
             Trace("Reading replay plan");
             ReplayPlan plan = ReadPlan(planPath);
-            if (plan.Format != ReplayFormat || plan.Version != 2)
+            if (plan.Format != ReplayFormat || plan.Version != ReplayVersion)
             {
                 throw new InvalidOperationException(
                     "Unsupported SOLIDWORKS replay plan format or version."
@@ -421,6 +438,20 @@ namespace Prompt2Cad.SolidWorks
                                     step,
                                     nativeSketch
                                 );
+                                if (step.Pattern != null)
+                                {
+                                    Trace(
+                                        "Creating native pattern " +
+                                        step.FeatureName
+                                    );
+                                    nativeFeature = CreateNativePattern(
+                                        application,
+                                        model,
+                                        part,
+                                        step,
+                                        nativeFeature
+                                    );
+                                }
                             }
                             else
                             {
@@ -488,6 +519,7 @@ namespace Prompt2Cad.SolidWorks
                 }
 
                 Trace("Replay complete");
+                NativeGeometryResult geometry = MeasureNativeGeometry(part);
                 string resultJson = WriteJson(
                     new ReplayResult
                     {
@@ -497,9 +529,18 @@ namespace Prompt2Cad.SolidWorks
                         FeatureCount = createdNames.Count,
                         VerificationPassed = true,
                         VerifiedDimensionCount = verifiedDimensionCount,
+                        Geometry = geometry,
                     }
                 );
-                TryDeleteTrace();
+                if (!String.Equals(
+                    System.Environment.GetEnvironmentVariable(
+                        "P2P_KEEP_SOLIDWORKS_TRACE"
+                    ),
+                    "1",
+                    StringComparison.Ordinal))
+                {
+                    TryDeleteTrace();
+                }
                 return resultJson;
             }
             finally
@@ -561,6 +602,63 @@ namespace Prompt2Cad.SolidWorks
                 serializer.WriteObject(stream, result);
                 return System.Text.Encoding.UTF8.GetString(stream.ToArray());
             }
+        }
+
+        private static NativeGeometryResult MeasureNativeGeometry(PartDoc part)
+        {
+            object[] bodyObjects = ObjectItems(part.GetBodies2(
+                (int)swBodyType_e.swSolidBody,
+                true
+            )).ToArray();
+            if (bodyObjects.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "The native part contains no visible solid body."
+                );
+            }
+
+            double volumeCubicMeters = 0.0;
+            foreach (object bodyObject in bodyObjects)
+            {
+                Body2 body = bodyObject as Body2;
+                if (body == null)
+                {
+                    continue;
+                }
+                double[] massProperties = ObjectItems(
+                    body.GetMassProperties(1.0)
+                ).Select(value => Convert.ToDouble(
+                    value,
+                    CultureInfo.InvariantCulture
+                )).ToArray();
+                if (massProperties.Length < 4)
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS did not return solid-body mass properties."
+                    );
+                }
+                volumeCubicMeters += massProperties[3];
+            }
+
+            double[] boundingBox = ObjectItems(part.GetPartBox(true))
+                .Select(value => Convert.ToDouble(
+                    value,
+                    CultureInfo.InvariantCulture
+                ) * MillimetersPerMeter)
+                .ToArray();
+            if (boundingBox.Length != 6)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS did not return a six-value part bounding box."
+                );
+            }
+            return new NativeGeometryResult
+            {
+                SolidBodyCount = bodyObjects.Length,
+                VolumeCubicMillimeters =
+                    volumeCubicMeters * Math.Pow(MillimetersPerMeter, 3),
+                BoundingBoxMillimeters = boundingBox,
+            };
         }
 
         private static string ResolvePartTemplate(
@@ -651,13 +749,26 @@ namespace Prompt2Cad.SolidWorks
             MathUtility mathUtility = application.IGetMathUtility();
             MathTransform modelToSketch = sketchDefinition.ModelToSketchTransform;
 
-            CreateProfileInstances(
-                model,
-                sketchManager,
-                step,
-                mathUtility,
-                modelToSketch
-            );
+            bool previousAddToDatabase = sketchManager.AddToDB;
+            try
+            {
+                // Native replay must preserve the coordinates in the replay plan.
+                // Direct database insertion disables interactive inference and
+                // snapping that can otherwise move an offset profile to the
+                // sketch origin on a side face.
+                sketchManager.AddToDB = true;
+                CreateProfileInstances(
+                    model,
+                    sketchManager,
+                    step,
+                    mathUtility,
+                    modelToSketch
+                );
+            }
+            finally
+            {
+                sketchManager.AddToDB = previousAddToDatabase;
+            }
 
             SketchSegment revolveAxis = null;
             if (step.Feature.Kind == "boss_revolve" ||
@@ -1002,6 +1113,10 @@ namespace Prompt2Cad.SolidWorks
                         "SOLIDWORKS did not create the rectangle."
                     );
                 }
+                TraceSketchPoints(
+                    segments[0].GetSketch(),
+                    "Rectangle before dimensions for " + step.SketchName
+                );
                 if (addDrivingDimensions)
                 {
                     AddRectangleDimensions(
@@ -1014,6 +1129,10 @@ namespace Prompt2Cad.SolidWorks
                         modelToSketch
                     );
                 }
+                TraceSketchPoints(
+                    segments[0].GetSketch(),
+                    "Rectangle after dimensions for " + step.SketchName
+                );
                 return;
             }
 
@@ -1267,13 +1386,25 @@ namespace Prompt2Cad.SolidWorks
         {
             DimensionSpec widthSpec = FindDimension(sketch, ".sketch.width");
             DimensionSpec heightSpec = FindDimension(sketch, ".sketch.height");
+            double[] widthDirection = ToSketchDirection(
+                frame,
+                new[] { 1.0, 0.0 },
+                mathUtility,
+                modelToSketch
+            );
+            double[] heightDirection = ToSketchDirection(
+                frame,
+                new[] { 0.0, 1.0 },
+                mathUtility,
+                modelToSketch
+            );
             SketchSegment widthSegment = FindRectangleSegment(
                 segments,
-                new[] { 1.0, 0.0, 0.0 }
+                widthDirection
             );
             SketchSegment heightSegment = FindRectangleSegment(
                 segments,
-                new[] { 0.0, 1.0, 0.0 }
+                heightDirection
             );
 
             double width = ToMeters(sketch.WidthMillimeters);
@@ -1528,6 +1659,46 @@ namespace Prompt2Cad.SolidWorks
                     true,
                     true
                 );
+                if (feature == null && step.Feature.Kind == "cut_revolve")
+                {
+                    Trace(
+                        "Retrying " + step.FeatureName +
+                        " with the compatibility cut-revolve API"
+                    );
+                    model.ClearSelection2(true);
+                    if (!nativeSketch.SketchFeature.Select2(false, 0))
+                    {
+                        throw new InvalidOperationException(
+                            "Could not reselect sketch '" + step.SketchName +
+                            "' for cut-revolve compatibility replay."
+                        );
+                    }
+                    SelectData retryAxisSelection =
+                        selectionManager.CreateSelectData();
+                    retryAxisSelection.Mark = 4;
+                    if (nativeSketch.RevolveAxis == null ||
+                        !nativeSketch.RevolveAxis.Select4(
+                            true,
+                            retryAxisSelection
+                        ))
+                    {
+                        throw new InvalidOperationException(
+                            "Could not reselect the native cut-revolve axis."
+                        );
+                    }
+                    feature = manager.FeatureRevolveCut2(
+                        DegreesToRadians(step.Feature.AngleDegrees),
+                        false,
+                        0.0,
+                        0,
+                        0,
+                        true,
+                        true,
+                        false,
+                        false,
+                        false
+                    );
+                }
             }
             else
             {
@@ -1591,31 +1762,11 @@ namespace Prompt2Cad.SolidWorks
                 ? step.FeatureName
                 : step.Pattern.SeedFeatureName;
 
-            if (step.Feature.DrivingDimension != null)
-            {
-                object dimensionObject = feature.Parameter("D1");
-                if (dimensionObject == null)
-                {
-                    throw new InvalidOperationException(
-                        "Native feature '" + step.FeatureName +
-                        "' has no D1 driving dimension."
-                    );
-                }
-                Dimension dimension = (Dimension)dimensionObject;
-                dimension.Name = step.Feature.DrivingDimension.NativeName;
-                int status = dimension.SetSystemValue3(
-                    ToSystemValue(step.Feature.DrivingDimension),
-                    (int)swSetValueInConfiguration_e.swSetValue_InAllConfigurations,
-                    null
-                );
-                if (status != (int)swSetValueReturnStatus_e.swSetValue_Successful)
-                {
-                    throw new InvalidOperationException(
-                        "SOLIDWORKS rejected feature dimension '" +
-                        step.Feature.DrivingDimension.NativeName + "'."
-                    );
-                }
-            }
+            ConfigureFeatureDrivingDimension(
+                feature,
+                step.Feature.DrivingDimension,
+                step.FeatureName
+            );
 
             if (!model.EditRebuild3())
             {
@@ -1688,7 +1839,9 @@ namespace Prompt2Cad.SolidWorks
                     "SOLIDWORKS did not create the Hole Wizard countersink."
                 );
             }
-            feature.Name = step.FeatureName;
+            feature.Name = step.Pattern == null
+                ? step.FeatureName
+                : step.Pattern.SeedFeatureName;
             if (!model.EditRebuild3())
             {
                 throw new InvalidOperationException(
@@ -1696,6 +1849,39 @@ namespace Prompt2Cad.SolidWorks
                 );
             }
             return feature;
+        }
+
+        private static void ConfigureFeatureDrivingDimension(
+            Feature feature,
+            DimensionSpec specification,
+            string featureName)
+        {
+            if (specification == null)
+            {
+                return;
+            }
+            object dimensionObject = feature.Parameter("D1");
+            if (dimensionObject == null)
+            {
+                throw new InvalidOperationException(
+                    "Native feature '" + featureName +
+                    "' has no D1 driving dimension."
+                );
+            }
+            Dimension dimension = (Dimension)dimensionObject;
+            dimension.Name = specification.NativeName;
+            int status = dimension.SetSystemValue3(
+                ToSystemValue(specification),
+                (int)swSetValueInConfiguration_e.swSetValue_InAllConfigurations,
+                null
+            );
+            if (status != (int)swSetValueReturnStatus_e.swSetValue_Successful)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS rejected feature dimension '" +
+                    specification.NativeName + "'."
+                );
+            }
         }
 
         private static Feature CreateNativePattern(
@@ -1934,6 +2120,7 @@ namespace Prompt2Cad.SolidWorks
             sketchFeature.Name = step.FeatureName + "_MirrorPositions";
             MathUtility mathUtility = application.IGetMathUtility();
             MathTransform modelToSketch = sketch.ModelToSketchTransform;
+            var patternPoints = new List<SketchPoint>();
             foreach (double[] position in step.Pattern.PositionsMillimeters.Skip(1))
             {
                 double[] point = ToSketchPoint(
@@ -1942,14 +2129,45 @@ namespace Prompt2Cad.SolidWorks
                     mathUtility,
                     modelToSketch
                 );
-                if (sketchManager.CreatePoint(point[0], point[1], point[2]) == null)
+                SketchPoint patternPoint = sketchManager.CreatePoint(
+                    point[0], point[1], point[2]
+                );
+                if (patternPoint == null)
                 {
                     throw new InvalidOperationException(
                         "SOLIDWORKS did not create a mirror-pattern point."
                     );
                 }
+                patternPoints.Add(patternPoint);
             }
             sketchManager.InsertSketch(true);
+
+            model.ClearSelection2(true);
+            if (!seedFeature.Select2(false, 4))
+            {
+                throw new InvalidOperationException(
+                    "Could not select the sketch-pattern seed feature."
+                );
+            }
+            SelectionMgr selectionManager =
+                (SelectionMgr)model.SelectionManager;
+            SelectData pointSelection = selectionManager.CreateSelectData();
+            pointSelection.Mark = 32;
+            foreach (SketchPoint patternPoint in patternPoints)
+            {
+                if (!patternPoint.Select4(true, pointSelection))
+                {
+                    throw new InvalidOperationException(
+                        "Could not select a mirror-pattern point."
+                    );
+                }
+            }
+            if (!sketchFeature.Select2(true, 64))
+            {
+                throw new InvalidOperationException(
+                    "Could not select the mirror-pattern sketch."
+                );
+            }
 
             SketchPatternFeatureData definition =
                 (SketchPatternFeatureData)model.FeatureManager.CreateDefinition(
@@ -1961,8 +2179,6 @@ namespace Prompt2Cad.SolidWorks
                     "SOLIDWORKS did not create sketch-pattern feature data."
                 );
             }
-            definition.Sketch = sketch;
-            definition.PatternFeatureArray = new object[] { seedFeature };
             definition.UseCentroid = true;
             definition.GeometryPattern = true;
             return model.FeatureManager.CreateFeature(definition);
@@ -2037,6 +2253,11 @@ namespace Prompt2Cad.SolidWorks
                 );
             }
             feature.Name = step.FeatureName;
+            ConfigureFeatureDrivingDimension(
+                feature,
+                step.Feature.DrivingDimension,
+                step.FeatureName
+            );
             if (!model.EditRebuild3())
             {
                 throw new InvalidOperationException(
@@ -2434,7 +2655,9 @@ namespace Prompt2Cad.SolidWorks
                     VerifyDimension(
                         model,
                         step.Feature.DrivingDimension,
-                        step.FeatureName
+                        step.Pattern == null
+                            ? step.FeatureName
+                            : step.Pattern.SeedFeatureName
                     );
                     dimensionCount += 1;
                 }
@@ -2568,27 +2791,50 @@ namespace Prompt2Cad.SolidWorks
             MathUtility mathUtility,
             MathTransform modelToSketch)
         {
-            if (frame == null || frame.OriginMillimeters == null ||
-                frame.XAxis == null || frame.Normal == null ||
-                localPoint == null || localPoint.Length < 2)
-            {
-                throw new InvalidOperationException(
-                    "A complete reference frame and local point are required."
-                );
-            }
-            double[] yAxis = Cross(frame.Normal, frame.XAxis);
-            double[] worldPoint = new[]
-            {
-                ToMeters(frame.OriginMillimeters[0] +
-                    frame.XAxis[0] * localPoint[0] + yAxis[0] * localPoint[1]),
-                ToMeters(frame.OriginMillimeters[1] +
-                    frame.XAxis[1] * localPoint[0] + yAxis[1] * localPoint[1]),
-                ToMeters(frame.OriginMillimeters[2] +
-                    frame.XAxis[2] * localPoint[0] + yAxis[2] * localPoint[1]),
-            };
+            double[] worldPoint = WorldPoint(frame, localPoint);
             MathPoint point = (MathPoint)mathUtility.CreatePoint(worldPoint);
             MathPoint sketchPoint = point.IMultiplyTransform(modelToSketch);
-            return (double[])sketchPoint.ArrayData;
+            double[] result = (double[])sketchPoint.ArrayData;
+            if (String.Equals(
+                System.Environment.GetEnvironmentVariable(
+                    "P2P_TRACE_COORDINATES"
+                ),
+                "1",
+                StringComparison.Ordinal))
+            {
+                Trace(
+                    "Mapped local [" + String.Join(",", localPoint) +
+                    "] through world [" + String.Join(",", worldPoint) +
+                    "] to sketch [" + String.Join(",", result) + "]"
+                );
+            }
+            return result;
+        }
+
+        private static double[] ToSketchDirection(
+            FrameSpec frame,
+            double[] localDirection,
+            MathUtility mathUtility,
+            MathTransform modelToSketch)
+        {
+            double[] sketchOrigin = ToSketchPoint(
+                frame,
+                new[] { 0.0, 0.0 },
+                mathUtility,
+                modelToSketch
+            );
+            double[] sketchEnd = ToSketchPoint(
+                frame,
+                localDirection,
+                mathUtility,
+                modelToSketch
+            );
+            return Normalize(new[]
+            {
+                sketchEnd[0] - sketchOrigin[0],
+                sketchEnd[1] - sketchOrigin[1],
+                sketchEnd[2] - sketchOrigin[2],
+            });
         }
 
         private static double[] WorldPoint(FrameSpec frame, double[] localPoint)
@@ -2718,6 +2964,32 @@ namespace Prompt2Cad.SolidWorks
                 tracePath,
                 DateTime.UtcNow.ToString("O") + " " + message + System.Environment.NewLine
             );
+        }
+
+        private static void TraceSketchPoints(Sketch sketch, string label)
+        {
+            if (!String.Equals(
+                System.Environment.GetEnvironmentVariable(
+                    "P2P_TRACE_COORDINATES"
+                ),
+                "1",
+                StringComparison.Ordinal) || sketch == null)
+            {
+                return;
+            }
+
+            var coordinates = new List<string>();
+            foreach (object pointObject in ObjectItems(sketch.GetSketchPoints2()))
+            {
+                SketchPoint point = pointObject as SketchPoint;
+                if (point != null)
+                {
+                    coordinates.Add(
+                        "[" + point.X + "," + point.Y + "," + point.Z + "]"
+                    );
+                }
+            }
+            Trace(label + ": " + String.Join(";", coordinates));
         }
 
         private static void TryDeleteTrace()

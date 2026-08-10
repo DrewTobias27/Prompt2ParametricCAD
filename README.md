@@ -166,6 +166,14 @@ prompt2cad-solidworks examples\models\circular_base_rectangular_boss.json `
   --output generated\model.SLDPRT
 ```
 
+Run the deterministic parity fixtures without opening SolidWorks, then execute
+the same suite in the installed application:
+
+```powershell
+prompt2cad-solidworks-smoke
+prompt2cad-solidworks-smoke --execute
+```
+
 The native replay planner covers every operation in the STEP builder:
 rectangle, circle, polygon, polyline, and line/arc sketches; blind/through
 extrusions and cuts; full or partial revolves; circular, linear, and mirrored

@@ -11,6 +11,7 @@ from prompt2cad.solidworks_export import model_path_to_replay_plan
 from prompt2cad.solidworks_export import materialize_stable_feature_ids
 from prompt2cad.solidworks_export import save_plan
 from prompt2cad.solidworks_replay import SOLIDWORKS_REPLAY_FORMAT
+from prompt2cad.solidworks_replay import SOLIDWORKS_REPLAY_VERSION
 from prompt2cad.solidworks_replay import SOLIDWORKS_PARITY_MATRIX
 from prompt2cad.solidworks_replay import SolidWorksExecutionError
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
@@ -578,6 +579,48 @@ def test_solidworks_parity_matrix_covers_every_step_operation_type():
         "chamfer",
         "fillet",
     }
+
+
+def test_native_runner_accepts_the_current_replay_plan_version():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        f"private const int ReplayVersion = {SOLIDWORKS_REPLAY_VERSION};"
+        in runner_source
+    )
+    assert "plan.Version != ReplayVersion" in runner_source
+
+
+def test_native_runner_disables_sketch_snapping_during_profile_creation():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "bool previousAddToDatabase = sketchManager.AddToDB;" in runner_source
+    assert "sketchManager.AddToDB = true;" in runner_source
+    assert "sketchManager.AddToDB = previousAddToDatabase;" in runner_source
+    assert "finally" in runner_source
+
+
+def test_native_runner_dimensions_rectangles_in_their_local_feature_frame():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "double[] widthDirection = ToSketchDirection(" in runner_source
+    assert "double[] heightDirection = ToSketchDirection(" in runner_source
+    assert "private static double[] ToSketchDirection(" in runner_source
 
 
 def test_export_invokes_packaged_runner_with_validated_plan(tmp_path: Path):

@@ -1,0 +1,51 @@
+{
+  "operations": [
+    {
+      "type": "extrude",
+      "id": "base",
+      "plane": "XY",
+      "profile": "rectangle",
+      "width": 110,
+      "height": 80,
+      "distance": 10
+    },
+    {
+      "type": "add_extrude",
+      "id": "bosses",
+      "target": "base.top",
+      "profile": "circle",
+      "positions": [[30, 20], [30, -20], [-30, 20], [-30, -20]],
+      "diameter": 14,
+      "distance": 8,
+      "pattern": {
+        "type": "mirror",
+        "seed_position": [30, 20],
+        "axes": ["x", "y"]
+      }
+    },
+    {
+      "type": "countersink",
+      "id": "mounting_holes",
+      "target": "base.top",
+      "positions": [[45, 30], [45, -30], [-45, 30], [-45, -30]],
+      "diameter": 5,
+      "countersink_diameter": 10,
+      "angle": 82,
+      "depth": "through",
+      "pattern": {
+        "type": "mirror",
+        "seed_position": [45, 30],
+        "axes": ["x", "y"]
+      }
+    },
+    {
+      "type": "cut",
+      "id": "second_boss_hole",
+      "target": "bosses.inst002.top",
+      "profile": "circle",
+      "positions": [[0, 0]],
+      "diameter": 5,
+      "depth": "through"
+    }
+  ]
+}
