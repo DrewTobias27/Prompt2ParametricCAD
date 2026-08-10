@@ -1,0 +1,16 @@
+{
+  "operations": [
+    {
+      "type": "revolve",
+      "id": "half_cylinder",
+      "plane": "XY",
+      "profile": "rectangle",
+      "positions": [[10, 0]],
+      "width": 20,
+      "height": 50,
+      "axis_start": [0, -1],
+      "axis_end": [0, 1],
+      "angle": 180
+    }
+  ]
+}

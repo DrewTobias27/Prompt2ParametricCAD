@@ -834,13 +834,6 @@ class FeatureRegistry:
         ]
         min_projection = min(corner_projections)
         max_projection = max(corner_projections)
-        center_projection = vector_dot(center, axis_direction)
-        positive_end_origin = center.add(
-            axis_direction.multiply(max_projection - center_projection)
-        )
-        negative_end_origin = center.add(
-            axis_direction.multiply(min_projection - center_projection)
-        )
         x_axis = self.reference_x_axis_for_axis(axis_direction, workplane)
 
         self.register_axis(
@@ -860,18 +853,23 @@ class FeatureRegistry:
         )
 
         end_faces = [
-            (
-                "front",
-                positive_end_origin,
-                axis_direction,
-            ),
-            (
-                "back",
-                negative_end_origin,
-                axis_direction.multiply(-1),
-            ),
+            ("front", axis_direction, True),
+            ("back", axis_direction.multiply(-1), False),
         ]
-        for index, (face_name, origin, normal) in enumerate(end_faces, start=1):
+        for index, (face_name, direction, choose_maximum) in enumerate(
+            end_faces,
+            start=1,
+        ):
+            face = self.planar_revolve_end_face(
+                solid,
+                direction,
+                axis_direction,
+                choose_maximum=choose_maximum,
+            )
+            if face is None:
+                continue
+            origin = face.Center()
+            normal = normalized_vector(face.normalAt())
             aliases = [
                 f"{reference_scope}.{face_name}",
                 f"{reference_scope}.face.{face_name}",
@@ -1005,6 +1003,30 @@ class FeatureRegistry:
                 edge_names,
                 aliases=aliases,
             )
+
+    @staticmethod
+    def planar_revolve_end_face(
+        solid,
+        direction: cq.Vector,
+        axis_direction: cq.Vector,
+        *,
+        choose_maximum: bool,
+    ):
+        """Return a real planar cap aligned with a revolve axis, if present."""
+        candidates = []
+        for face in solid.Faces():
+            if face.geomType() != "PLANE":
+                continue
+            normal = normalized_vector(face.normalAt())
+            if vector_dot(normal, direction) < 0.94:
+                continue
+            projection = vector_dot(face.Center(), axis_direction)
+            candidates.append((projection, face))
+
+        if not candidates:
+            return None
+        selector = max if choose_maximum else min
+        return selector(candidates, key=lambda item: item[0])[1]
 
     @staticmethod
     def reference_x_axis_for_axis(axis_direction: cq.Vector, workplane: cq.Plane) -> cq.Vector:

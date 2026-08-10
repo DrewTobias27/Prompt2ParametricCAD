@@ -24,6 +24,8 @@ SMOKE_FIXTURE_NAMES = (
     "solidworks_smoke_revolved_shaft",
     "solidworks_smoke_edge_details",
     "solidworks_smoke_coordinate_profiles",
+    "solidworks_smoke_arc_revolve",
+    "solidworks_smoke_partial_revolve",
 )
 
 

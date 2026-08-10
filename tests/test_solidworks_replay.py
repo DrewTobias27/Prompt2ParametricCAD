@@ -184,6 +184,23 @@ def test_replay_supports_revolves_and_coordinate_profiles():
     ]
 
 
+def test_replay_only_publishes_revolve_faces_that_exist():
+    model_data = json.loads(
+        (
+            Path(__file__).parents[1]
+            / "examples"
+            / "models"
+            / "solidworks_smoke_arc_revolve.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    capsule = replay_plan(model_data).features[0]
+
+    assert capsule.publish_references == {
+        "outer_surface": "P2P_capsule_outer_surface"
+    }
+
+
 def test_replay_maps_the_source_xy_datum_plane():
     model_data = native_model_data()
     model_data["operations"] = [model_data["operations"][0]]

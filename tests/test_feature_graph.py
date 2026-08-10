@@ -320,6 +320,46 @@ def test_revolved_base_registers_axis_faces_surface_and_edge_groups():
     assert graph.registry.get_reference_group("base.end_edges") is not None
 
 
+def test_revolved_capsule_does_not_invent_planar_end_faces():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "capsule",
+                "plane": "XY",
+                "profile": "sketch",
+                "positions": [[0, 0]],
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+                "start": [0, -30],
+                "segments": [
+                    {
+                        "type": "arc",
+                        "through": [5, -28.660254],
+                        "to": [10, -20],
+                    },
+                    {"type": "line", "to": [10, 20]},
+                    {
+                        "type": "arc",
+                        "through": [5, 28.660254],
+                        "to": [0, 30],
+                    },
+                    {"type": "line", "to": [0, -30]},
+                ],
+                "close": True,
+            }
+        ]
+    }
+
+    _, graph = build_model_with_graph(model_data)
+
+    assert graph.registry.get_reference("capsule.axis").kind == "axis"
+    assert graph.registry.get_reference("capsule.outer_surface").kind == "surface"
+    assert graph.registry.get_reference("capsule.front") is None
+    assert graph.registry.get_reference("capsule.back") is None
+
+
 def test_added_revolve_registers_own_references_when_id_is_present():
     model_data = {
         "operations": [

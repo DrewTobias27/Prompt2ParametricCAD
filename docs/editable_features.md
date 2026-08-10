@@ -107,9 +107,9 @@ constraints or selection rules:
 The runner temporarily disables SolidWorks' interactive dimension-entry prompt
 and restores the user's prior setting after replay. It uses the configured part
 template when available and falls back to the newest installed standard part
-template. Five real-application smoke models cover every supported profile as
-well as boss/cut features, through and blind end conditions, patterns,
-revolves, edge treatments, and multi-level feature dependencies.
+template. Seven real-application smoke models cover every supported profile as
+well as boss/cut features, through and blind end conditions, patterns, full and
+partial revolves, edge treatments, and multi-level feature dependencies.
 
 Legacy repeated source positions remain exact contours so existing JSON keeps
 working. Operations with canonical pattern metadata instead create one seed
@@ -157,5 +157,5 @@ relations. CadQuery remains the geometry oracle for every native replay
 expansion.
 
 Run `prompt2cad-solidworks-smoke` for the CadQuery build and native-plan phase.
-On a configured Windows workstation, add `--execute` to replay the same five
+On a configured Windows workstation, add `--execute` to replay the same seven
 fixtures into `SLDPRT` files and record per-fixture failures in one report.

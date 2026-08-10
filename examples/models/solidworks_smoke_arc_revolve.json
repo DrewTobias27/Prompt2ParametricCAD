@@ -1,0 +1,22 @@
+{
+  "operations": [
+    {
+      "type": "revolve",
+      "id": "capsule",
+      "plane": "XY",
+      "profile": "sketch",
+      "positions": [[0, 0]],
+      "axis_start": [0, -1],
+      "axis_end": [0, 1],
+      "angle": 360,
+      "start": [0, -30],
+      "segments": [
+        {"type": "arc", "through": [5, -28.660254], "to": [10, -20]},
+        {"type": "line", "to": [10, 20]},
+        {"type": "arc", "through": [5, 28.660254], "to": [0, 30]},
+        {"type": "line", "to": [0, -30]}
+      ],
+      "close": true
+    }
+  ]
+}

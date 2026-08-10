@@ -825,7 +825,14 @@ def _published_reference_names(
 
     profile = feature.source_operation.get("profile")
     if operation_type in {"revolve", "add_revolve"}:
-        semantics = ["front", "back", "outer_surface"]
+        created = set(feature.created_references)
+        semantics = []
+        if f"{feature.id}.face.f001" in created:
+            semantics.append("front")
+        if f"{feature.id}.face.f002" in created:
+            semantics.append("back")
+        if f"{feature.id}.surface.s001" in created:
+            semantics.append("outer_surface")
     elif profile == "rectangle":
         semantics = ["top", "front", "back", "left", "right"]
         if operation_type == "extrude":
