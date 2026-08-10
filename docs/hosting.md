@@ -42,9 +42,30 @@ After deployment:
 1. Open `/health` and confirm `{"status":"ok"}`.
 2. Open `/` and confirm the React application loads.
 3. Build one manual model and download its STEP file.
-4. Generate one known-good prompt and download its STEP file.
-5. Confirm the API key is present only in Render's secret settings.
+4. Download its SolidWorks package and inspect `manifest.json` and the replay
+   plan inside the ZIP.
+5. Generate one known-good prompt and download its STEP file.
+6. Confirm the API key is present only in Render's secret settings.
 
-The hosted application exports STEP and editable model data. Native SolidWorks
-replay remains a local Windows feature because it requires an installed and
-licensed SolidWorks application.
+The hosted application exports STEP, editable model data, and a validated
+SolidWorks replay package. The package is generated in memory and contains no
+API credentials. Native `SLDPRT` creation remains a local Windows step because
+it requires an installed and licensed SolidWorks application: extract the ZIP
+and run `Build-SolidWorks-Part.ps1` from Windows PowerShell.
+
+## Public-release gate
+
+Before linking the application from a LinkedIn post:
+
+1. Download a fresh SolidWorks package from the deployed public URL.
+2. Run its launcher on Windows with the supported SolidWorks version.
+3. Confirm the resulting `SLDPRT` opens, rebuilds, and exposes editable named
+   sketches, dimensions, patterns, and ordered features.
+4. Run `prompt2cad-solidworks-smoke --execute` and require every native parity
+   fixture to pass.
+5. Confirm both download buttons and the package instructions work for a new
+   user without access to the repository.
+
+The messaging requirements for that later post are recorded in
+[LinkedIn launch notes](linkedin_launch_notes.md). They are release constraints,
+not a prepared post draft.

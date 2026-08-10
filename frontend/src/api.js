@@ -28,6 +28,34 @@ async function postJson(path, payload) {
   return data;
 }
 
+async function postDownload(path, payload, fallbackFilename) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    let detail = null;
+    try {
+      const data = await response.json();
+      detail = typeof data?.detail === "string" ? data.detail : data?.message;
+    } catch {
+      // The status fallback remains useful for non-JSON server failures.
+    }
+    throw new Error(detail || `Request failed with status ${response.status}`);
+  }
+
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return {
+    blob: await response.blob(),
+    filename: filenameMatch?.[1] || fallbackFilename,
+  };
+}
+
 export function generateFromPrompt(prompt) {
   return postJson("/generate", { prompt });
 }
@@ -57,6 +85,17 @@ export function getEditableModel(modelData) {
   return postJson("/editable-model", {
     model_data: modelData,
   });
+}
+
+export function createSolidWorksPackage(modelData, filenameHint) {
+  return postDownload(
+    "/solidworks-package",
+    {
+      model_data: modelData,
+      filename_hint: filenameHint,
+    },
+    "prompt2cad-solidworks.zip",
+  );
 }
 
 export function editModelParameters(modelData, updates, filenameHint) {

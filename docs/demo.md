@@ -4,7 +4,8 @@
 
 Prompt2ParametricCAD converts a natural-language or guided mechanical design
 into validated parametric features, builds the solid with CadQuery, and exports
-a STEP file while retaining a machine-readable feature graph.
+a STEP file or a local SolidWorks replay package while retaining a
+machine-readable feature graph.
 
 ## Prepare
 
@@ -27,9 +28,11 @@ from the second device.
 1. Describe a mechanical part and generate it.
 2. Show the generated operation JSON and quality result.
 3. Download and open the STEP file.
-4. Switch to the manual builder.
-5. Add a base, a feature, a pattern, and a cut while showing the drawing preview.
-6. Explain that both workflows produce the same operation representation.
+4. Show the separate SolidWorks-package download and explain that it creates an
+   editable `SLDPRT` locally for users who have Windows and SolidWorks.
+5. Switch to the manual builder.
+6. Add a base, a feature, a pattern, and a cut while showing the drawing preview.
+7. Explain that both workflows produce the same operation representation.
 
 Reliable starting prompt:
 
@@ -51,11 +54,10 @@ boss, 10 mm tall, with a 10 mm concentric through hole.
 ## Honest limitations
 
 - Ambiguous or highly complex prompts can still lose spatial relationships.
-- STEP does not preserve a native SolidWorks feature tree. A separate native
-  replay path covers the current sketch, extrude, cut, revolve, pattern,
-  countersink, chamfer, fillet, placement, and named-face vocabulary. Treat it
-  as a tested prototype until the target SolidWorks installation passes its
-  native smoke fixtures.
+- STEP does not preserve a native SolidWorks feature tree. The downloadable
+  SolidWorks package instead replays the supported sketch, extrude, cut,
+  revolve, pattern, countersink, chamfer, fillet, placement, and named-face
+  vocabulary through an installed copy of SolidWorks.
 - Curved-surface targeting and topology-changing detail features remain active
   development areas.
 

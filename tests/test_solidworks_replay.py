@@ -676,6 +676,19 @@ def test_native_runner_dimensions_rectangles_in_their_local_feature_frame():
     assert "private static double[] ToSketchDirection(" in runner_source
 
 
+def test_native_runner_anchors_center_rectangles_with_explicit_geometry():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "CreateRectangleCenterPoint(" in runner_source
+    assert "segment.ConstructionGeometry" in runner_source
+    assert 'model.SketchAddConstraints("sgATMIDDLE")' in runner_source
+
+
 def test_export_invokes_packaged_runner_with_validated_plan(tmp_path: Path):
     plan = replay_plan()
     output_path = tmp_path / "native" / "part.SLDPRT"

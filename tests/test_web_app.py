@@ -38,6 +38,52 @@ def test_editable_routes_are_exposed_in_the_api_contract():
 
     assert "post" in paths["/editable-model"]
     assert "post" in paths["/edit-parameters"]
+    assert "post" in paths["/solidworks-package"]
+
+
+def test_solidworks_package_route_returns_downloadable_zip(monkeypatch):
+    class FakePackage:
+        filename = "demo-solidworks.zip"
+        content = b"zip-bytes"
+        manifest = {"version": 1}
+
+    monkeypatch.setattr(
+        web_app,
+        "create_solidworks_package",
+        lambda model_data, filename_hint: FakePackage(),
+    )
+
+    response = web_app.download_solidworks_package(
+        web_app.CADSolidWorksPackageRequest(
+            model_data={"operations": []},
+            filename_hint="demo",
+        )
+    )
+
+    assert response.media_type == "application/zip"
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="demo-solidworks.zip"'
+    )
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-prompt2cad-package-version"] == "1"
+
+
+def test_solidworks_package_route_reports_unsupported_models(monkeypatch):
+    def reject_package(model_data, filename_hint):
+        raise ValueError("feature_2 cannot be replayed")
+
+    monkeypatch.setattr(web_app, "create_solidworks_package", reject_package)
+
+    with pytest.raises(HTTPException) as error:
+        web_app.download_solidworks_package(
+            web_app.CADSolidWorksPackageRequest(
+                model_data={"operations": []},
+                filename_hint="demo",
+            )
+        )
+
+    assert error.value.status_code == 422
+    assert "feature_2 cannot be replayed" in error.value.detail
 
 
 def test_home_reports_when_frontend_is_not_built(monkeypatch, tmp_path):

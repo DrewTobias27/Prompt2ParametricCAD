@@ -1137,6 +1137,49 @@ textarea {
   transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
+.download-section {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.download-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.download-link.solidworks-download {
+  border-color: #334155;
+  background: #ffffff;
+  color: #1e293b;
+  box-shadow: none;
+  font: inherit;
+  font-weight: 700;
+}
+
+.download-link.solidworks-download:hover:not(:disabled) {
+  border-color: #1e293b;
+  background: #f8fafc;
+  color: #0f172a;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
+}
+
+.download-link.solidworks-download:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.download-note,
+.package-status {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.84rem;
+}
+
+.package-status.error {
+  color: #b91c1c;
+}
+
 .download-link svg {
   width: 1.15rem;
   height: 1.15rem;

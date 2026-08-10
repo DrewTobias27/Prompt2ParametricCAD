@@ -12,6 +12,7 @@ from typing import Any
 import cadquery as cq
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -28,6 +29,7 @@ from prompt2cad.prompting import suggest_base_model_data
 from prompt2cad.prompting import suggest_feature_model_data
 from prompt2cad.quality import check_model_quality
 from prompt2cad.schema import validate_model_data
+from prompt2cad.solidworks_package import create_solidworks_package
 from prompt2cad.web_runtime import cleanup_step_files
 from prompt2cad.web_runtime import environment_int
 from prompt2cad.web_runtime import SlidingWindowRateLimiter
@@ -51,6 +53,11 @@ class CADBuildRequest(BaseModel):
 
 class CADEditableModelRequest(BaseModel):
     model_data: dict
+
+
+class CADSolidWorksPackageRequest(BaseModel):
+    model_data: dict
+    filename_hint: str = "prompt2cad-model"
 
 
 class CADParameterEditRequest(BaseModel):
@@ -446,6 +453,36 @@ def download_step_file(filename: str):
         path=step_path,
         filename=filename,
         media_type="application/step",
+    )
+
+
+@app.post("/solidworks-package")
+def download_solidworks_package(request: CADSolidWorksPackageRequest):
+    """Return a validated local replay bundle for native SLDPRT creation."""
+    try:
+        package = create_solidworks_package(
+            request.model_data,
+            request.filename_hint,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=f"SolidWorks package is unavailable: {error}",
+        ) from error
+    except FileNotFoundError as error:
+        raise HTTPException(
+            status_code=500,
+            detail="SolidWorks package assets are unavailable on the server.",
+        ) from error
+
+    return StreamingResponse(
+        iter([package.content]),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{package.filename}"',
+            "Cache-Control": "no-store",
+            "X-Prompt2CAD-Package-Version": str(package.manifest["version"]),
+        },
     )
 
 

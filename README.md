@@ -1,5 +1,7 @@
 # Prompt2ParametricCAD
 
+[Try the live app](https://prompt2parametriccad.onrender.com/)
+
 Prompt2ParametricCAD turns natural-language design intent or guided user input
 into validated, parametric CAD features. It uses an intermediate JSON
 representation to separate language understanding from geometry construction,
@@ -19,8 +21,8 @@ and represented as a dependency graph for validated editing and native replay.
 - CadQuery solid construction and STEP export
 - Feature graph with stable IDs, parents, children, sketches, faces, and edges
 - Versioned editable-model document with named parameters and validated rebuilds
-- Verified native SolidWorks replay prototype with sketches, dimensions, and
-  ordered boss/cut features
+- Verified native SolidWorks replay with sketches, dimensions, patterns, and
+  ordered features
 - Automatic repair fallback with structured diagnostics
 - Focused result refinement that preserves prior design intent and validates each revision
 - Deterministic fixtures and API benchmarks for semantic and geometric quality
@@ -45,7 +47,7 @@ to regenerate its STEP files locally.
 | Hole features | Through, blind, counterbore, countersink |
 | Detail features | Fillet, chamfer, rounded slots and pockets |
 | References | Canonical face/edge IDs plus readable aliases such as `base.top` |
-| Outputs | STEP geometry, operation JSON, editable-model JSON, feature-tree debug JSON, and a strict native `SLDPRT` prototype subset |
+| Outputs | STEP geometry, operation JSON, editable-model JSON, feature-tree debug JSON, and validated native SolidWorks replay packages |
 
 Complex CAD requests remain an active research problem. The system is strongest
 on single connected mechanical parts built from sketches, extrusions, cuts,
@@ -132,8 +134,10 @@ and troubleshooting.
 
 The production web application is packaged as one Docker service: React is
 built into static assets, FastAPI serves the interface and API, and CadQuery
-creates temporary STEP downloads. The included `render.yaml` configures a
-Render web service with a health check and public-demo safeguards. See
+creates temporary STEP downloads. Successful models can also be downloaded as
+validated SolidWorks replay packages for local native `SLDPRT` creation. The
+included `render.yaml` configures a Render web service with a health check and
+public-demo safeguards. See
 [docs/hosting.md](docs/hosting.md) for deployment and secret configuration.
 
 ## Command-line examples
@@ -190,6 +194,10 @@ targets, local placement frames, and deterministic feature names rather than
 importing a featureless STEP body. Planning, serialization, and the automation
 runner are regression-tested without opening SolidWorks; each installed
 SolidWorks version still requires a native smoke test before release use.
+The hosted application packages the source model, editable-model document,
+validated replay plan, and local runner into a ZIP. After extraction, run
+`Build-SolidWorks-Part.ps1` on Windows with SolidWorks installed; no API
+credential is included in the package.
 
 Run the automated tests:
 

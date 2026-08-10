@@ -36,7 +36,14 @@ export function DesignReview({ base, features, usesApiAssistance }) {
   );
 }
 
-export function OutputPanel({ status, result, downloadUrl }) {
+export function OutputPanel({
+  status,
+  result,
+  downloadUrl,
+  onDownloadSolidWorks,
+  isSolidWorksLoading,
+  solidWorksStatus,
+}) {
   const hasRequestError = status.startsWith("Error:");
 
   return (
@@ -46,13 +53,37 @@ export function OutputPanel({ status, result, downloadUrl }) {
         {status || "No output yet."}
       </p>
 
-      {downloadUrl && (
-        <a className="download-link" href={downloadUrl}>
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" />
-          </svg>
-          Download STEP file
-        </a>
+      {downloadUrl && result?.model_data && (
+        <div className="download-section">
+          <div className="download-actions">
+            <a className="download-link" href={downloadUrl}>
+              <DownloadIcon />
+              Download STEP
+            </a>
+            <button
+              className="download-link solidworks-download"
+              type="button"
+              onClick={onDownloadSolidWorks}
+              disabled={isSolidWorksLoading}
+            >
+              <DownloadIcon />
+              {isSolidWorksLoading ? "Preparing package..." : "Download SolidWorks package"}
+            </button>
+          </div>
+          <p className="download-note">
+            Builds an editable SLDPRT on your computer. Requires Windows and an installed copy of SolidWorks.
+          </p>
+          {solidWorksStatus && (
+            <p
+              className={solidWorksStatus.includes("unavailable")
+                ? "package-status error"
+                : "package-status"}
+              role="status"
+            >
+              {solidWorksStatus}
+            </p>
+          )}
+        </div>
       )}
 
       {result?.revision_summary && (
@@ -66,6 +97,14 @@ export function OutputPanel({ status, result, downloadUrl }) {
 
       {result && <pre>{JSON.stringify(result, null, 2)}</pre>}
     </section>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" />
+    </svg>
   );
 }
 

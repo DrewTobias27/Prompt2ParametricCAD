@@ -1141,8 +1141,10 @@ namespace Prompt2Cad.SolidWorks
                         "SOLIDWORKS did not create the rectangle."
                     );
                 }
-                SketchPoint centerPoint = FindSketchPointAt(
-                    segments[0].GetSketch(),
+                SketchPoint centerPoint = CreateRectangleCenterPoint(
+                    model,
+                    sketchManager,
+                    segments,
                     centerWorld
                 );
                 ApplyPlacementControl(
@@ -1464,6 +1466,55 @@ namespace Prompt2Cad.SolidWorks
                 );
             }
             return bestPoint;
+        }
+
+        private static SketchPoint CreateRectangleCenterPoint(
+            ModelDoc2 model,
+            SketchManager sketchManager,
+            SketchSegment[] rectangleSegments,
+            double[] center)
+        {
+            SketchPoint centerPoint = sketchManager.CreatePoint(
+                center[0], center[1], center[2]
+            );
+            if (centerPoint == null)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS did not create the rectangle center point."
+                );
+            }
+
+            SketchSegment centerGuide = rectangleSegments.FirstOrDefault(
+                segment => segment != null && segment.ConstructionGeometry
+            );
+            if (centerGuide == null)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS did not expose the center-rectangle guide geometry."
+                );
+            }
+
+            bool previousAddToDatabase = sketchManager.AddToDB;
+            try
+            {
+                sketchManager.AddToDB = false;
+                model.ClearSelection2(true);
+                if (!centerPoint.Select4(false, null) ||
+                    !centerGuide.Select4(true, null))
+                {
+                    throw new InvalidOperationException(
+                        "Could not select the rectangle center references."
+                    );
+                }
+                model.SketchAddConstraints("sgATMIDDLE");
+                model.ClearSelection2(true);
+            }
+            finally
+            {
+                sketchManager.AddToDB = previousAddToDatabase;
+                model.ClearSelection2(true);
+            }
+            return centerPoint;
         }
 
         private static void ApplyPlacementControl(

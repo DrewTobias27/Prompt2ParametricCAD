@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildFromModelData,
+  createSolidWorksPackage,
   editModelParameters,
   generateFromPrompt,
   getEditableModel,
@@ -42,6 +43,8 @@ export default function App() {
   const [editableModel, setEditableModel] = useState(null);
   const [isEditableLoading, setIsEditableLoading] = useState(false);
   const [parameterHistory, setParameterHistory] = useState([]);
+  const [isSolidWorksLoading, setIsSolidWorksLoading] = useState(false);
+  const [solidWorksStatus, setSolidWorksStatus] = useState("");
 
   const usesApiAssistance = hasApiAssistedFields({ base, features });
   const manualModelData = useMemo(
@@ -107,6 +110,7 @@ export default function App() {
     setStatus("");
     setEditableModel(null);
     setParameterHistory([]);
+    setSolidWorksStatus("");
   }, []);
 
   const updateFeatures = useCallback((update) => {
@@ -115,6 +119,7 @@ export default function App() {
     setStatus("");
     setEditableModel(null);
     setParameterHistory([]);
+    setSolidWorksStatus("");
   }, []);
 
   const updatePrompt = useCallback((value) => {
@@ -125,6 +130,7 @@ export default function App() {
     setRevisionHistory([]);
     setEditableModel(null);
     setParameterHistory([]);
+    setSolidWorksStatus("");
   }, []);
 
   function handleModeChange(nextMode) {
@@ -139,6 +145,7 @@ export default function App() {
     setRevisionHistory([]);
     setEditableModel(null);
     setParameterHistory([]);
+    setSolidWorksStatus("");
   }
 
   async function runRequest(request, {
@@ -276,6 +283,39 @@ export default function App() {
     setResult(previousResult);
     setParameterHistory((history) => history.slice(0, -1));
     setStatus(`Restored revision ${previousResult.revision ?? 1}.`);
+  }
+
+  async function handleSolidWorksDownload() {
+    if (!result?.model_data || isSolidWorksLoading) {
+      return;
+    }
+
+    setIsSolidWorksLoading(true);
+    setSolidWorksStatus("Preparing validated SolidWorks package...");
+    try {
+      const filenameHint = mode === "prompt"
+        ? prompt
+        : `manual ${base.profile} model`;
+      const download = await createSolidWorksPackage(
+        result.model_data,
+        filenameHint,
+      );
+      const objectUrl = URL.createObjectURL(download.blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = download.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      setSolidWorksStatus(
+        "Package downloaded. Extract it on a Windows computer with SolidWorks.",
+      );
+    } catch (error) {
+      setSolidWorksStatus(`SolidWorks package unavailable: ${error.message}`);
+    } finally {
+      setIsSolidWorksLoading(false);
+    }
   }
 
   function handleTargetReferenceClick(reference) {
@@ -416,7 +456,14 @@ export default function App() {
               <RepairHistoryPanel repairHistory={result?.repair_history} />
             </>
           )}
-          <OutputPanel status={status} result={result} downloadUrl={downloadUrl} />
+          <OutputPanel
+            status={status}
+            result={result}
+            downloadUrl={downloadUrl}
+            onDownloadSolidWorks={handleSolidWorksDownload}
+            isSolidWorksLoading={isSolidWorksLoading}
+            solidWorksStatus={solidWorksStatus}
+          />
         </aside>
       </section>
     </main>
