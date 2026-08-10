@@ -16,9 +16,12 @@ flowchart LR
     V --> B["CadQuery interpreter"]
     B --> S["Connected solid"]
     B --> G["Feature graph"]
+    J --> D["Editable model document"]
+    G --> D
     S --> Q["Geometry and operation-effect checks"]
     G --> Q
     Q --> E["STEP and debug export"]
+    D -.-> N["Future native-CAD replay"]
 ```
 
 The operation JSON is the central contract. Prompt generation and the manual
@@ -38,6 +41,7 @@ it.
 | `feature_graph.py` | Feature dependencies, references, and build order |
 | `feature_registry.py` | Runtime face, edge, alias, and target lookup |
 | `sketch_model.py` | Normalized sketch entities and geometric metadata |
+| `editable_model.py` | Versioned features, named parameters, source paths, and transactional rebuilds |
 | `quality.py` | Schema, structure, build, export, and geometry quality gates |
 | `operation_effects.py` | Verifies each feature materially changed geometry |
 | `web_app.py` | FastAPI endpoints and production frontend hosting |
@@ -68,6 +72,7 @@ The interpreter builds operations sequentially. Each feature receives:
 - a build-order index;
 - parent and child relationships;
 - a normalized sketch;
+- named driving parameters linked to exact operation source paths;
 - created face and edge references;
 - readable aliases such as `feature_1.top`;
 - geometry summaries used by evaluators.
@@ -111,6 +116,8 @@ The public workflow uses `/generate` for automatic prompt generation and
 - Some compound CAD concepts still lower into multiple primitive operations.
 - Semantic correctness is harder to prove than geometric validity.
 
-The feature graph, normalized sketches, and reference registry are intentionally
-designed as the intermediate layer for future SolidWorks or other native-CAD
-adapters.
+The feature graph, normalized sketches, reference registry, and versioned
+editable-model document are intentionally designed as the intermediate layer
+for future SolidWorks or other native-CAD adapters. See
+[editable_features.md](editable_features.md) for the replay strategy, current
+representation gaps, and planned safeguards against topology changes.

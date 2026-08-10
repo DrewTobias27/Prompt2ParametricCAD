@@ -18,6 +18,7 @@ and represented as a dependency graph for future editable CAD export.
 - Strict JSON schema and progressive geometry validation
 - CadQuery solid construction and STEP export
 - Feature graph with stable IDs, parents, children, sketches, faces, and edges
+- Versioned editable-model document with named parameters and validated rebuilds
 - Automatic repair fallback with structured diagnostics
 - Focused result refinement that preserves prior design intent and validates each revision
 - Deterministic fixtures and API benchmarks for semantic and geometric quality
@@ -42,7 +43,7 @@ to regenerate its STEP files locally.
 | Hole features | Through, blind, counterbore, countersink |
 | Detail features | Fillet, chamfer, rounded slots and pockets |
 | References | Canonical face/edge IDs plus readable aliases such as `base.top` |
-| Outputs | STEP geometry, operation JSON, feature-tree debug JSON |
+| Outputs | STEP geometry, operation JSON, editable-model JSON, feature-tree debug JSON |
 
 Complex CAD requests remain an active research problem. The system is strongest
 on single connected mechanical parts built from sketches, extrusions, cuts,
@@ -139,6 +140,14 @@ prompt2cad-feature-tree examples\models\api_rectangular_plate.json `
   --output generated\plate-feature-tree.json
 ```
 
+Export the versioned editable-model representation used for parameter editing
+and future native-CAD replay:
+
+```powershell
+prompt2cad-editable-model examples\models\api_rectangular_plate.json `
+  --output generated\plate-editable.json
+```
+
 Run the automated tests:
 
 ```powershell
@@ -181,8 +190,10 @@ generated/        Ignored local STEP files, reports, logs, and training exports
 
 This is a working prototype and portfolio project, not a replacement for a
 production CAD system. STEP export preserves the final solid but does not
-preserve a native SolidWorks feature tree. The internal feature graph and sketch
-representation are scaffolding for that longer-term goal.
+preserve a native SolidWorks feature tree. The versioned editable-model
+document now preserves named driving values, build order, support references,
+and normalized sketches so edits can be validated and rebuilt before a future
+native-CAD adapter replays them.
 
 Current priorities are:
 
@@ -192,4 +203,5 @@ Current priorities are:
 4. Native-CAD export experiments that retain sketches and feature history.
 
 For implementation details and known constraints, see
-[docs/architecture.md](docs/architecture.md).
+[docs/architecture.md](docs/architecture.md) and the
+[editable feature architecture](docs/editable_features.md).
