@@ -9,11 +9,12 @@ both from one origin.
 The repository includes `render.yaml`. Creating a Render Blueprint from the
 repository applies the service, health-check, and runtime settings.
 
-The Blueprint requests Render's paid `standard` instance because its 2 GB RAM
-and dedicated CPU are a safer baseline for CadQuery/OpenCascade than the free
-512 MB service. Render shows the cost before the Blueprint is created. A free
-instance can be used for an initial deployment experiment by changing `plan` to
-`free`, but it can sleep when idle and is not the recommended portfolio link.
+The Blueprint defaults to Render's free instance so the portfolio prototype can
+be hosted without adding payment information. Free services have 512 MB RAM and
+sleep when idle, so the first request after a quiet period can be slow and
+CadQuery/OpenCascade might exceed the available memory on complex parts. If
+that happens, keep the full generator local rather than silently weakening its
+geometry pipeline.
 
 The only required secret is:
 

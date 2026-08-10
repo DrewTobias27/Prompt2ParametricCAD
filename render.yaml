@@ -2,7 +2,7 @@ services:
   - type: web
     name: prompt2parametriccad
     runtime: docker
-    plan: standard
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: OPENAI_API_KEY
