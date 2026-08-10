@@ -18,3 +18,46 @@ publish the post until Drew asks.
 
 Do not link the SolidWorks claim publicly until the release gate in
 `docs/hosting.md` passes against a package downloaded from the deployed website.
+
+## Verified release evidence
+
+Verified against the public deployment on August 10, 2026:
+
+- A multi-feature mounting plate generated successfully from a natural-language
+  prompt with four patterned holes, a raised boss, and a concentric through hole.
+- A follow-up correction changed the four-hole edge margin from 10 mm to 14 mm
+  and the boss height from 10 mm to 13 mm while preserving a valid single solid.
+- The public STEP endpoint returned a non-empty model file.
+- A SolidWorks replay package downloaded from the public site created a native
+  `SLDPRT` with one solid, two native features, and twelve editable dimensions.
+- The Python regression suite passed with 404 tests and one skipped test.
+- The native SolidWorks verification suite passed all seven supported cases.
+
+## Recommended visuals
+
+Use a small set that communicates different capabilities instead of many similar
+parts:
+
+1. A clean live-app capture showing the description, generated feature tree,
+   download actions, and refinement box.
+2. `cross-arm-hub-plate.png` for complex sketch geometry and repeated features.
+3. `two-wall-u-bracket.png` for parent-child features and work on multiple faces.
+4. `turned-shaft.png` for revolved geometry.
+5. A real SolidWorks screenshot showing the generated native feature tree and an
+   editable dimension. Do not substitute a STEP import screenshot for this proof.
+
+The prepared portfolio renders are stored in the portfolio repository under
+`public/assets/prompt2cad/renders/`.
+
+## Final human checks
+
+- Open the live site on a phone and confirm that the builder, output, and download
+  controls remain readable without horizontal scrolling.
+- Capture a clean desktop image or short recording without browser chrome,
+  scrollbars, API keys, local paths, or unrelated tabs.
+- Run one known-good prompt and one correction immediately before publishing.
+- Download both the STEP file and SolidWorks package from the public site.
+- Run the downloaded SolidWorks package on Windows with SolidWorks and capture
+  the resulting native feature tree.
+- Preview the finished LinkedIn post and portfolio link while signed out or in a
+  private browser window.
