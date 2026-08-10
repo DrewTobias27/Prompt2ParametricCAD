@@ -7,7 +7,7 @@ then builds real solids with CadQuery and exports STEP files.
 
 The project is designed around inspectable design intent—not one-off mesh
 generation. Every model can be validated, evaluated, rebuilt in feature order,
-and represented as a dependency graph for future editable CAD export.
+and represented as a dependency graph for validated editing and native replay.
 
 ## Highlights
 
@@ -19,6 +19,8 @@ and represented as a dependency graph for future editable CAD export.
 - CadQuery solid construction and STEP export
 - Feature graph with stable IDs, parents, children, sketches, faces, and edges
 - Versioned editable-model document with named parameters and validated rebuilds
+- Verified native SolidWorks replay prototype with sketches, dimensions, and
+  ordered boss/cut features
 - Automatic repair fallback with structured diagnostics
 - Focused result refinement that preserves prior design intent and validates each revision
 - Deterministic fixtures and API benchmarks for semantic and geometric quality
@@ -43,7 +45,7 @@ to regenerate its STEP files locally.
 | Hole features | Through, blind, counterbore, countersink |
 | Detail features | Fillet, chamfer, rounded slots and pockets |
 | References | Canonical face/edge IDs plus readable aliases such as `base.top` |
-| Outputs | STEP geometry, operation JSON, editable-model JSON, feature-tree debug JSON |
+| Outputs | STEP geometry, operation JSON, editable-model JSON, feature-tree debug JSON, and a strict native `SLDPRT` prototype subset |
 
 Complex CAD requests remain an active research problem. The system is strongest
 on single connected mechanical parts built from sketches, extrusions, cuts,
@@ -83,6 +85,7 @@ Requirements:
 - Python 3.11 or 3.12
 - Node.js and pnpm
 - An OpenAI API key for natural-language generation
+- SolidWorks 2025 on Windows only when using native `SLDPRT` replay
 
 The current setup and launch helpers are tested on Windows.
 
@@ -141,12 +144,36 @@ prompt2cad-feature-tree examples\models\api_rectangular_plate.json `
 ```
 
 Export the versioned editable-model representation used for parameter editing
-and future native-CAD replay:
+and native-CAD replay:
 
 ```powershell
 prompt2cad-editable-model examples\models\api_rectangular_plate.json `
   --output generated\plate-editable.json
 ```
+
+Validate whether a model is in the current native SolidWorks subset without
+opening SolidWorks:
+
+```powershell
+prompt2cad-solidworks examples\models\circular_base_rectangular_boss.json `
+  --plan-only --plan-output generated\model-solidworks-plan.json
+```
+
+Replay a supported model into native sketches and ordered features:
+
+```powershell
+prompt2cad-solidworks examples\models\circular_base_rectangular_boss.json `
+  --output generated\model.SLDPRT
+```
+
+The native replay planner covers every operation in the STEP builder:
+rectangle, circle, polygon, polyline, and line/arc sketches; blind/through
+extrusions and cuts; full or partial revolves; circular, linear, and mirrored
+patterns; countersinks; chamfers; and fillets. It preserves semantic face
+targets, local placement frames, and deterministic feature names rather than
+importing a featureless STEP body. Planning, serialization, and the automation
+runner are regression-tested without opening SolidWorks; each installed
+SolidWorks version still requires a native smoke test before release use.
 
 Run the automated tests:
 
@@ -189,18 +216,19 @@ generated/        Ignored local STEP files, reports, logs, and training exports
 ## Project status
 
 This is a working prototype and portfolio project, not a replacement for a
-production CAD system. STEP export preserves the final solid but does not
-preserve a native SolidWorks feature tree. The versioned editable-model
-document now preserves named driving values, build order, support references,
-and normalized sketches so edits can be validated and rebuilt before a future
-native-CAD adapter replays them.
+production CAD system. STEP export preserves the final solid but not an editable
+feature tree. The optional SolidWorks adapter replays the supported operation
+history into named native sketches, dimensions, patterns, Hole Wizard
+countersinks, edge treatments, ordered features, and an `SLDPRT`. The versioned
+editable-model document remains the CAD-neutral source of truth for validated
+edits and future adapter expansion.
 
 Current priorities are:
 
 1. Broader design-intent vocabulary and more reliable spatial relationships.
-2. Stable face and edge references after topology-changing operations.
-3. Stronger semantic evaluation of whether geometry matches the prompt.
-4. Native-CAD export experiments that retain sketches and feature history.
+2. Real-application smoke fixtures across supported SolidWorks versions.
+3. Stable face and edge references after topology-changing native edits.
+4. Stronger semantic evaluation, sketch constraints, and locating dimensions.
 
 For implementation details and known constraints, see
 [docs/architecture.md](docs/architecture.md) and the

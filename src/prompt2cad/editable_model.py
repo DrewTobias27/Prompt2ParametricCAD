@@ -143,7 +143,9 @@ class EditableModelDocument:
             "warnings": list(self.warnings),
             "native_replay": {
                 "parameterization_complete": self.parameterization_complete,
-                "exporter_implemented": False,
+                "exporter_implemented": True,
+                "adapter_status": "prototype",
+                "eligibility_requires_replay_planning": True,
             },
             "source_model_data": deepcopy(self.source_model_data),
         }
@@ -314,7 +316,7 @@ def _representation_notes(
         )
 
     positions = operation.get("positions", [])
-    if len(positions) > 1:
+    if len(positions) > 1 and not operation.get("pattern"):
         notes.append(
             "multiple instances are stored in one operation; native replay "
             "should separate the seed feature from its pattern"

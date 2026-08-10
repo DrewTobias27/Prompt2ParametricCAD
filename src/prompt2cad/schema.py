@@ -24,6 +24,78 @@ POSITIONS_SCHEMA = {
     "minItems": 1,
 }
 
+CIRCULAR_PATTERN_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["circular"]},
+        "seed_position": POINT_SCHEMA,
+        "center": POINT_SCHEMA,
+        "count": {"type": "integer", "minimum": 2},
+        "total_angle_degrees": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 360,
+        },
+    },
+    "required": [
+        "type",
+        "seed_position",
+        "center",
+        "count",
+        "total_angle_degrees",
+    ],
+}
+
+LINEAR_PATTERN_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["linear"]},
+        "seed_position": POINT_SCHEMA,
+        "direction_1": POINT_SCHEMA,
+        "count_1": {"type": "integer", "minimum": 1},
+        "spacing_1": {"type": "number", "minimum": 0},
+        "direction_2": POINT_SCHEMA,
+        "count_2": {"type": "integer", "minimum": 1},
+        "spacing_2": {"type": "number", "minimum": 0},
+    },
+    "required": [
+        "type",
+        "seed_position",
+        "direction_1",
+        "count_1",
+        "spacing_1",
+        "direction_2",
+        "count_2",
+        "spacing_2",
+    ],
+}
+
+MIRROR_PATTERN_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "type": {"type": "string", "enum": ["mirror"]},
+        "seed_position": POINT_SCHEMA,
+        "axes": {
+            "type": "array",
+            "items": {"type": "string", "enum": ["x", "y"]},
+            "minItems": 1,
+            "uniqueItems": True,
+        },
+    },
+    "required": ["type", "seed_position", "axes"],
+}
+
+FEATURE_PATTERN_SCHEMA = {
+    "anyOf": [
+        CIRCULAR_PATTERN_SCHEMA,
+        LINEAR_PATTERN_SCHEMA,
+        MIRROR_PATTERN_SCHEMA,
+    ],
+}
+
 NON_NEGATIVE_NUMBER_SCHEMA = {
     "type": "number",
     "minimum": 0,
@@ -332,6 +404,7 @@ def build_add_extrude_schema(
     include_optional_fields: bool = True,
     require_id: bool = False,
     include_face_tags: bool = True,
+    include_pattern: bool = True,
 ) -> dict:
     """Build a schema for an additive extrusion operation."""
     properties = {
@@ -361,6 +434,8 @@ def build_add_extrude_schema(
                 "type": "string",
             },
         }
+    if include_optional_fields and include_pattern:
+        properties["pattern"] = FEATURE_PATTERN_SCHEMA
 
     required = [
         "type",
@@ -385,6 +460,7 @@ def build_cut_schema(
     profile: str,
     include_id: bool = True,
     require_id: bool = False,
+    include_pattern: bool = True,
 ) -> dict:
     """Build a schema for a cut operation."""
     properties = {
@@ -407,6 +483,8 @@ def build_cut_schema(
         properties["id"] = {
             "type": "string",
         }
+    if include_id and include_pattern:
+        properties["pattern"] = FEATURE_PATTERN_SCHEMA
 
     required = [
         "type",
@@ -530,22 +608,27 @@ SKETCH_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema("sketch")
 OPENAI_RECTANGLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "rectangle",
     include_optional_fields=False,
+    include_pattern=False,
 )
 OPENAI_CIRCLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "circle",
     include_optional_fields=False,
+    include_pattern=False,
 )
 OPENAI_POLYGON_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "polygon",
     include_optional_fields=False,
+    include_pattern=False,
 )
 OPENAI_POLYLINE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "polyline",
     include_optional_fields=False,
+    include_pattern=False,
 )
 OPENAI_SKETCH_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "sketch",
     include_optional_fields=False,
+    include_pattern=False,
 )
 
 RELATIONAL_OPENAI_RECTANGLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
@@ -553,30 +636,35 @@ RELATIONAL_OPENAI_RECTANGLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     include_optional_fields=True,
     require_id=True,
     include_face_tags=False,
+    include_pattern=False,
 )
 RELATIONAL_OPENAI_CIRCLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "circle",
     include_optional_fields=True,
     require_id=True,
     include_face_tags=False,
+    include_pattern=False,
 )
 RELATIONAL_OPENAI_POLYGON_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "polygon",
     include_optional_fields=True,
     require_id=True,
     include_face_tags=False,
+    include_pattern=False,
 )
 RELATIONAL_OPENAI_POLYLINE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "polyline",
     include_optional_fields=True,
     require_id=True,
     include_face_tags=False,
+    include_pattern=False,
 )
 RELATIONAL_OPENAI_SKETCH_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "sketch",
     include_optional_fields=True,
     require_id=True,
     include_face_tags=False,
+    include_pattern=False,
 )
 
 
@@ -647,43 +735,53 @@ SKETCH_CUT_SCHEMA = build_cut_schema("sketch")
 RELATIONAL_OPENAI_RECTANGLE_CUT_SCHEMA = build_cut_schema(
     "rectangle",
     require_id=True,
+    include_pattern=False,
 )
 RELATIONAL_OPENAI_CIRCLE_CUT_SCHEMA = build_cut_schema(
     "circle",
     require_id=True,
+    include_pattern=False,
 )
 RELATIONAL_OPENAI_POLYGON_CUT_SCHEMA = build_cut_schema(
     "polygon",
     require_id=True,
+    include_pattern=False,
 )
 RELATIONAL_OPENAI_POLYLINE_CUT_SCHEMA = build_cut_schema(
     "polyline",
     require_id=True,
+    include_pattern=False,
 )
 RELATIONAL_OPENAI_SKETCH_CUT_SCHEMA = build_cut_schema(
     "sketch",
     require_id=True,
+    include_pattern=False,
 )
 
 OPENAI_RECTANGLE_CUT_SCHEMA = build_cut_schema(
     "rectangle",
     include_id=False,
+    include_pattern=False,
 )
 OPENAI_CIRCLE_CUT_SCHEMA = build_cut_schema(
     "circle",
     include_id=False,
+    include_pattern=False,
 )
 OPENAI_POLYGON_CUT_SCHEMA = build_cut_schema(
     "polygon",
     include_id=False,
+    include_pattern=False,
 )
 OPENAI_POLYLINE_CUT_SCHEMA = build_cut_schema(
     "polyline",
     include_id=False,
+    include_pattern=False,
 )
 OPENAI_SKETCH_CUT_SCHEMA = build_cut_schema(
     "sketch",
     include_id=False,
+    include_pattern=False,
 )
 
 RECTANGLE_CUT_REVOLVE_SCHEMA = build_revolve_feature_schema("cut_revolve", "rectangle")
@@ -792,6 +890,7 @@ COUNTERSINK_SCHEMA = {
             "exclusiveMaximum": 180,
         },
         "depth": CUT_DEPTH_SCHEMA,
+        "pattern": FEATURE_PATTERN_SCHEMA,
     },
     "required": [
         "type",

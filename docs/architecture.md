@@ -21,7 +21,7 @@ flowchart LR
     S --> Q["Geometry and operation-effect checks"]
     G --> Q
     Q --> E["STEP and debug export"]
-    D -.-> N["Future native-CAD replay"]
+    D --> N["Strict native SolidWorks replay"]
 ```
 
 The operation JSON is the central contract. Prompt generation and the manual
@@ -42,6 +42,8 @@ it.
 | `feature_registry.py` | Runtime face, edge, alias, and target lookup |
 | `sketch_model.py` | Normalized sketch entities and geometric metadata |
 | `editable_model.py` | Versioned features, named parameters, source paths, and transactional rebuilds |
+| `solidworks_replay.py` | Validates and lowers the supported editable subset into a deterministic native replay plan |
+| `solidworks_replay_runner.cs` | Replays native sketches, dimensions, dependencies, boss/cut features, and `SLDPRT` output through the installed SolidWorks API |
 | `quality.py` | Schema, structure, build, export, and geometry quality gates |
 | `operation_effects.py` | Verifies each feature materially changed geometry |
 | `web_app.py` | FastAPI endpoints and production frontend hosting |
@@ -112,14 +114,16 @@ transactional updates and exports only a successful rebuild.
 
 ## Current constraints
 
-- STEP preserves final geometry, not a native editable feature history.
+- STEP preserves final geometry, not a native editable feature history; the
+  optional SolidWorks adapter separately replays all current operation
+  categories as native features, subject to installed-version smoke testing.
 - Topological names can change after cuts, fillets, chamfers, and shelling.
 - Curved or highly irregular target surfaces need stronger local-frame support.
 - Some compound CAD concepts still lower into multiple primitive operations.
 - Semantic correctness is harder to prove than geometric validity.
 
 The feature graph, normalized sketches, reference registry, and versioned
-editable-model document are intentionally designed as the intermediate layer
-for future SolidWorks or other native-CAD adapters. See
-[editable_features.md](editable_features.md) for the replay strategy, current
-representation gaps, and planned safeguards against topology changes.
+editable-model document are the CAD-neutral intermediate layer used by the
+first SolidWorks replay adapter and future native-CAD adapters. See
+[editable_features.md](editable_features.md) for the implemented replay slice,
+current representation gaps, and safeguards against topology changes.

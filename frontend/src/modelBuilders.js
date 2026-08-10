@@ -134,6 +134,11 @@ export function buildFeatureOperation(feature, featureNumber, instances) {
     ]),
   };
 
+  const pattern = buildFeaturePattern(feature, instances);
+  if (pattern) {
+    operation.pattern = pattern;
+  }
+
   if (feature.operation === "add_extrude") {
     operation.id = `feature_${featureNumber}`;
     operation.distance = numberValue(feature.amount);
@@ -152,6 +157,43 @@ export function buildFeatureOperation(feature, featureNumber, instances) {
   }
 
   return operation;
+}
+
+export function buildFeaturePattern(feature, instances) {
+  if (instances.length < 2) {
+    return null;
+  }
+
+  const seedPosition = [
+    roundNumber(instances[0].x),
+    roundNumber(instances[0].y),
+  ];
+  if (feature.pattern === "circular") {
+    return {
+      type: "circular",
+      seed_position: seedPosition,
+      center: [0, 0],
+      count: Math.max(2, Math.floor(numberValue(feature.copies) || 2)),
+      total_angle_degrees: 360,
+    };
+  }
+
+  const axes = [];
+  if (feature.mirrorX) {
+    axes.push("x");
+  }
+  if (feature.mirrorY) {
+    axes.push("y");
+  }
+  if (axes.length > 0) {
+    return {
+      type: "mirror",
+      seed_position: seedPosition,
+      axes,
+    };
+  }
+
+  return null;
 }
 
 export function expandFeatureInstances(feature) {

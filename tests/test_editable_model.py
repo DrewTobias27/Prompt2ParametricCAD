@@ -69,7 +69,9 @@ def test_editable_document_preserves_history_supports_and_sketches():
     assert exported["units"] == {"length": "mm", "angle": "deg"}
     assert exported["native_replay"] == {
         "parameterization_complete": True,
-        "exporter_implemented": False,
+        "exporter_implemented": True,
+        "adapter_status": "prototype",
+        "eligibility_requires_replay_planning": True,
     }
 
 

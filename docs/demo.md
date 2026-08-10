@@ -51,7 +51,11 @@ boss, 10 mm tall, with a 10 mm concentric through hole.
 ## Honest limitations
 
 - Ambiguous or highly complex prompts can still lose spatial relationships.
-- STEP does not preserve a native SolidWorks feature tree.
+- STEP does not preserve a native SolidWorks feature tree. A separate native
+  replay path covers the current sketch, extrude, cut, revolve, pattern,
+  countersink, chamfer, fillet, placement, and named-face vocabulary. Treat it
+  as a tested prototype until the target SolidWorks installation passes its
+  native smoke fixtures.
 - Curved-surface targeting and topology-changing detail features remain active
   development areas.
 

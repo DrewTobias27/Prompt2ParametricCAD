@@ -13,6 +13,7 @@ Prompt2ParametricCAD operation JSON.
 from __future__ import annotations
 
 import math
+from copy import deepcopy
 from typing import Any
 
 from jsonschema import ValidationError
@@ -1292,12 +1293,21 @@ def feature_operation(
         return revolved_feature_operation(base, feature)
 
     operation_type = "add_extrude" if feature["operation"] == "extrusion" else "cut"
+    positions = resolve_positions(base, feature, operations_by_id)
     operation = {
         "type": operation_type,
         "id": feature["id"],
         "target": feature["target"],
-        "positions": resolve_positions(base, feature, operations_by_id),
+        "positions": positions,
     }
+
+    pattern = feature_pattern_metadata(
+        feature,
+        positions,
+        operations_by_id or {},
+    )
+    if pattern is not None:
+        operation["pattern"] = pattern
 
     operation.update(profile_fields(feature))
 
@@ -1339,11 +1349,12 @@ def countersink_feature_operation(
     half_angle = math.degrees(math.atan2(radial_width, axial_depth))
     angle = max(30.0, min(150.0, 2 * half_angle))
 
-    return {
+    positions = resolve_positions(base, feature, operations_by_id)
+    operation = {
         "type": "countersink",
         "id": feature["id"],
         "target": feature["target"],
-        "positions": resolve_positions(base, feature, operations_by_id),
+        "positions": positions,
         "diameter": round_number(hole_diameter),
         "countersink_diameter": round_number(countersink_diameter),
         "angle": round_number(angle),
@@ -1353,6 +1364,10 @@ def countersink_feature_operation(
             else "through"
         ),
     }
+    pattern = feature_pattern_metadata(feature, positions, operations_by_id)
+    if pattern is not None:
+        operation["pattern"] = pattern
+    return operation
 
 
 def revolved_feature_operation(
@@ -1737,6 +1752,66 @@ def resolve_positions(
         return rounded_points(source_positions)
 
     raise ValueError(f"Unsupported placement type: {placement_type}")
+
+
+def feature_pattern_metadata(
+    feature: dict[str, Any],
+    positions: list[list[float]],
+    operations_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Preserve the design rule behind repeated concrete positions.
+
+    CadQuery still consumes ``positions`` exactly as before.  Native CAD
+    exporters can additionally use this metadata to create one seed feature
+    followed by an editable pattern instead of baking every instance into a
+    single sketch.
+    """
+    if len(positions) < 2:
+        return None
+
+    placement = feature["placement"]
+    placement_type = placement["type"]
+    seed_position = rounded_points([positions[0]])[0]
+
+    if placement_type == "circular_pattern":
+        return {
+            "type": "circular",
+            "seed_position": seed_position,
+            "center": [0, 0],
+            "count": int(placement["count"]),
+            "total_angle_degrees": 360,
+        }
+
+    if placement_type == "rectangular_pattern":
+        return {
+            "type": "linear",
+            "seed_position": seed_position,
+            "direction_1": [1, 0],
+            "count_1": int(placement["columns"]),
+            "spacing_1": round_number(number_value(placement["column_spacing"])),
+            "direction_2": [0, 1],
+            "count_2": int(placement["rows"]),
+            "spacing_2": round_number(number_value(placement["row_spacing"])),
+        }
+
+    if placement_type == "mirrored":
+        return {
+            "type": "mirror",
+            "seed_position": seed_position,
+            "axes": list(dict.fromkeys(placement["axes"])),
+        }
+
+    if placement_type == "same_as_feature":
+        source_operation = operations_by_id.get(placement["source_feature"])
+        source_pattern = (
+            source_operation.get("pattern")
+            if source_operation is not None
+            else None
+        )
+        if isinstance(source_pattern, dict):
+            return deepcopy(source_pattern)
+
+    return None
 
 
 def placement_reference_geometry(

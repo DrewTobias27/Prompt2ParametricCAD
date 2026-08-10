@@ -117,6 +117,13 @@ def test_circular_pattern_intent_computes_evenly_spaced_positions():
         [-30, 0],
         [0, -30],
     ]
+    assert model_data["operations"][1]["pattern"] == {
+        "type": "circular",
+        "seed_position": [30, 0],
+        "center": [0, 0],
+        "count": 4,
+        "total_angle_degrees": 360,
+    }
     validate_model_data(model_data)
 
 
@@ -274,6 +281,11 @@ def test_mirrored_intent_removes_duplicate_centered_instances():
     model_data = intent_to_model_data(intent)
 
     assert model_data["operations"][1]["positions"] == [[30, 0], [-30, 0]]
+    assert model_data["operations"][1]["pattern"] == {
+        "type": "mirror",
+        "seed_position": [30, 0],
+        "axes": ["x", "y"],
+    }
 
 
 def test_rectangular_pattern_intent_computes_grid_positions():
@@ -315,6 +327,16 @@ def test_rectangular_pattern_intent_computes_grid_positions():
         [0, 10],
         [30, 10],
     ]
+    assert model_data["operations"][1]["pattern"] == {
+        "type": "linear",
+        "seed_position": [-30, -10],
+        "direction_1": [1, 0],
+        "count_1": 3,
+        "spacing_1": 30,
+        "direction_2": [0, 1],
+        "count_2": 2,
+        "spacing_2": 20,
+    }
 
 
 def test_offset_from_edge_intent_places_feature_inward_from_named_edge():

@@ -10,6 +10,7 @@
     },
     {
       "type": "add_extrude",
+      "id": "boss",
       "target": "base.top",
       "profile": "rectangle",
       "positions": [[0, 0]],
