@@ -99,7 +99,10 @@ constraints or selection rules:
 - deterministic IDs for operations that omitted an explicit source ID;
 - native sketch and feature names derived from stable feature IDs;
 - named width, height, diameter, extrusion-distance, and blind-depth driving
-  dimensions, plus named revolve angles;
+  dimensions, plus named revolve angles and stable X/Y locating dimensions for
+  non-centered rectangle and circle profiles;
+- fixed sketch-local datum points and geometric relations for centered
+  rectangle and circle profiles, including profiles on rotated side faces;
 - semantic face publication and lookup for parent/child dependencies;
 - in-session verification that every expected sketch, feature, dimension, and
   published face exists before success is reported.
@@ -152,8 +155,9 @@ The backend now exposes this layer through `/editable-model` and
 known-good revision and exports a new STEP file only after the parameter update,
 schema, rebuild, operation-effect checks, and quality checks succeed.
 
-The next native increment should add complete locating dimensions and sketch
-relations. CadQuery remains the geometry oracle for every native replay
+The next native increment should extend locating constraints from parametric
+rectangle/circle profiles to coordinate-driven polygon, polyline, and arc
+sketches. CadQuery remains the geometry oracle for every native replay
 expansion.
 
 Run `prompt2cad-solidworks-smoke` for the CadQuery build and native-plan phase.

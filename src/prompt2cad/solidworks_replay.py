@@ -23,7 +23,7 @@ from prompt2cad.editable_model import EditableModelDocument
 
 
 SOLIDWORKS_REPLAY_FORMAT = "prompt2cad.solidworks-replay-plan"
-SOLIDWORKS_REPLAY_VERSION = 3
+SOLIDWORKS_REPLAY_VERSION = 4
 SUPPORTED_OPERATION_TYPES = {
     "extrude",
     "add_extrude",
@@ -385,6 +385,7 @@ def _replay_feature(
     pattern = _native_pattern_control(feature)
     if pattern is not None:
         sketch["positions_mm"] = [pattern["seed_position_mm"]]
+        sketch["placement_controls"] = sketch.get("placement_controls", [])[:1]
     publish_references = _published_reference_names(feature)
 
     return SolidWorksReplayFeature(
@@ -403,12 +404,18 @@ def _replay_feature(
 def _native_sketch(feature: EditableFeatureDefinition, profile: str) -> dict:
     operation = feature.source_operation
     dimensions: list[dict] = []
+    positions = [
+        [float(position[0]), float(position[1])]
+        for position in operation.get("positions", [[0, 0]])
+    ]
     geometry: dict[str, object] = {
         "profile": profile,
-        "positions_mm": [
-            [float(position[0]), float(position[1])]
-            for position in operation.get("positions", [[0, 0]])
-        ],
+        "positions_mm": positions,
+        "placement_controls": (
+            _native_placement_controls(feature, positions)
+            if profile in {"rectangle", "circle"}
+            else []
+        ),
     }
 
     if profile == "rectangle":
@@ -471,7 +478,41 @@ def _countersink_position_sketch(feature: EditableFeatureDefinition) -> dict:
             for position in operation["positions"]
         ],
         "driving_dimensions": [],
+        "placement_controls": [],
     }
+
+
+def _native_placement_controls(
+    feature: EditableFeatureDefinition,
+    positions: list[list[float]],
+) -> list[dict]:
+    """Return stable native controls for parametric profile locations."""
+    controls = []
+    for index, position in enumerate(positions, start=1):
+        axes = {}
+        for coordinate_index, axis_name in enumerate(("x", "y")):
+            value = float(position[coordinate_index])
+            axes[axis_name] = (
+                None
+                if abs(value) <= 1e-12
+                else _dimension(
+                    feature,
+                    parameter_id=(
+                        f"{feature.id}.placement.inst{index:03d}.{axis_name}"
+                    ),
+                    fallback_name=f"placement_inst{index:03d}_{axis_name}",
+                    value=abs(value),
+                )
+            )
+        controls.append(
+            {
+                "instance_index": index,
+                "position_mm": position,
+                "x_dimension": axes["x"],
+                "y_dimension": axes["y"],
+            }
+        )
+    return controls
 
 
 def _native_pattern_control(

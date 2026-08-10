@@ -125,6 +125,25 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "driving_dimensions")]
         public DimensionSpec[] DrivingDimensions { get; set; }
+
+        [DataMember(Name = "placement_controls")]
+        public PlacementControl[] PlacementControls { get; set; }
+    }
+
+    [DataContract]
+    public sealed class PlacementControl
+    {
+        [DataMember(Name = "instance_index")]
+        public int InstanceIndex { get; set; }
+
+        [DataMember(Name = "position_mm")]
+        public double[] PositionMillimeters { get; set; }
+
+        [DataMember(Name = "x_dimension")]
+        public DimensionSpec XDimension { get; set; }
+
+        [DataMember(Name = "y_dimension")]
+        public DimensionSpec YDimension { get; set; }
     }
 
     [DataContract]
@@ -322,7 +341,7 @@ namespace Prompt2Cad.SolidWorks
     {
         private const double MillimetersPerMeter = 1000.0;
         private const string ReplayFormat = "prompt2cad.solidworks-replay-plan";
-        private const int ReplayVersion = 3;
+        private const int ReplayVersion = 4;
         private static string tracePath;
 
         public static string Execute(
@@ -995,6 +1014,9 @@ namespace Prompt2Cad.SolidWorks
                 return;
             }
 
+            SketchPoint placementAnchor = null;
+            PlacementControl[] placementControls =
+                step.Sketch.PlacementControls ?? new PlacementControl[0];
             for (int index = 0; index < positions.Length; index++)
             {
                 double[] center = positions[index];
@@ -1010,6 +1032,10 @@ namespace Prompt2Cad.SolidWorks
                     step,
                     center,
                     addDrivingDimensions: index == 0,
+                    placementControl: index < placementControls.Length
+                        ? placementControls[index]
+                        : null,
+                    placementAnchor: ref placementAnchor,
                     mathUtility: mathUtility,
                     modelToSketch: modelToSketch
                 );
@@ -1072,6 +1098,8 @@ namespace Prompt2Cad.SolidWorks
             ReplayStep step,
             double[] center,
             bool addDrivingDimensions,
+            PlacementControl placementControl,
+            ref SketchPoint placementAnchor,
             MathUtility mathUtility,
             MathTransform modelToSketch)
         {
@@ -1113,6 +1141,20 @@ namespace Prompt2Cad.SolidWorks
                         "SOLIDWORKS did not create the rectangle."
                     );
                 }
+                SketchPoint centerPoint = FindSketchPointAt(
+                    segments[0].GetSketch(),
+                    centerWorld
+                );
+                ApplyPlacementControl(
+                    model,
+                    sketchManager,
+                    frame,
+                    centerPoint,
+                    placementControl,
+                    ref placementAnchor,
+                    mathUtility,
+                    modelToSketch
+                );
                 TraceSketchPoints(
                     segments[0].GetSketch(),
                     "Rectangle before dimensions for " + step.SketchName
@@ -1154,6 +1196,20 @@ namespace Prompt2Cad.SolidWorks
                         "SOLIDWORKS did not create the circle."
                     );
                 }
+                SketchPoint centerPoint = FindSketchPointAt(
+                    circle.GetSketch(),
+                    centerWorld
+                );
+                ApplyPlacementControl(
+                    model,
+                    sketchManager,
+                    frame,
+                    centerPoint,
+                    placementControl,
+                    ref placementAnchor,
+                    mathUtility,
+                    modelToSketch
+                );
                 if (addDrivingDimensions)
                 {
                     AddCircleDimension(
@@ -1371,6 +1427,235 @@ namespace Prompt2Cad.SolidWorks
             {
                 throw new InvalidOperationException(
                     "SOLIDWORKS did not create a sketch line."
+                );
+            }
+        }
+
+        private static SketchPoint FindSketchPointAt(
+            Sketch sketch,
+            double[] target)
+        {
+            SketchPoint bestPoint = null;
+            double bestDistance = Double.PositiveInfinity;
+            foreach (object pointObject in ObjectItems(sketch.GetSketchPoints2()))
+            {
+                SketchPoint point = pointObject as SketchPoint;
+                if (point == null)
+                {
+                    continue;
+                }
+                double distance = Math.Sqrt(
+                    Math.Pow(point.X - target[0], 2) +
+                    Math.Pow(point.Y - target[1], 2) +
+                    Math.Pow(point.Z - target[2], 2)
+                );
+                // Prefer the newest point when an explicit anchor and a profile
+                // center intentionally share the same coordinates.
+                if (distance <= bestDistance)
+                {
+                    bestPoint = point;
+                    bestDistance = distance;
+                }
+            }
+            if (bestPoint == null || bestDistance > 1e-7)
+            {
+                throw new InvalidOperationException(
+                    "Could not identify the native profile center point."
+                );
+            }
+            return bestPoint;
+        }
+
+        private static void ApplyPlacementControl(
+            ModelDoc2 model,
+            SketchManager sketchManager,
+            FrameSpec frame,
+            SketchPoint centerPoint,
+            PlacementControl control,
+            ref SketchPoint anchorPoint,
+            MathUtility mathUtility,
+            MathTransform modelToSketch)
+        {
+            if (control == null)
+            {
+                return;
+            }
+            if (control.PositionMillimeters == null ||
+                control.PositionMillimeters.Length < 2)
+            {
+                throw new InvalidOperationException(
+                    "A native placement control is missing its X or Y value."
+                );
+            }
+
+            bool anchorWasCreated = anchorPoint == null;
+            if (anchorWasCreated)
+            {
+                double[] anchorCoordinates = ToSketchPoint(
+                    frame,
+                    new[] { 0.0, 0.0 },
+                    mathUtility,
+                    modelToSketch
+                );
+                anchorPoint = sketchManager.CreatePoint(
+                    anchorCoordinates[0],
+                    anchorCoordinates[1],
+                    anchorCoordinates[2]
+                );
+                if (anchorPoint == null)
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS did not create the placement datum point."
+                    );
+                }
+            }
+
+            bool previousAddToDatabase = sketchManager.AddToDB;
+            try
+            {
+                sketchManager.AddToDB = false;
+                if (anchorWasCreated)
+                {
+                    FixSketchPoint(model, anchorPoint);
+                }
+
+                double xValue = control.PositionMillimeters[0];
+                double yValue = control.PositionMillimeters[1];
+                if (Math.Abs(xValue) <= 1e-12 && Math.Abs(yValue) <= 1e-12)
+                {
+                    AddPointRelation(
+                        model,
+                        anchorPoint,
+                        centerPoint,
+                        "sgCOINCIDENT"
+                    );
+                    return;
+                }
+
+                AddPlacementAxisControl(
+                    model,
+                    frame,
+                    anchorPoint,
+                    centerPoint,
+                    new[] { 1.0, 0.0 },
+                    xValue,
+                    control.XDimension,
+                    mathUtility,
+                    modelToSketch
+                );
+                AddPlacementAxisControl(
+                    model,
+                    frame,
+                    anchorPoint,
+                    centerPoint,
+                    new[] { 0.0, 1.0 },
+                    yValue,
+                    control.YDimension,
+                    mathUtility,
+                    modelToSketch
+                );
+            }
+            finally
+            {
+                sketchManager.AddToDB = previousAddToDatabase;
+                model.ClearSelection2(true);
+            }
+        }
+
+        private static void FixSketchPoint(ModelDoc2 model, SketchPoint point)
+        {
+            model.ClearSelection2(true);
+            if (!point.Select4(false, null))
+            {
+                throw new InvalidOperationException(
+                    "Could not select the placement datum point."
+                );
+            }
+            model.SketchAddConstraints("sgFIXED");
+            model.ClearSelection2(true);
+        }
+
+        private static void AddPlacementAxisControl(
+            ModelDoc2 model,
+            FrameSpec frame,
+            SketchPoint anchorPoint,
+            SketchPoint centerPoint,
+            double[] localDirection,
+            double signedValue,
+            DimensionSpec specification,
+            MathUtility mathUtility,
+            MathTransform modelToSketch)
+        {
+            double[] sketchDirection = ToSketchDirection(
+                frame,
+                localDirection,
+                mathUtility,
+                modelToSketch
+            );
+            bool horizontal = Math.Abs(sketchDirection[0]) >=
+                Math.Abs(sketchDirection[1]);
+
+            if (Math.Abs(signedValue) <= 1e-12)
+            {
+                AddPointRelation(
+                    model,
+                    anchorPoint,
+                    centerPoint,
+                    horizontal
+                        ? "sgVERTICALPOINTS2D"
+                        : "sgHORIZONTALPOINTS2D"
+                );
+                return;
+            }
+            if (specification == null)
+            {
+                throw new InvalidOperationException(
+                    "A nonzero native placement is missing its dimension."
+                );
+            }
+
+            SelectSketchPoints(model, anchorPoint, centerPoint);
+            double[] label = horizontal
+                ? new[]
+                {
+                    (anchorPoint.X + centerPoint.X) / 2.0,
+                    Math.Min(anchorPoint.Y, centerPoint.Y) - 0.01,
+                    0.0,
+                }
+                : new[]
+                {
+                    Math.Min(anchorPoint.X, centerPoint.X) - 0.01,
+                    (anchorPoint.Y + centerPoint.Y) / 2.0,
+                    0.0,
+                };
+            object display = horizontal
+                ? model.AddHorizontalDimension2(label[0], label[1], label[2])
+                : model.AddVerticalDimension2(label[0], label[1], label[2]);
+            SetNativeDimension(display, specification);
+            model.ClearSelection2(true);
+        }
+
+        private static void AddPointRelation(
+            ModelDoc2 model,
+            SketchPoint first,
+            SketchPoint second,
+            string relation)
+        {
+            SelectSketchPoints(model, first, second);
+            model.SketchAddConstraints(relation);
+            model.ClearSelection2(true);
+        }
+
+        private static void SelectSketchPoints(
+            ModelDoc2 model,
+            SketchPoint first,
+            SketchPoint second)
+        {
+            model.ClearSelection2(true);
+            if (!first.Select4(false, null) || !second.Select4(true, null))
+            {
+                throw new InvalidOperationException(
+                    "Could not select the native placement points."
                 );
             }
         }
@@ -2649,6 +2934,25 @@ namespace Prompt2Cad.SolidWorks
                 {
                     VerifyDimension(model, dimension, step.SketchName);
                     dimensionCount += 1;
+                }
+                foreach (PlacementControl control in
+                    step.Sketch == null
+                        ? new PlacementControl[0]
+                        : step.Sketch.PlacementControls ?? new PlacementControl[0])
+                {
+                    foreach (DimensionSpec dimension in new[]
+                    {
+                        control.XDimension,
+                        control.YDimension,
+                    })
+                    {
+                        if (dimension == null)
+                        {
+                            continue;
+                        }
+                        VerifyDimension(model, dimension, step.SketchName);
+                        dimensionCount += 1;
+                    }
                 }
                 if (step.Feature.DrivingDimension != null)
                 {

@@ -123,6 +123,42 @@ def test_replay_plan_maps_sketch_and_feature_dimensions():
     }
 
 
+def test_replay_plan_maps_stable_profile_placement_controls():
+    model_data = native_model_data()
+    model_data["operations"][1]["positions"] = [[-12, 7]]
+
+    boss = replay_plan(model_data).features[1]
+    control = boss.sketch["placement_controls"][0]
+
+    assert control["instance_index"] == 1
+    assert control["position_mm"] == [-12.0, 7.0]
+    assert control["x_dimension"] == {
+        "parameter_id": "boss.placement.inst001.x",
+        "native_name": "P2P_boss_placement_inst001_x",
+        "value_mm": 12.0,
+        "unit": "mm",
+    }
+    assert control["y_dimension"] == {
+        "parameter_id": "boss.placement.inst001.y",
+        "native_name": "P2P_boss_placement_inst001_y",
+        "value_mm": 7.0,
+        "unit": "mm",
+    }
+
+
+def test_centered_profile_uses_relations_without_zero_dimensions():
+    boss = replay_plan().features[1]
+
+    assert boss.sketch["placement_controls"] == [
+        {
+            "instance_index": 1,
+            "position_mm": [0.0, 0.0],
+            "x_dimension": None,
+            "y_dimension": None,
+        }
+    ]
+
+
 def test_blind_cut_preserves_a_named_native_depth():
     model_data = native_model_data()
     model_data["operations"][2]["depth"] = 4
