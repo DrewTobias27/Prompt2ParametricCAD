@@ -128,6 +128,14 @@ another device on the same private network:
 See [docs/setup.md](docs/setup.md) for development mode, environment overrides,
 and troubleshooting.
 
+## Hosting
+
+The production web application is packaged as one Docker service: React is
+built into static assets, FastAPI serves the interface and API, and CadQuery
+creates temporary STEP downloads. The included `render.yaml` configures a
+Render web service with a health check and public-demo safeguards. See
+[docs/hosting.md](docs/hosting.md) for deployment and secret configuration.
+
 ## Command-line examples
 
 Once installed in editable mode, build a STEP file from saved operation JSON:

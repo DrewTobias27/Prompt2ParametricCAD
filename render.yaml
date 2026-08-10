@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: prompt2parametriccad
+    runtime: docker
+    plan: standard
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PROMPT2CAD_PUBLIC_RATE_LIMIT_REQUESTS
+        value: "10"
+      - key: PROMPT2CAD_PUBLIC_RATE_LIMIT_WINDOW_SECONDS
+        value: "3600"
+      - key: PROMPT2CAD_STEP_MAX_AGE_SECONDS
+        value: "3600"
+      - key: PROMPT2CAD_STEP_MAX_FILES
+        value: "50"

@@ -2,6 +2,7 @@
 
 from collections import OrderedDict
 from copy import deepcopy
+from hashlib import sha256
 import json
 from pathlib import Path
 import re
@@ -9,10 +10,10 @@ from time import perf_counter
 from typing import Any
 
 import cadquery as cq
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from prompt2cad.editable_model import model_data_to_editable_document
 from prompt2cad.editable_model import rebuild_with_parameter_updates
@@ -27,15 +28,18 @@ from prompt2cad.prompting import suggest_base_model_data
 from prompt2cad.prompting import suggest_feature_model_data
 from prompt2cad.quality import check_model_quality
 from prompt2cad.schema import validate_model_data
+from prompt2cad.web_runtime import cleanup_step_files
+from prompt2cad.web_runtime import environment_int
+from prompt2cad.web_runtime import SlidingWindowRateLimiter
 
 
 class CADRequest(BaseModel):
-    prompt: str
+    prompt: str = Field(min_length=1, max_length=2000)
 
 
 class CADRefineRequest(BaseModel):
-    original_prompt: str
-    correction: str
+    original_prompt: str = Field(min_length=1, max_length=2000)
+    correction: str = Field(min_length=1, max_length=1000)
     design_intent: dict
     revision: int = 1
 
@@ -78,6 +82,30 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST_DIR = REPO_ROOT / "frontend" / "dist"
 CACHE_MAX_ENTRIES = 64
 MAX_AUTOMATIC_API_CALLS = 4
+PUBLIC_RATE_LIMIT_REQUESTS = environment_int(
+    "PROMPT2CAD_PUBLIC_RATE_LIMIT_REQUESTS",
+    0,
+)
+PUBLIC_RATE_LIMIT_WINDOW_SECONDS = environment_int(
+    "PROMPT2CAD_PUBLIC_RATE_LIMIT_WINDOW_SECONDS",
+    3600,
+    minimum=1,
+)
+STEP_MAX_AGE_SECONDS = environment_int(
+    "PROMPT2CAD_STEP_MAX_AGE_SECONDS",
+    3600,
+)
+STEP_MAX_FILES = environment_int("PROMPT2CAD_STEP_MAX_FILES", 50)
+RATE_LIMITED_PATHS = {
+    "/generate",
+    "/refine",
+    "/suggest-base",
+    "/suggest-feature",
+}
+PUBLIC_RATE_LIMITER = SlidingWindowRateLimiter(
+    limit=PUBLIC_RATE_LIMIT_REQUESTS,
+    window_seconds=PUBLIC_RATE_LIMIT_WINDOW_SECONDS,
+)
 SUCCESS_RESPONSE_CACHE: OrderedDict[str, dict] = OrderedDict()
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -87,6 +115,42 @@ if (FRONTEND_DIST_DIR / "assets").exists():
         StaticFiles(directory=FRONTEND_DIST_DIR / "assets"),
         name="frontend-assets",
     )
+
+
+def request_client_key(request: Request) -> str:
+    """Return the best available client address from a managed reverse proxy."""
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",", maxsplit=1)[0].strip()
+    if request.client is not None:
+        return request.client.host
+    return "unknown"
+
+
+@app.middleware("http")
+async def limit_public_ai_requests(request: Request, call_next):
+    """Protect public AI-backed routes from accidental or automated overuse."""
+    if request.method != "POST" or request.url.path not in RATE_LIMITED_PATHS:
+        return await call_next(request)
+
+    allowed, remaining, retry_after = PUBLIC_RATE_LIMITER.check(
+        request_client_key(request)
+    )
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "status": "error",
+                "message": "Generation limit reached. Please try again later.",
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    response = await call_next(request)
+    if PUBLIC_RATE_LIMIT_REQUESTS > 0:
+        response.headers["X-RateLimit-Limit"] = str(PUBLIC_RATE_LIMIT_REQUESTS)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+    return response
 
 
 @app.get("/")
@@ -120,7 +184,8 @@ def make_safe_filename(prompt: str) -> str:
     if not name:
         name = "prompt2cad-model"
 
-    return f"{name}.step"
+    prompt_hash = sha256(prompt.encode("utf-8")).hexdigest()[:8]
+    return f"{name}-{prompt_hash}.step"
 
 
 def seconds_since(started_at: float) -> float:
@@ -174,6 +239,26 @@ def cache_success_response(key: str, response_data: dict) -> None:
         SUCCESS_RESPONSE_CACHE.popitem(last=False)
 
 
+def cleanup_generated_downloads() -> None:
+    """Prune temporary downloads and remove stale responses from the cache."""
+    removed_paths = cleanup_step_files(
+        GENERATED_DIR,
+        max_age_seconds=STEP_MAX_AGE_SECONDS,
+        max_files=STEP_MAX_FILES,
+    )
+    if not removed_paths:
+        return
+
+    removed_filenames = {path.name for path in removed_paths}
+    stale_cache_keys = [
+        key
+        for key, response in SUCCESS_RESPONSE_CACHE.items()
+        if Path(response.get("step_file", "")).name in removed_filenames
+    ]
+    for key in stale_cache_keys:
+        SUCCESS_RESPONSE_CACHE.pop(key, None)
+
+
 def export_model_data(
     model_data: dict,
     filename_hint: str,
@@ -204,6 +289,7 @@ def export_model_data(
     )
     quality_seconds = seconds_since(quality_started_at)
     export_model_total_seconds = seconds_since(started_at)
+    cleanup_generated_downloads()
 
     return {
         "status": "success",
@@ -348,7 +434,14 @@ def summarize_operation_changes(
 @app.get("/download/{filename}")
 def download_step_file(filename: str):
     """Download a generated STEP file."""
-    step_path = GENERATED_DIR / filename
+    step_path = (GENERATED_DIR / filename).resolve()
+    generated_directory = GENERATED_DIR.resolve()
+    if (
+        step_path.parent != generated_directory
+        or step_path.suffix.lower() != ".step"
+        or not step_path.is_file()
+    ):
+        raise HTTPException(status_code=404, detail="STEP file not found")
     return FileResponse(
         path=step_path,
         filename=filename,

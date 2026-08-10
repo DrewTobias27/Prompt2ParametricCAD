@@ -1,13 +1,36 @@
 """Tests for local FastAPI route helpers."""
 
 import cadquery as cq
+from fastapi import HTTPException
 from fastapi.responses import FileResponse
+import pytest
 
 from prompt2cad import web_app
 
 
 def test_health_reports_backend_ready():
     assert web_app.health() == {"status": "ok"}
+
+
+def test_download_route_rejects_missing_or_unsafe_files(monkeypatch, tmp_path):
+    monkeypatch.setattr(web_app, "GENERATED_DIR", tmp_path)
+
+    with pytest.raises(HTTPException, match="STEP file not found"):
+        web_app.download_step_file("missing.step")
+
+    with pytest.raises(HTTPException, match="STEP file not found"):
+        web_app.download_step_file("../outside.step")
+
+
+def test_safe_filename_avoids_collisions_after_readable_prefix():
+    shared_prefix = "Create a very long mechanical mounting plate " * 3
+
+    first = web_app.make_safe_filename(shared_prefix + "with two holes")
+    second = web_app.make_safe_filename(shared_prefix + "with four holes")
+
+    assert first != second
+    assert first.endswith(".step")
+    assert second.endswith(".step")
 
 
 def test_editable_routes_are_exposed_in_the_api_contract():
@@ -761,7 +784,7 @@ def test_edit_parameters_route_exports_only_the_valid_rebuilt_revision(
     assert response["editable_model"]["build_order"] == ["base", "boss"]
     assert response["performance"]["build_reused"] is True
     assert response["performance"]["editable_rebuild_seconds"] >= 0
-    assert (tmp_path / "wider-plate.step").exists()
+    assert (tmp_path / web_app.make_safe_filename("wider plate")).exists()
 
 
 def test_edit_parameters_route_preserves_last_good_model_when_edit_fails(
