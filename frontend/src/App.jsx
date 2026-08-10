@@ -1,11 +1,14 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildFromModelData,
+  editModelParameters,
   generateFromPrompt,
+  getEditableModel,
   getDownloadUrl,
   refineGeneratedDesign,
 } from "./api.js";
 import { DrawingPreview } from "./DrawingPreview.jsx";
+import { EditableParametersPanel } from "./EditableParametersPanel.jsx";
 import { FeatureTreePanel } from "./FeatureTreePanel.jsx";
 import { resolveManualModelData } from "./manualAssistance.js";
 import { ManualBuilder } from "./ManualBuilder.jsx";
@@ -36,6 +39,9 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [correction, setCorrection] = useState("");
   const [revisionHistory, setRevisionHistory] = useState([]);
+  const [editableModel, setEditableModel] = useState(null);
+  const [isEditableLoading, setIsEditableLoading] = useState(false);
+  const [parameterHistory, setParameterHistory] = useState([]);
 
   const usesApiAssistance = hasApiAssistedFields({ base, features });
   const manualModelData = useMemo(
@@ -56,16 +62,59 @@ export default function App() {
       result?.generation_path,
     );
 
+  useEffect(() => {
+    let cancelled = false;
+    if (result?.status !== "success" || !result?.model_data) {
+      setEditableModel(null);
+      setIsEditableLoading(false);
+      return undefined;
+    }
+
+    if (result.editable_model) {
+      setEditableModel(result.editable_model);
+      setIsEditableLoading(false);
+      return undefined;
+    }
+
+    setIsEditableLoading(true);
+    getEditableModel(result.model_data)
+      .then((data) => {
+        if (!cancelled) {
+          setEditableModel(
+            data.status === "success" ? data.editable_model : null,
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEditableModel(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsEditableLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [result?.model_data, result?.status]);
+
   const updateBase = useCallback((update) => {
     setBase(update);
     setResult(null);
     setStatus("");
+    setEditableModel(null);
+    setParameterHistory([]);
   }, []);
 
   const updateFeatures = useCallback((update) => {
     setFeatures(update);
     setResult(null);
     setStatus("");
+    setEditableModel(null);
+    setParameterHistory([]);
   }, []);
 
   const updatePrompt = useCallback((value) => {
@@ -74,6 +123,8 @@ export default function App() {
     setStatus("");
     setCorrection("");
     setRevisionHistory([]);
+    setEditableModel(null);
+    setParameterHistory([]);
   }, []);
 
   function handleModeChange(nextMode) {
@@ -86,6 +137,8 @@ export default function App() {
     setStatus("");
     setCorrection("");
     setRevisionHistory([]);
+    setEditableModel(null);
+    setParameterHistory([]);
   }
 
   async function runRequest(request, {
@@ -126,6 +179,7 @@ export default function App() {
     event.preventDefault();
     setCorrection("");
     setRevisionHistory([]);
+    setParameterHistory([]);
     runRequest(() => generateFromPrompt(prompt));
   }
 
@@ -148,6 +202,7 @@ export default function App() {
         clearResult: false,
         preserveResultOnError: true,
         onSuccess: () => {
+          setParameterHistory([]);
           setRevisionHistory((history) => [
             ...history,
             { correction: correctionText, result: previousResult },
@@ -181,6 +236,46 @@ export default function App() {
     }
 
     runRequest(() => buildFromModelData(manualModelData, `manual ${base.profile} base`));
+  }
+
+  function handleParameterEdit(updates) {
+    const previousResult = result;
+    if (!previousResult?.model_data || Object.keys(updates).length === 0) {
+      return;
+    }
+
+    runRequest(
+      () => editModelParameters(
+        previousResult.model_data,
+        updates,
+        `edited ${prompt || "cad model"}`,
+      ),
+      {
+        loadingMessage: "Rebuilding edited model...",
+        clearResult: false,
+        preserveResultOnError: true,
+        onSuccess: (data) => {
+          setParameterHistory((history) => [...history, previousResult]);
+          setResult({
+            ...data,
+            generation_mode: "parameter_edit",
+            generation_path: "parameter_edit",
+            revision: (previousResult.revision ?? 1) + 1,
+          });
+        },
+      },
+    );
+  }
+
+  function handleRestoreParameterRevision() {
+    const previousResult = parameterHistory.at(-1);
+    if (!previousResult || isLoading) {
+      return;
+    }
+
+    setResult(previousResult);
+    setParameterHistory((history) => history.slice(0, -1));
+    setStatus(`Restored revision ${previousResult.revision ?? 1}.`);
   }
 
   function handleTargetReferenceClick(reference) {
@@ -306,6 +401,13 @@ export default function App() {
                 base={generatedTreeView.base}
                 features={generatedTreeView.features}
                 title="Generated feature tree"
+              />
+              <EditableParametersPanel
+                editableModel={editableModel}
+                isLoading={isLoading || isEditableLoading}
+                onApply={handleParameterEdit}
+                onRestore={handleRestoreParameterRevision}
+                canRestore={parameterHistory.length > 0}
               />
               <GeneratedModelReview
                 modelData={result?.model_data}

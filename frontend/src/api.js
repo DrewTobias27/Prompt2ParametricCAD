@@ -53,6 +53,20 @@ export function buildFromModelData(modelData, filenameHint) {
   });
 }
 
+export function getEditableModel(modelData) {
+  return postJson("/editable-model", {
+    model_data: modelData,
+  });
+}
+
+export function editModelParameters(modelData, updates, filenameHint) {
+  return postJson("/edit-parameters", {
+    model_data: modelData,
+    updates,
+    filename_hint: filenameHint,
+  });
+}
+
 export function suggestBase({ profile, description, distance }) {
   return postJson("/suggest-base", {
     profile,
