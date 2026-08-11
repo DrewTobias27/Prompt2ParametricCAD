@@ -523,7 +523,10 @@ def value_matches(actual_value: Any, expected_value: Any) -> bool:
     """Return whether an actual value satisfies an expected value or matcher."""
     if isinstance(expected_value, dict):
         if "one_of" in expected_value:
-            return actual_value in expected_value["one_of"]
+            return any(
+                value_matches(actual_value, alternative)
+                for alternative in expected_value["one_of"]
+            )
         if "contains" in expected_value:
             return str(expected_value["contains"]) in str(actual_value)
         if expected_value.get("exists") is True:

@@ -233,8 +233,8 @@
       "expected_concepts": {
         "base": {"type": "revolve", "profile": "rectangle", "angle": 360, "height": {"approx": 100, "tolerance": 0.1}},
         "operation_groups": [
-          {"selector": {"type": "add_revolve", "profile": "rectangle", "width": {"approx": 6, "tolerance": 0.1}, "height": {"approx": 8, "tolerance": 0.1}}, "operation_count": 2, "instance_count": 2, "positions": {"point_set": [[15, -25], [15, 25]], "tolerance": 0.2}},
-          {"selector": {"type": "cut_revolve", "profile": "rectangle", "width": {"approx": 2, "tolerance": 0.1}, "height": {"approx": 3, "tolerance": 0.1}}, "operation_count": 2, "instance_count": 2},
+          {"selector": {"type": "add_revolve", "profile": "rectangle", "width": {"approx": 6, "tolerance": 0.1}, "height": {"approx": 8, "tolerance": 0.1}}, "operation_count": {"min": 1}, "instance_count": 2, "positions": {"point_set": [[15, -25], [15, 25]], "tolerance": 0.2}},
+          {"selector": {"type": "cut_revolve", "profile": "rectangle", "width": {"approx": 2, "tolerance": 0.1}, "height": {"approx": 3, "tolerance": 0.1}}, "operation_count": {"min": 1}, "instance_count": 2},
           {"selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": {"approx": 20, "tolerance": 0.1}}, "operation_count": 1, "instance_count": 1}
         ],
         "geometry": {"solid_count": 1, "bounding_box": {"xlen": {"approx": 36, "tolerance": 0.2}, "ylen": {"approx": 100, "tolerance": 0.2}, "zlen": {"approx": 36, "tolerance": 0.2}}}
@@ -310,7 +310,7 @@
           {"role": "pocket", "operation": "cut", "shape": "rectangle", "width": {"approx": 112, "tolerance": 0.2}, "height": {"approx": 72, "tolerance": 0.2}, "depth": {"approx": 16, "tolerance": 0.2}, "placement": {"type": "centered"}},
           {"role": "rim", "operation": "extrusion", "shape": "rectangle", "distance": {"approx": 3, "tolerance": 0.1}, "placement": {"type": "centered"}},
           {"operation": "cut", "shape": "rectangle", "depth": {"approx": 3, "tolerance": 0.1}, "placement": {"type": "centered"}},
-          {"role": "drain", "operation": "cut", "shape": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": "through", "placement": {"type": "centered"}}
+          {"role": "drain", "operation": "cut", "shape": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": {"one_of": ["through", {"approx": 4, "tolerance": 0.1}]}, "placement": {"type": "centered"}}
         ]
       },
       "expected_concepts": {
@@ -319,7 +319,7 @@
           {"type": "cut", "profile": "rectangle", "width": {"approx": 112, "tolerance": 0.2}, "height": {"approx": 72, "tolerance": 0.2}, "depth": {"approx": 16, "tolerance": 0.2}},
           {"type": "add_extrude", "profile": "rectangle", "distance": {"approx": 3, "tolerance": 0.1}},
           {"type": "cut", "profile": "rectangle", "depth": {"approx": 3, "tolerance": 0.1}},
-          {"type": "cut", "profile": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": "through"}
+          {"type": "cut", "profile": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": {"one_of": ["through", {"approx": 4, "tolerance": 0.1}]}}
         ],
         "operation_relationships": [
           {"type": "targets_parent", "feature": {"type": "cut", "profile": "rectangle", "depth": {"approx": 3, "tolerance": 0.1}}, "parent": {"type": "add_extrude", "profile": "rectangle", "distance": {"approx": 3, "tolerance": 0.1}}}

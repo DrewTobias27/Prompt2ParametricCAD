@@ -711,18 +711,23 @@ def feature_intent_to_openai(feature: dict[str, Any]) -> dict[str, Any]:
 
 def validate_design_intent(intent: dict[str, Any]) -> None:
     """Validate high-level design intent before lowering it."""
-    try:
-        validate(instance=intent, schema=DESIGN_INTENT_SCHEMA)
-    except ValidationError as error:
-        raise ValueError(
-            f"Design intent does not match schema: {error.message}"
-        ) from error
+    validate_design_intent_structure(intent)
 
     validate_base_dimensions(intent["base"])
     for feature in intent["features"]:
         validate_feature_dimensions(feature)
     for edge_treatment in intent.get("edge_treatments", []):
         validate_edge_treatment_dimensions(edge_treatment)
+
+
+def validate_design_intent_structure(intent: dict[str, Any]) -> None:
+    """Validate intent vocabulary and structure before inferring dimensions."""
+    try:
+        validate(instance=intent, schema=DESIGN_INTENT_SCHEMA)
+    except ValidationError as error:
+        raise ValueError(
+            f"Design intent does not match schema: {error.message}"
+        ) from error
 
 
 def intent_to_model_data(intent: dict[str, Any]) -> dict[str, Any]:
@@ -804,6 +809,10 @@ def prepare_design_intent_for_lowering(
 ) -> dict[str, Any]:
     """Return the canonical intent representation consumed by the lowerer."""
     intent = remove_null_values(intent)
+    # Validate enums and structural fields before dimension inference. This
+    # turns model-invented profile or placement names into actionable schema
+    # feedback instead of downstream KeyError messages.
+    validate_design_intent_structure(intent)
     intent = normalize_intent_references(intent)
     intent = fill_reasonable_missing_dimensions(intent)
     intent = collapse_aligned_wall_through_cuts(intent)
@@ -1449,7 +1458,7 @@ def revolved_feature_operation(
     radial_size = number_value(feature["width"])
     axial_size = number_value(feature["height"])
     base_radius = number_value(base["diameter"]) / 2
-    center_y = revolved_feature_center_y(base, feature)
+    center_ys = revolved_feature_center_ys(base, feature)
     if "radius" in feature:
         center_x = number_value(feature["radius"])
     else:
@@ -1468,7 +1477,10 @@ def revolved_feature_operation(
         "id": feature["id"],
         "plane": "XY",
         "profile": "rectangle",
-        "positions": [[round_number(center_x), round_number(center_y)]],
+        "positions": [
+            [round_number(center_x), round_number(center_y)]
+            for center_y in center_ys
+        ],
         "axis_start": [0, -1],
         "axis_end": [0, 1],
         "angle": 360,
@@ -1509,34 +1521,43 @@ def resolve_custom_revolve_positions(feature: dict[str, Any]) -> list[list[float
     )
 
 
-def revolved_feature_center_y(base: dict[str, Any], feature: dict[str, Any]) -> float:
-    """Resolve axial feature placement into a Y position for revolve sketches."""
+def revolved_feature_center_ys(
+    base: dict[str, Any],
+    feature: dict[str, Any],
+) -> list[float]:
+    """Resolve every axial feature placement for a revolved rectangle."""
     placement = feature["placement"]
     if placement["type"] == "centered":
-        return 0
+        return [0]
     if placement["type"] == "explicit":
-        position_x = number_value(placement["positions"][0][0])
-        position_y = number_value(placement["positions"][0][1])
-        # Design-intent placement is a generic 2D vocabulary. Older examples
-        # and direct operation JSON put axial position in Y, while language
-        # models commonly express a one-dimensional shaft offset as [axial, 0].
-        # Accept both unambiguous forms so paired features do not collapse at
-        # the shaft midpoint.
-        if position_y == 0 and position_x != 0:
-            return position_x
-        return position_y
+        return [
+            revolved_explicit_position_y(position)
+            for position in placement["positions"]
+        ]
     if placement["type"] == "offset_from_edge":
         length = number_value(base["length"])
         axial_size = number_value(feature["height"])
         offset = number_value(placement["offset"])
         if placement["edge"] == "front":
-            return length / 2 - offset - axial_size / 2
+            return [length / 2 - offset - axial_size / 2]
         if placement["edge"] == "back":
-            return -length / 2 + offset + axial_size / 2
+            return [-length / 2 + offset + axial_size / 2]
 
     raise ValueError(
         "Revolved features support centered, explicit, or front/back offset placement"
     )
+
+
+def revolved_explicit_position_y(position: list[float]) -> float:
+    """Return an axial coordinate from either supported explicit convention."""
+    position_x = number_value(position[0])
+    position_y = number_value(position[1])
+    # Design-intent placement is a generic 2D vocabulary. Older examples and
+    # direct operation JSON put axial position in Y, while language models
+    # commonly express a one-dimensional shaft offset as [axial, 0].
+    if position_y == 0 and position_x != 0:
+        return position_x
+    return position_y
 
 
 def edge_treatment_operation(

@@ -1736,3 +1736,53 @@ def test_revolved_explicit_placement_accepts_axial_first_coordinate():
 
     assert model_data["operations"][1]["positions"] == [[15, 25]]
     assert check_model_data(model_data)["passed"] is True
+
+
+def test_revolved_feature_preserves_every_explicit_axial_instance():
+    intent = {
+        "base": {
+            "id": "shaft",
+            "profile": "cylinder",
+            "diameter": 24,
+            "length": 100,
+        },
+        "features": [
+            {
+                "id": "collars",
+                "operation": "revolved_extrusion",
+                "target": "shaft",
+                "shape": "rectangle",
+                "width": 6,
+                "height": 8,
+                "placement": {
+                    "type": "explicit",
+                    "positions": [[0, -25], [0, 25]],
+                },
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["positions"] == [[15, -25], [15, 25]]
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_invalid_profile_is_reported_before_dimension_inference():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "d_shape_straight_left_rounded_right",
+            "width": 100,
+            "height": 70,
+            "thickness": 8,
+        },
+        "features": [],
+        "edge_treatments": [],
+    }
+
+    with pytest.raises(Exception) as caught:
+        intent_to_model_data(intent)
+
+    assert "is not one of" in str(caught.value)

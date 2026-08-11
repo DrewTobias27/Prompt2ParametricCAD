@@ -249,6 +249,39 @@ def test_concept_evaluator_treats_incompatible_numeric_match_as_non_match():
     assert "Missing operation matching" in result.failures[0]
 
 
+def test_concept_evaluator_one_of_accepts_nested_numeric_matcher():
+    model_data = {
+        "operations": [
+            {"type": "extrude", "id": "base"},
+            {
+                "type": "cut",
+                "id": "drain",
+                "profile": "circle",
+                "depth": 4,
+            },
+        ]
+    }
+
+    result = evaluate_model_concepts(
+        model_data,
+        {
+            "operations": [
+                {
+                    "type": "cut",
+                    "depth": {
+                        "one_of": [
+                            "through",
+                            {"approx": 4, "tolerance": 0.1},
+                        ]
+                    },
+                }
+            ]
+        },
+    )
+
+    assert result.passed is True
+
+
 def test_concept_evaluator_checks_cross_feature_positions_and_parent():
     model_data = {
         "operations": [
