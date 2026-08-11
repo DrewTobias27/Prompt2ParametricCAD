@@ -254,6 +254,11 @@ OPENAI_EXPLICIT_PLACEMENT_SCHEMA = {
             "type": "array",
             "items": POINT_SCHEMA,
             "minItems": 1,
+            "description": (
+                "Feature-center coordinates on the target sketch plane. For "
+                "revolved shaft features, use [0, axial_center], so two "
+                "features at opposite axial locations use [0, -a] and [0, a]."
+            ),
         },
     },
     "required": ["type", "positions"],
@@ -465,8 +470,20 @@ OPENAI_FEATURE_COMMON_PROPERTIES = {
 
 OPENAI_FEATURE_SHAPE_DIMENSIONS = {
     "rectangle": {
-        "width": OPENAI_POSITIVE_NUMBER_REF,
-        "height": OPENAI_POSITIVE_NUMBER_REF,
+        "width": {
+            **OPENAI_POSITIVE_NUMBER_REF,
+            "description": (
+                "Planar sketch width. For a revolved collar or groove, this "
+                "is radial thickness/depth, not axial width."
+            ),
+        },
+        "height": {
+            **OPENAI_POSITIVE_NUMBER_REF,
+            "description": (
+                "Planar sketch height. For a revolved collar or groove, this "
+                "is axial width along the shaft."
+            ),
+        },
     },
     "circle": {"diameter": OPENAI_POSITIVE_NUMBER_REF},
     "polygon": {
@@ -520,14 +537,27 @@ OPENAI_FEATURE_OPERATION_SCHEMA = {
         }),
         strict_openai_object({
             "type": fixed_string_schema("revolved_extrusion"),
-            "radius": OPENAI_POSITIVE_NUMBER_REF,
+            "radius": {
+                **OPENAI_POSITIVE_NUMBER_REF,
+                "description": (
+                    "Radial center of the revolved profile. Omit this field "
+                    "for a normal collar so the backend infers it from the "
+                    "shaft radius and radial profile width."
+                ),
+            },
         }),
         strict_openai_object({
             "type": fixed_string_schema("revolved_cut"),
         }),
         strict_openai_object({
             "type": fixed_string_schema("revolved_cut"),
-            "radius": OPENAI_POSITIVE_NUMBER_REF,
+            "radius": {
+                **OPENAI_POSITIVE_NUMBER_REF,
+                "description": (
+                    "Radial center of the revolved cut profile. Omit this "
+                    "field for a normal shaft groove so the backend infers it."
+                ),
+            },
         }),
     ],
 }
@@ -928,6 +958,25 @@ def normalize_feature_reference(
         all_features or [],
         base,
     )
+    placement = normalized.get("placement", {})
+    if placement.get("type") == "same_as_feature":
+        source_feature_id = placement.get("source_feature")
+        source_feature = next(
+            (
+                candidate
+                for candidate in (all_features or [])
+                if candidate.get("id") == source_feature_id
+            ),
+            None,
+        )
+        target_owner = normalized["target"].split(".", 1)[0]
+        if (
+            source_feature is not None
+            and source_feature.get("operation")
+            in {"extrusion", "revolved_extrusion"}
+            and target_owner == "base"
+        ):
+            normalized["target"] = f"{source_feature_id}.top"
     return normalized
 
 
@@ -1466,7 +1515,16 @@ def revolved_feature_center_y(base: dict[str, Any], feature: dict[str, Any]) -> 
     if placement["type"] == "centered":
         return 0
     if placement["type"] == "explicit":
-        return number_value(placement["positions"][0][1])
+        position_x = number_value(placement["positions"][0][0])
+        position_y = number_value(placement["positions"][0][1])
+        # Design-intent placement is a generic 2D vocabulary. Older examples
+        # and direct operation JSON put axial position in Y, while language
+        # models commonly express a one-dimensional shaft offset as [axial, 0].
+        # Accept both unambiguous forms so paired features do not collapse at
+        # the shaft midpoint.
+        if position_y == 0 and position_x != 0:
+            return position_x
+        return position_y
     if placement["type"] == "offset_from_edge":
         length = number_value(base["length"])
         axial_size = number_value(feature["height"])

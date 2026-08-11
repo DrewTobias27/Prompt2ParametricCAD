@@ -67,6 +67,12 @@ def evaluate_model_concepts(
         )
     )
     failures.extend(
+        expected_operation_group_failures(
+            operations,
+            expected_concepts.get("operation_groups", []),
+        )
+    )
+    failures.extend(
         expected_relationship_failures(
             relationships,
             expected_concepts.get("relationships", []),
@@ -173,6 +179,103 @@ def expected_operation_failures(
             )
 
     return failures
+
+
+def expected_operation_group_failures(
+    operations: list[dict[str, Any]],
+    expected_groups: list[dict[str, Any]],
+) -> list[str]:
+    """Return failures for aggregate facts about matching operations.
+
+    A generated design may represent repeated geometry as one patterned
+    operation or as several single-instance operations. Group checks validate
+    the requested semantic result without requiring one particular encoding.
+    """
+    failures = []
+    for group in expected_groups:
+        selector = group.get("selector", {})
+        matches = [
+            operation
+            for operation in operations
+            if object_matches_expected(operation, selector)
+        ]
+        label = json.dumps(selector, sort_keys=True)
+
+        if "operation_count" in group and not value_matches(
+            len(matches),
+            group["operation_count"],
+        ):
+            failures.append(
+                f"Expected operation group {label} to contain "
+                f"{group['operation_count']} operations, but found "
+                f"{len(matches)}."
+            )
+
+        instance_count = sum(operation_instance_count(match) for match in matches)
+        if "instance_count" in group and not value_matches(
+            instance_count,
+            group["instance_count"],
+        ):
+            failures.append(
+                f"Expected operation group {label} to contain "
+                f"{group['instance_count']} feature instances, but found "
+                f"{instance_count}."
+            )
+
+        positions = [
+            point
+            for match in matches
+            for point in match.get("positions", [])
+            if isinstance(point, list)
+        ]
+        if "positions" in group and not value_matches(
+            positions,
+            group["positions"],
+        ):
+            failures.append(
+                f"Expected operation group {label} positions to match "
+                f"{group['positions']}, but found {positions}."
+            )
+
+        target_count = len({
+            str(match["target"])
+            for match in matches
+            if match.get("target") is not None
+        })
+        if "unique_target_count" in group and not value_matches(
+            target_count,
+            group["unique_target_count"],
+        ):
+            failures.append(
+                f"Expected operation group {label} to use "
+                f"{group['unique_target_count']} unique targets, but found "
+                f"{target_count}."
+            )
+
+        target_parent_count = len({
+            str(match["target"]).split(".", 1)[0]
+            for match in matches
+            if match.get("target") is not None
+        })
+        if "unique_target_parent_count" in group and not value_matches(
+            target_parent_count,
+            group["unique_target_parent_count"],
+        ):
+            failures.append(
+                f"Expected operation group {label} to use "
+                f"{group['unique_target_parent_count']} unique target parents, "
+                f"but found {target_parent_count}."
+            )
+
+    return failures
+
+
+def operation_instance_count(operation: dict[str, Any]) -> int:
+    """Return the number of concrete instances represented by an operation."""
+    positions = operation.get("positions")
+    if isinstance(positions, list) and positions:
+        return len(positions)
+    return 1
 
 
 def expected_relationship_failures(
@@ -294,6 +397,28 @@ def expected_operation_relationship_failures(
                     f"Expected {smaller_ref} {field} to be smaller than "
                     f"{larger_ref} {field}, but found {smaller_value} and "
                     f"{larger_value}."
+                )
+        elif relationship_type == "circular_pattern_angular_offset":
+            if len(referenced) != 2:
+                failures.append(
+                    "Circular-pattern angular-offset relationships require "
+                    "exactly two feature selectors."
+                )
+                continue
+            first_positions = referenced[0].get("positions", [])
+            second_positions = referenced[1].get("positions", [])
+            expected_offset = float(relationship.get("offset_degrees", 0))
+            tolerance = float(relationship.get("tolerance_degrees", 1e-4))
+            if not circular_patterns_have_angular_offset(
+                first_positions,
+                second_positions,
+                expected_offset,
+                tolerance,
+            ):
+                failures.append(
+                    f"Expected circular patterns {feature_refs} to have a "
+                    f"{expected_offset} degree angular offset, but their "
+                    "pattern phases differ."
                 )
         else:
             failures.append(
@@ -425,6 +550,13 @@ def value_matches(actual_value: Any, expected_value: Any) -> bool:
                 expected_value["circular_pattern"],
             ):
                 return False
+        if "point_set" in expected_value:
+            if not unordered_points_match(
+                actual_value,
+                expected_value["point_set"],
+                float(expected_value.get("tolerance", 1e-6)),
+            ):
+                return False
         if "approx" in expected_value:
             if actual_value is None:
                 return False
@@ -462,6 +594,7 @@ def value_matches(actual_value: Any, expected_value: Any) -> bool:
             "length",
             "unique_length",
             "circular_pattern",
+            "point_set",
         }
         nested_expectations = {
             key: child_expected
@@ -520,4 +653,102 @@ def circular_positions_match(
         if any(abs(gap - expected_gap) > tolerance for gap in gaps):
             return False
 
+    expected_start_angle = expected_pattern.get("start_angle_degrees")
+    if expected_start_angle is not None:
+        angle_tolerance = float(
+            expected_pattern.get("angle_tolerance_degrees", 1e-4)
+        )
+        if not any(
+            angular_distance_degrees(
+                math.degrees(math.atan2(point[1], point[0])),
+                float(expected_start_angle),
+            )
+            <= angle_tolerance
+            for point in actual_value
+        ):
+            return False
+
     return True
+
+
+def unordered_points_match(
+    actual_value: Any,
+    expected_points: Any,
+    tolerance: float,
+) -> bool:
+    """Return whether two 2D point lists match regardless of ordering."""
+    if not isinstance(actual_value, list) or not isinstance(expected_points, list):
+        return False
+    if len(actual_value) != len(expected_points):
+        return False
+    if not all(is_2d_numeric_point(point) for point in actual_value):
+        return False
+    if not all(is_2d_numeric_point(point) for point in expected_points):
+        return False
+
+    unmatched = list(actual_value)
+    for expected_point in expected_points:
+        match_index = next(
+            (
+                index
+                for index, actual_point in enumerate(unmatched)
+                if math.dist(actual_point, expected_point) <= tolerance
+            ),
+            None,
+        )
+        if match_index is None:
+            return False
+        unmatched.pop(match_index)
+    return True
+
+
+def is_2d_numeric_point(value: Any) -> bool:
+    """Return whether a value is a numeric two-dimensional point."""
+    return (
+        isinstance(value, list)
+        and len(value) == 2
+        and all(isinstance(coordinate, (int, float)) for coordinate in value)
+    )
+
+
+def circular_patterns_have_angular_offset(
+    first_positions: Any,
+    second_positions: Any,
+    expected_offset_degrees: float,
+    tolerance_degrees: float,
+) -> bool:
+    """Return whether equal-count circular patterns have the expected phase."""
+    if not isinstance(first_positions, list) or not isinstance(second_positions, list):
+        return False
+    if (
+        not first_positions
+        or len(first_positions) != len(second_positions)
+        or not all(is_2d_numeric_point(point) for point in first_positions)
+        or not all(is_2d_numeric_point(point) for point in second_positions)
+    ):
+        return False
+
+    count = len(first_positions)
+    period = 360.0 / count
+    first_phase = circular_pattern_phase_degrees(first_positions, period)
+    second_phase = circular_pattern_phase_degrees(second_positions, period)
+    actual_offset = abs(second_phase - first_phase) % period
+    actual_offset = min(actual_offset, period - actual_offset)
+    expected_offset = abs(expected_offset_degrees) % period
+    expected_offset = min(expected_offset, period - expected_offset)
+    return abs(actual_offset - expected_offset) <= tolerance_degrees
+
+
+def circular_pattern_phase_degrees(
+    positions: list[list[float]],
+    period_degrees: float,
+) -> float:
+    """Return the repeated angular phase of one evenly spaced pattern."""
+    angle = math.degrees(math.atan2(positions[0][1], positions[0][0]))
+    return angle % period_degrees
+
+
+def angular_distance_degrees(first: float, second: float) -> float:
+    """Return the smallest unsigned angle between two degree values."""
+    difference = abs((first - second) % 360.0)
+    return min(difference, 360.0 - difference)

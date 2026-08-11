@@ -20,9 +20,6 @@ def intent_coverage_failures(design_intent: dict[str, Any]) -> list[str]:
     """Return missing required semantic concepts in a design-intent object."""
     design_intent = remove_null_values(design_intent)
     required_concepts = design_intent.get("required_concepts", [])
-    if not required_concepts:
-        return []
-
     covered_concepts = covered_intent_concepts(design_intent)
     failures = []
     for required_concept in required_concepts:
@@ -34,6 +31,79 @@ def intent_coverage_failures(design_intent: dict[str, Any]) -> list[str]:
             failures.append(
                 f"Required concept '{required_concept}' is not covered by "
                 "the base, features, edge treatments, roles, or ids."
+            )
+
+    failures.extend(intent_structure_failures(design_intent))
+
+    return failures
+
+
+def intent_structure_failures(design_intent: dict[str, Any]) -> list[str]:
+    """Return semantic inconsistencies that schema validation cannot detect."""
+    features = design_intent.get("features", [])
+    base = design_intent.get("base", {})
+    failures = []
+
+    for feature in features:
+        if (
+            feature.get("role") == "rim"
+            and feature.get("operation") == "extrusion"
+        ):
+            rim_id = feature.get("id")
+            rim_distance = feature.get("distance")
+            inner_cuts = [
+                candidate
+                for candidate in features
+                if candidate.get("operation") == "cut"
+                and candidate.get("target", "").startswith(f"{rim_id}.")
+                and candidate.get("placement", {}).get("type") == "centered"
+            ]
+            for inner_cut in inner_cuts:
+                cut_depth = inner_cut.get("depth")
+                if (
+                    isinstance(rim_distance, (int, float))
+                    and isinstance(cut_depth, (int, float))
+                    and abs(float(rim_distance) - float(cut_depth)) > 1e-6
+                ):
+                    failures.append(
+                        f"Rim '{rim_id}' is {rim_distance} mm tall, but its "
+                        f"center opening cut is only {cut_depth} mm deep. "
+                        "Use equal values so the rim remains hollow."
+                    )
+
+            wall_features = [
+                candidate
+                for candidate in features
+                if candidate.get("role") == "wall"
+                and candidate.get("operation") == "extrusion"
+            ]
+            target_owner = str(feature.get("target", "")).split(".", 1)[0]
+            if wall_features and target_owner in {"base", base.get("id")}:
+                failures.append(
+                    f"Rim '{rim_id}' starts from the base while separate walls "
+                    "already define the tray height. Target a wall top face and "
+                    "extrude only the requested rim height."
+                )
+
+        if (
+            feature.get("role") == "tab"
+            and feature.get("operation") == "extrusion"
+            and str(feature.get("target", "")).endswith(".top")
+            and feature.get("placement", {}).get("type") == "offset_from_edge"
+            and isinstance(
+                feature.get("placement", {}).get("offset"),
+                (int, float),
+            )
+            and float(feature["placement"]["offset"]) < 0
+            and isinstance(feature.get("distance"), (int, float))
+            and isinstance(base.get("thickness"), (int, float))
+            and abs(float(feature["distance"]) - float(base["thickness"])) <= 1e-6
+        ):
+            failures.append(
+                f"Tab '{feature.get('id')}' is positioned outside a top face "
+                "but extrudes another full base thickness upward. For a "
+                "coplanar side extension, target the corresponding side face "
+                "and use distance as the outward extension."
             )
 
     return failures

@@ -335,6 +335,10 @@ Supported placements:
   feature-center coordinate parallel to the edge, measured from the target
   center; use along 0 for a centered wall or feature. Never put the feature's
   width, height, span, or length in along.
+  For near-corner circles, margin is clearance from the circle's outside edge
+  to the parent outline, not the center-to-edge distance. If the user gives a
+  center-to-edge distance, subtract the circle radius to obtain margin, or use
+  explicit positions when exact centers are clearer.
 - same_as_feature: for child features that must reuse every instance position
   of an earlier feature. Include source_feature with that earlier feature's id.
   Use this for requests such as "one hole in each boss", "a hole in every
@@ -379,11 +383,20 @@ Parent-child feature rules:
 - A hole through a vertical wall must target the appropriate vertical side
   face of that wall. Do not target the wall's top face, which is its horizontal
   cap and produces a cut in the wrong direction.
+- Coordinates on a vertical side face are local face coordinates: the first
+  coordinate runs horizontally along the face and the second runs vertically
+  from the face center. If a wall is H tall and a hole center is h above the
+  wall base, use explicit position [[0, h - H/2]] when it is horizontally
+  centered. Do not encode the requested height as offset_from_edge along.
 - For a raised rim made as an outer extrusion followed by an inner cut, make
   the inner cut target the rim extrusion's top face. Give that inner cut a
   numeric depth equal to the rim extrusion distance so it removes only the
   raised material. Do not use "through" unless the request explicitly asks
   for the opening to continue through the body below the rim.
+- When a tray is built from a thin bottom plus separate wall extrusions, start
+  the rim on a wall top face and extrude only the rim height. Do not add wall
+  height to rim distance. The centered inner rim cut must equal that same rim
+  distance.
 - A single through cut may pass through multiple aligned, parallel walls.
   When one straight bore creates the requested hole in every aligned wall,
   output one cut from the nearest wall rather than duplicate cuts at the same
@@ -395,6 +408,14 @@ Wall dimension rules for extrusion from a base top face:
   and rectangle height is the wall span along the base height.
 - For a wall along the front or back edge, rectangle height is wall thickness
   and rectangle width is the wall span along the base width.
+
+Coplanar side-extension rules:
+- A tab, ear, or flange that extends the base outline while keeping the same
+  thickness is not a raised top-face extrusion. Target base.left, base.right,
+  base.front, or base.back and use distance for the outward extension.
+- On that vertical side face, size the sketch to the requested in-plane tab
+  span and the existing base thickness. Do not extrude a second base thickness
+  upward from base.top.
 
 For shaft-like parts:
 - Use base profile "cylinder" for normal shafts/cylinders that have diameter
@@ -408,6 +429,15 @@ For shaft-like parts:
   rectangle width is radial cut depth; height is axial groove width.
 - For centered collars/grooves, use centered placement. For features near one
   end, use offset_from_edge with edge "front" or "back".
+- For an exact axial center, explicit placement stores the axial coordinate in
+  the second value: use [[0, axial_center]], such as [[0, -25]] and [[0, 25]].
+- For a collar with requested outside diameter D on a shaft diameter d, radial
+  width is (D - d) / 2, axial height is the requested collar width, and the
+  inferred radius should normally be omitted. Example: a 36 mm collar on a
+  24 mm shaft that is 8 mm wide uses width 6 and height 8.
+- For a circumferential groove 2 mm deep and 3 mm wide, use radial width 2 and
+  axial height 3. Omit radius unless the request gives a nonstandard radial
+  centerline.
 - Do not include counterbore or countersink in required_concepts unless the
   prompt explicitly asks for a counterbore, countersink, recessed screw seat,
   or chamfered/conical hole.
@@ -506,6 +536,16 @@ choose simple, proportional millimeter values that fit the parent geometry.
 
 Every additive feature must intersect existing material. Every cut must remove
 measurable material. Every repeated instance must affect the intended target.
+For revolved rectangle features, width is radial depth/thickness, height is
+axial width, and explicit axial placement uses [0, axial_center]. A repeated
+collar or groove must use a different axial center for every requested copy.
+For a same_as_feature child of an additive boss/tab, target that parent
+feature's material face rather than the base. For side-face features, use
+local coordinates [horizontal_from_center, vertical_from_center]. A hollow
+rim's inner cut depth must equal the rim extrusion distance. A coplanar tab
+extending the base outline must start on a side face, not the base top. When a
+prompt gives a circular feature's center-to-edge distance, convert it to exact
+positions or subtract the feature radius before using near_corners.margin.
 Prefer the smallest change that satisfies the original request and all reported
 failures. Return JSON only.
 """.strip()

@@ -21,6 +21,150 @@ def test_parse_args_accepts_isolated_model_override(monkeypatch):
     assert args.mode == ["intent"]
 
 
+def test_parse_args_accepts_strict_release_gate(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["tiny_api_compare", "--require-all-pass"],
+    )
+
+    args = tiny_api_compare.parse_args()
+
+    assert args.require_all_pass is True
+
+
+def test_parse_args_accepts_deployed_service(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "tiny_api_compare",
+            "--api-base-url",
+            "https://cad.example",
+            "--mode",
+            "deployed",
+        ],
+    )
+
+    args = tiny_api_compare.parse_args()
+
+    assert args.api_base_url == "https://cad.example"
+    assert args.mode == ["deployed"]
+
+
+def test_finish_cli_report_fails_strict_gate_on_warning(tmp_path, capsys):
+    report = {
+        "api_call_budget": 1,
+        "cases": [],
+        "summary": {
+            "case_count": 1,
+            "result_count": 1,
+            "status_counts": {"pass": 0, "warn": 1, "fail": 0},
+            "average_elapsed_seconds": 0,
+            "total_elapsed_seconds": 0,
+            "slowest_results": [],
+        },
+    }
+
+    with pytest.raises(SystemExit) as caught:
+        tiny_api_compare.finish_cli_report(
+            report,
+            tmp_path / "report.json",
+            require_all_pass=True,
+        )
+
+    assert caught.value.code == 1
+    assert "RESULTS" in capsys.readouterr().out
+
+
+def test_finish_cli_report_accepts_all_pass(tmp_path):
+    report = {
+        "api_call_budget": 1,
+        "cases": [],
+        "summary": {
+            "case_count": 1,
+            "result_count": 1,
+            "status_counts": {"pass": 1, "warn": 0, "fail": 0},
+            "average_elapsed_seconds": 0,
+            "total_elapsed_seconds": 0,
+            "slowest_results": [],
+        },
+    }
+
+    tiny_api_compare.finish_cli_report(
+        report,
+        tmp_path / "report.json",
+        require_all_pass=True,
+    )
+
+
+def test_run_deployed_rechecks_returned_model_locally(monkeypatch):
+    response_payload = {
+        "status": "success",
+        "generation_path": "design_intent",
+        "generation_mode": "automatic",
+        "design_intent": {
+            "required_concepts": ["plate"],
+            "base": {
+                "id": "base",
+                "role": "plate",
+                "profile": "rectangle",
+                "width": 20,
+                "height": 12,
+                "thickness": 3,
+            },
+            "features": [],
+            "edge_treatments": [],
+        },
+        "model_data": {
+            "operations": [
+                {
+                    "type": "extrude",
+                    "id": "base",
+                    "plane": "XY",
+                    "profile": "rectangle",
+                    "width": 20,
+                    "height": 12,
+                    "distance": 3,
+                }
+            ],
+            "relationships": [],
+        },
+        "performance": {"api_seconds": 1.2, "total_seconds": 1.4},
+    }
+
+    class FakeResponse:
+        status = 200
+        reason = "OK"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps(response_payload).encode("utf-8")
+
+    monkeypatch.setattr(
+        tiny_api_compare,
+        "urlopen",
+        lambda request, timeout: FakeResponse(),
+    )
+
+    result = tiny_api_compare.run_deployed(
+        "Create a plate.",
+        "https://cad.example/",
+    )
+
+    assert result["status"] == "pass"
+    assert result["generation_path"] == "design_intent"
+    assert result["build_succeeded"] is True
+    assert result["operation_effects_passed"] is True
+    assert result["intent_coverage_passed"] is True
+    assert result["server_performance"]["api_seconds"] == 1.2
+
+
 def test_load_prompt_cases_from_named_case_file(tmp_path):
     prompt_file = tmp_path / "gap_tests.json"
     prompt_file.write_text(

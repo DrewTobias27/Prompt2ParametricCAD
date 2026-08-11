@@ -192,6 +192,35 @@ def check_openai_connection(timeout_seconds: int = 10) -> dict[str, Any]:
         }
 
 
+def check_deployed_connection(
+    api_base_url: str,
+    timeout_seconds: int = 180,
+) -> dict[str, Any]:
+    """Check a deployed Prompt2CAD service, allowing for a cold start."""
+    request = Request(
+        f"{api_base_url.rstrip('/')}/health",
+        headers={"Accept": "application/json"},
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            return {
+                "passed": 200 <= response.status < 300,
+                "status_code": response.status,
+                "reason": response.reason,
+                "api_base_url": api_base_url,
+            }
+    except (HTTPError, URLError, TimeoutError) as error:
+        return {
+            "passed": False,
+            "status_code": getattr(error, "code", None),
+            "error_type": type(error).__name__,
+            "message": str(error),
+            "reason": getattr(error, "reason", None),
+            "api_base_url": api_base_url,
+        }
+
+
 def evaluate_model_data(
     model_data: dict[str, Any],
     *,
@@ -459,6 +488,81 @@ def run_intent_feedback(prompt: str) -> dict[str, Any]:
     }
 
 
+def run_deployed(
+    prompt: str,
+    api_base_url: str,
+    timeout_seconds: int = 300,
+) -> dict[str, Any]:
+    """Generate through the public web API, then repeat every local check."""
+    started_at = time.perf_counter()
+    request = Request(
+        f"{api_base_url.rstrip('/')}/generate",
+        data=json.dumps({"prompt": prompt}).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=timeout_seconds) as response:
+        response_data = json.loads(response.read().decode("utf-8"))
+
+    result: dict[str, Any] = {
+        "deployment_status": response_data.get("status"),
+        "generation_path": response_data.get("generation_path"),
+        "generation_mode": response_data.get("generation_mode"),
+        "pipeline_attempts": response_data.get("pipeline_attempts", []),
+        "design_intent": response_data.get("design_intent"),
+        "model_data": response_data.get("model_data"),
+        "repair_count": len(response_data.get("intent_repair_history", [])),
+        "recovered_after_feedback": bool(
+            response_data.get("intent_repair_history")
+        ),
+        "intent_repair_history": response_data.get(
+            "intent_repair_history",
+            [],
+        ),
+        "server_performance": response_data.get("performance", {}),
+    }
+    if response_data.get("message"):
+        result["message"] = response_data["message"]
+
+    model_data = result["model_data"]
+    design_intent = result["design_intent"]
+    performance = {
+        key: value
+        for key, value in result["server_performance"].items()
+        if key in CANONICAL_TIMING_STAGES and isinstance(value, (int, float))
+    }
+
+    if isinstance(design_intent, dict) and isinstance(model_data, dict):
+        coverage_failures = intent_coverage_failures(design_intent)
+        missing_dimensions = missing_required_intent_dimensions(design_intent)
+        intent_alignment = evaluate_intent_alignment(design_intent, model_data)
+        result.update({
+            "intent_coverage_passed": not coverage_failures,
+            "intent_coverage_failures": coverage_failures,
+            "intent_missing_required_dimensions": missing_dimensions,
+            "intent_alignment_passed": intent_alignment["passed"],
+            "intent_alignment_failures": intent_alignment["failures"],
+        })
+
+    if isinstance(model_data, dict):
+        evaluation = evaluate_model_data(model_data)
+        performance.update(evaluation.pop("performance", {}))
+        result.update(evaluation)
+
+    total_seconds = elapsed_seconds(started_at)
+    result["performance"] = finalize_performance(performance, total_seconds)
+    result["elapsed_seconds"] = round(total_seconds, 2)
+    result["status"] = (
+        status_for_result(result)
+        if response_data.get("status") == "success"
+        else "fail"
+    )
+    return result
+
+
 def evaluate_existing_intent(
     design_intent: dict[str, Any],
     *,
@@ -495,10 +599,22 @@ def evaluate_existing_intent(
     return result
 
 
-def run_case(prompt: str, mode: str) -> dict[str, Any]:
+def run_case(
+    prompt: str,
+    mode: str,
+    *,
+    api_base_url: str | None = None,
+) -> dict[str, Any]:
     """Run one prompt through one API path and return a compact result."""
     started_at = time.perf_counter()
     try:
+        if mode == "deployed":
+            if api_base_url is None:
+                raise ValueError("deployed mode requires --api-base-url")
+            return {
+                "mode": mode,
+                **run_deployed(prompt, api_base_url),
+            }
         if mode == "direct":
             result = run_direct(prompt)
         elif mode == "intent":
@@ -873,6 +989,7 @@ def compare_prompts(
     output_path: Path,
     skip_preflight: bool = False,
     modes: list[str] | None = None,
+    api_base_url: str | None = None,
 ) -> dict[str, Any]:
     """Run a tiny comparison and save the full report."""
     return compare_prompt_cases(
@@ -880,6 +997,7 @@ def compare_prompts(
         output_path=output_path,
         skip_preflight=skip_preflight,
         modes=modes,
+        api_base_url=api_base_url,
     )
 
 
@@ -889,6 +1007,7 @@ def compare_prompt_cases(
     output_path: Path,
     skip_preflight: bool = False,
     modes: list[str] | None = None,
+    api_base_url: str | None = None,
 ) -> dict[str, Any]:
     """Run cases through the selected generation paths."""
     modes = modes or ["intent_feedback"]
@@ -896,12 +1015,17 @@ def compare_prompt_cases(
         "api_call_budget": len(prompt_cases) * len(modes),
         "modes": modes,
         "configured_model": os.getenv("PROMPT2CAD_OPENAI_MODEL"),
+        "api_base_url": api_base_url,
         "preflight": None,
         "cases": [],
     }
 
     if not skip_preflight:
-        preflight = check_openai_connection()
+        preflight = (
+            check_deployed_connection(api_base_url)
+            if api_base_url is not None
+            else check_openai_connection()
+        )
         report["preflight"] = preflight
         if not preflight["passed"]:
             attach_report_summary(report)
@@ -916,7 +1040,11 @@ def compare_prompt_cases(
         results = []
 
         for mode in modes:
-            result = run_case(prompt, mode)
+            result = (
+                run_case(prompt, mode, api_base_url=api_base_url)
+                if api_base_url is not None
+                else run_case(prompt, mode)
+            )
             model_output_path = models_dir / mode / f"{safe_case_name(case_name)}.json"
             result = attach_eval_result(
                 result,
@@ -955,6 +1083,7 @@ def compare_eval_cases(
     output_path: Path,
     skip_preflight: bool = False,
     modes: list[str] | None = None,
+    api_base_url: str | None = None,
 ) -> dict[str, Any]:
     """Run API generation paths against existing evaluator case files."""
     modes = modes or ["intent_feedback"]
@@ -962,13 +1091,18 @@ def compare_eval_cases(
         "api_call_budget": len(case_names) * len(modes),
         "modes": modes,
         "configured_model": os.getenv("PROMPT2CAD_OPENAI_MODEL"),
+        "api_base_url": api_base_url,
         "cases_dir": str(cases_dir),
         "preflight": None,
         "cases": [],
     }
 
     if not skip_preflight:
-        preflight = check_openai_connection()
+        preflight = (
+            check_deployed_connection(api_base_url)
+            if api_base_url is not None
+            else check_openai_connection()
+        )
         report["preflight"] = preflight
         if not preflight["passed"]:
             attach_report_summary(report)
@@ -984,7 +1118,11 @@ def compare_eval_cases(
         results = []
 
         for mode in modes:
-            result = run_case(prompt, mode)
+            result = (
+                run_case(prompt, mode, api_base_url=api_base_url)
+                if api_base_url is not None
+                else run_case(prompt, mode)
+            )
             model_output_path = models_dir / mode / f"{case_name}.json"
             results.append(
                 attach_eval_result(
@@ -1244,11 +1382,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         action="append",
-        choices=["direct", "intent", "intent_feedback"],
+        choices=["direct", "intent", "intent_feedback", "deployed"],
         help=(
             "Generation path to run. Omit to run the production feedback loop, "
             "which records its exact first-pass candidate for paired scoring. "
             "Direct is retained only for explicit fallback diagnostics."
+        ),
+    )
+    parser.add_argument(
+        "--api-base-url",
+        help=(
+            "Run deployed mode against a public Prompt2CAD service, such as "
+            "https://prompt2parametriccad.onrender.com. When supplied without "
+            "--mode, deployed mode is selected automatically."
         ),
     )
     parser.add_argument(
@@ -1259,7 +1405,35 @@ def parse_args() -> argparse.Namespace:
             "without making API calls."
         ),
     )
+    parser.add_argument(
+        "--require-all-pass",
+        action="store_true",
+        help=(
+            "Exit with status 1 when any result is a warning or failure. "
+            "Use this for a strict release gate."
+        ),
+    )
     return parser.parse_args()
+
+
+def finish_cli_report(
+    report: dict[str, Any],
+    output_path: Path,
+    *,
+    require_all_pass: bool,
+) -> None:
+    """Print a report and enforce the optional strict release gate."""
+    print_summary(report, output_path)
+    if not require_all_pass:
+        return
+
+    status_counts = report.get("summary", {}).get("status_counts", {})
+    nonpassing_count = sum(
+        int(status_counts.get(status, 0))
+        for status in ("warn", "fail")
+    )
+    if nonpassing_count:
+        raise SystemExit(1)
 
 
 def main() -> None:
@@ -1269,6 +1443,7 @@ def main() -> None:
         os.environ["PROMPT2CAD_OPENAI_MODEL"] = args.model
     if args.reasoning_effort is not None:
         os.environ["PROMPT2CAD_REASONING_EFFORT"] = args.reasoning_effort
+    modes = args.mode or (["deployed"] if args.api_base_url else None)
     if args.rescore_report is not None:
         prompt_cases = (
             filter_prompt_cases(load_prompt_cases(args.prompt_file), args.prompt_case)
@@ -1280,7 +1455,11 @@ def main() -> None:
             output_path=args.output,
             prompt_cases=prompt_cases,
         )
-        print_summary(report, args.output)
+        finish_cli_report(
+            report,
+            args.output,
+            require_all_pass=args.require_all_pass,
+        )
         return
 
     eval_cases = args.eval_case or (DEFAULT_EVAL_CASES if args.hard_eval_suite else [])
@@ -1290,9 +1469,14 @@ def main() -> None:
             cases_dir=args.cases_dir,
             output_path=args.output,
             skip_preflight=args.skip_preflight,
-            modes=args.mode,
+            modes=modes,
+            api_base_url=args.api_base_url,
         )
-        print_summary(report, args.output)
+        finish_cli_report(
+            report,
+            args.output,
+            require_all_pass=args.require_all_pass,
+        )
         return
 
     if args.prompt_file is not None:
@@ -1303,9 +1487,14 @@ def main() -> None:
             ),
             output_path=args.output,
             skip_preflight=args.skip_preflight,
-            modes=args.mode,
+            modes=modes,
+            api_base_url=args.api_base_url,
         )
-        print_summary(report, args.output)
+        finish_cli_report(
+            report,
+            args.output,
+            require_all_pass=args.require_all_pass,
+        )
         return
 
     prompts = args.prompt or DEFAULT_PROMPTS
@@ -1313,9 +1502,14 @@ def main() -> None:
         prompts,
         output_path=args.output,
         skip_preflight=args.skip_preflight,
-        modes=args.mode,
+        modes=modes,
+        api_base_url=args.api_base_url,
     )
-    print_summary(report, args.output)
+    finish_cli_report(
+        report,
+        args.output,
+        require_all_pass=args.require_all_pass,
+    )
 
 
 if __name__ == "__main__":

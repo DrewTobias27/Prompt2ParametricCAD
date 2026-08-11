@@ -140,5 +140,23 @@ prompt2cad-capability-audit --execute-native `
   --output-root generated\capability-native-release
 ```
 
+Run the curated live semantic gate against the same public service used by
+portfolio visitors:
+
+```powershell
+prompt2cad-live-eval `
+  --prompt-file evals\release_semantic_cases.json `
+  --api-base-url https://prompt2parametriccad.onrender.com `
+  --require-all-pass `
+  --output generated\release-semantic\deployed-report.json
+```
+
+The ten live cases cover exact corner offsets, compound counterbores, aligned
+wall bores, nested feature ownership, revolved shaft details, nonrectangular
+parent/child patterns, angularly offset radial patterns, hollow trays,
+coplanar side tabs, and edge-treated slot plates. A warning fails this gate;
+valid geometry alone is insufficient when dimensions or relationships differ
+from the request.
+
 The native command is intentionally long-running. Use `--category` or repeated
 `--case` arguments for focused development runs.

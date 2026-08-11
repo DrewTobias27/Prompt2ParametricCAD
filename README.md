@@ -223,6 +223,19 @@ Run deterministic and generated-model evaluations:
 prompt2cad-eval --models-dir generated\evals --cases-dir evals\cases
 ```
 
+Run the strict semantic release suite against the public deployment. This
+rebuilds every returned model locally and checks requested dimensions, feature
+counts, placements, parent targets, pattern relationships, and operation
+effects:
+
+```powershell
+prompt2cad-live-eval `
+  --prompt-file evals\release_semantic_cases.json `
+  --api-base-url https://prompt2parametriccad.onrender.com `
+  --require-all-pass `
+  --output generated\release-semantic\deployed-report.json
+```
+
 Generate training-ready design-intent records:
 
 ```powershell

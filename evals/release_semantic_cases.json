@@ -1,0 +1,376 @@
+{
+  "description": "Curated live-API release gate. These cases require exact dimensions, feature counts, target ownership, pattern relationships, buildable single-solid geometry, and measurable operation effects.",
+  "cases": [
+    {
+      "name": "release_mounting_plate_nested_boss",
+      "prompt": "Create a 100 mm by 70 mm rectangular mounting plate, 8 mm thick. Cut four 6 mm circular through holes near the corners with each hole center 10 mm from its two nearest plate edges. Add a centered 36 mm by 24 mm rectangular boss on the top face, 12 mm tall. Cut a centered 14 mm circular through hole through the boss.",
+      "focus": "Exact base size, four corner instances, centered boss, and a child hole owned by the boss.",
+      "expected_intent": {
+        "base": {
+          "profile": "rectangle",
+          "width": {"approx": 100, "tolerance": 0.1},
+          "height": {"approx": 70, "tolerance": 0.1},
+          "thickness": {"approx": 8, "tolerance": 0.1}
+        },
+        "features": [
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "diameter": {"approx": 6, "tolerance": 0.1},
+            "depth": "through",
+            "placement": {"type": {"one_of": ["near_corners", "explicit"]}}
+          },
+          {
+            "operation": "extrusion",
+            "shape": "rectangle",
+            "width": {"approx": 36, "tolerance": 0.1},
+            "height": {"approx": 24, "tolerance": 0.1},
+            "distance": {"approx": 12, "tolerance": 0.1},
+            "placement": {"type": "centered"}
+          },
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "diameter": {"approx": 14, "tolerance": 0.1},
+            "depth": "through",
+            "placement": {"type": "centered"}
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {
+          "type": "extrude",
+          "profile": "rectangle",
+          "width": {"approx": 100, "tolerance": 0.1},
+          "height": {"approx": 70, "tolerance": 0.1},
+          "distance": {"approx": 8, "tolerance": 0.1}
+        },
+        "operation_groups": [
+          {
+            "selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 6, "tolerance": 0.1}},
+            "operation_count": 1,
+            "instance_count": 4,
+            "positions": {
+              "point_set": [[-40, -25], [-40, 25], [40, -25], [40, 25]],
+              "tolerance": 0.2
+            }
+          },
+          {
+            "selector": {"type": "add_extrude", "profile": "rectangle", "width": {"approx": 36, "tolerance": 0.1}, "height": {"approx": 24, "tolerance": 0.1}, "distance": {"approx": 12, "tolerance": 0.1}},
+            "operation_count": 1,
+            "instance_count": 1
+          },
+          {
+            "selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 14, "tolerance": 0.1}},
+            "operation_count": 1,
+            "instance_count": 1
+          }
+        ],
+        "operation_relationships": [
+          {
+            "type": "targets_parent",
+            "feature": {"type": "cut", "diameter": {"approx": 14, "tolerance": 0.1}},
+            "parent": {"type": "add_extrude", "profile": "rectangle", "width": {"approx": 36, "tolerance": 0.1}}
+          }
+        ],
+        "geometry": {
+          "solid_count": 1,
+          "bounding_box": {
+            "xlen": {"approx": 100, "tolerance": 0.2},
+            "ylen": {"approx": 70, "tolerance": 0.2},
+            "zlen": {"approx": 20, "tolerance": 0.2}
+          }
+        }
+      }
+    },
+    {
+      "name": "release_counterbored_flange",
+      "prompt": "Create a 110 mm diameter circular flange, 12 mm thick. Add six equally spaced 6 mm through holes on a 78 mm bolt circle. Counterbore those same six holes to 12 mm diameter and 4 mm depth from the top. Add a centered 32 mm diameter boss, 8 mm tall, and cut a centered 14 mm through hole through the boss and flange.",
+      "focus": "Concentric compound-hole patterns, exact bolt circle, centered boss, and full-depth center bore.",
+      "expected_intent": {
+        "base": {
+          "profile": "circle",
+          "diameter": {"approx": 110, "tolerance": 0.1},
+          "thickness": {"approx": 12, "tolerance": 0.1}
+        },
+        "features": [
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "diameter": {"approx": 6, "tolerance": 0.1},
+            "placement": {"type": "circular_pattern", "count": 6, "radius": {"approx": 39, "tolerance": 0.1}}
+          },
+          {
+            "role": "counterbore",
+            "operation": "cut",
+            "shape": "circle",
+            "diameter": {"approx": 12, "tolerance": 0.1},
+            "depth": {"approx": 4, "tolerance": 0.1},
+            "placement": {"type": {"one_of": ["same_as_feature", "circular_pattern"]}}
+          },
+          {
+            "operation": "extrusion",
+            "shape": "circle",
+            "diameter": {"approx": 32, "tolerance": 0.1},
+            "distance": {"approx": 8, "tolerance": 0.1},
+            "placement": {"type": "centered"}
+          },
+          {
+            "operation": "cut",
+            "shape": "circle",
+            "diameter": {"approx": 14, "tolerance": 0.1},
+            "depth": "through",
+            "placement": {"type": "centered"}
+          }
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "circle", "diameter": {"approx": 110, "tolerance": 0.1}, "distance": {"approx": 12, "tolerance": 0.1}},
+        "operation_groups": [
+          {
+            "selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 6, "tolerance": 0.1}},
+            "operation_count": 1,
+            "instance_count": 6
+          },
+          {
+            "selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 12, "tolerance": 0.1}, "depth": {"approx": 4, "tolerance": 0.1}},
+            "operation_count": 1,
+            "instance_count": 6
+          },
+          {
+            "selector": {"type": "add_extrude", "profile": "circle", "diameter": {"approx": 32, "tolerance": 0.1}, "distance": {"approx": 8, "tolerance": 0.1}},
+            "operation_count": 1,
+            "instance_count": 1
+          },
+          {
+            "selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 14, "tolerance": 0.1}},
+            "operation_count": 1,
+            "instance_count": 1
+          }
+        ],
+        "operations": [
+          {"type": "cut", "diameter": {"approx": 6, "tolerance": 0.1}, "positions": {"circular_pattern": {"count": 6, "radius": 39, "tolerance": 0.2}}},
+          {"type": "cut", "diameter": {"approx": 12, "tolerance": 0.1}, "positions": {"circular_pattern": {"count": 6, "radius": 39, "tolerance": 0.2}}}
+        ],
+        "operation_relationships": [
+          {
+            "type": "same_positions",
+            "features": [
+              {"type": "cut", "diameter": {"approx": 6, "tolerance": 0.1}},
+              {"type": "cut", "diameter": {"approx": 12, "tolerance": 0.1}}
+            ]
+          },
+          {
+            "type": "targets_parent",
+            "feature": {"type": "cut", "diameter": {"approx": 14, "tolerance": 0.1}},
+            "parent": {"type": "add_extrude", "diameter": {"approx": 32, "tolerance": 0.1}}
+          }
+        ],
+        "geometry": {"solid_count": 1, "bounding_box": {"xlen": {"approx": 110, "tolerance": 0.2}, "ylen": {"approx": 110, "tolerance": 0.2}, "zlen": {"approx": 20, "tolerance": 0.2}}}
+      }
+    },
+    {
+      "name": "release_u_bracket_aligned_wall_bore",
+      "prompt": "Create a U bracket from a 90 mm by 55 mm rectangular base plate, 8 mm thick. Add two vertical side walls along the left and right edges. Each wall is 8 mm thick, spans the full 55 mm base depth, and rises 45 mm above the base. Make one coaxial 8 mm through bore centered 25 mm above the base top so it passes through both walls.",
+      "focus": "Two connected wall instances and one correctly targeted bore crossing both aligned walls.",
+      "expected_intent": {
+        "base": {"profile": "rectangle", "width": {"approx": 90, "tolerance": 0.1}, "height": {"approx": 55, "tolerance": 0.1}, "thickness": {"approx": 8, "tolerance": 0.1}},
+        "features": [
+          {"role": "wall", "operation": "extrusion", "shape": "rectangle", "distance": {"approx": 45, "tolerance": 0.1}},
+          {"role": "hole", "operation": "cut", "shape": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": "through", "target": {"contains": "wall"}}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "rectangle", "width": {"approx": 90, "tolerance": 0.1}, "height": {"approx": 55, "tolerance": 0.1}, "distance": {"approx": 8, "tolerance": 0.1}},
+        "operation_groups": [
+          {"selector": {"type": "add_extrude", "profile": "rectangle", "distance": {"approx": 45, "tolerance": 0.1}}, "operation_count": {"min": 1}, "instance_count": 2},
+          {"selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": "through", "target": {"contains": "wall"}}, "operation_count": {"min": 1}, "instance_count": {"min": 1}, "positions": {"point_set": [[0, 2.5]], "tolerance": 0.2}}
+        ],
+        "geometry": {"solid_count": 1, "bounding_box": {"xlen": {"approx": 90, "tolerance": 0.2}, "ylen": {"approx": 55, "tolerance": 0.2}, "zlen": {"approx": 53, "tolerance": 0.2}}}
+      }
+    },
+    {
+      "name": "release_nested_boss_cross_hole_fillet",
+      "prompt": "Create a 90 mm by 60 mm rectangular base, 10 mm thick. Add a centered 44 mm by 30 mm rectangular boss, 14 mm tall. Add a centered 24 mm diameter circular boss on top of that boss, 8 mm tall. Cut an 8 mm horizontal through hole through the front and back faces of the rectangular boss. Fillet the four vertical outer edges of the base with a 3 mm radius.",
+      "focus": "Nested parent targets, a side-face bore, exact stack height, and a native edge treatment.",
+      "expected_intent": {
+        "base": {"profile": "rectangle", "width": {"approx": 90, "tolerance": 0.1}, "height": {"approx": 60, "tolerance": 0.1}, "thickness": {"approx": 10, "tolerance": 0.1}},
+        "features": [
+          {"operation": "extrusion", "shape": "rectangle", "width": {"approx": 44, "tolerance": 0.1}, "height": {"approx": 30, "tolerance": 0.1}, "distance": {"approx": 14, "tolerance": 0.1}, "placement": {"type": "centered"}},
+          {"operation": "extrusion", "shape": "circle", "diameter": {"approx": 24, "tolerance": 0.1}, "distance": {"approx": 8, "tolerance": 0.1}, "placement": {"type": "centered"}},
+          {"operation": "cut", "shape": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": "through", "target": {"contains": "boss."}}
+        ],
+        "edge_treatments": [
+          {"treatment": "fillet", "target_feature": "base", "edge_selector": "vertical_edges", "radius": {"approx": 3, "tolerance": 0.1}}
+        ]
+      },
+      "expected_concepts": {
+        "operation_counts": {"add_extrude": 2, "cut": 1, "fillet": 1},
+        "operations": [
+          {"type": "add_extrude", "profile": "rectangle", "width": {"approx": 44, "tolerance": 0.1}, "height": {"approx": 30, "tolerance": 0.1}, "distance": {"approx": 14, "tolerance": 0.1}},
+          {"type": "add_extrude", "profile": "circle", "diameter": {"approx": 24, "tolerance": 0.1}, "distance": {"approx": 8, "tolerance": 0.1}},
+          {"type": "cut", "profile": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": "through", "target": {"contains": "boss."}, "positions": {"point_set": [[0, 0]], "tolerance": 0.2}},
+          {"type": "fillet", "target": {"contains": "base.vertical_edges"}, "radius": {"approx": 3, "tolerance": 0.1}}
+        ],
+        "operation_relationships": [
+          {"type": "targets_parent", "feature": {"type": "add_extrude", "profile": "circle"}, "parent": {"type": "add_extrude", "profile": "rectangle"}}
+        ],
+        "geometry": {"solid_count": 1, "bounding_box": {"xlen": {"approx": 90, "tolerance": 0.2}, "ylen": {"approx": 60, "tolerance": 0.2}, "zlen": {"approx": 32, "tolerance": 0.2}}}
+      }
+    },
+    {
+      "name": "release_stepped_shaft_collars_grooves_bore",
+      "prompt": "Create a 24 mm diameter cylindrical shaft, 100 mm long. Add two 36 mm outside-diameter collars, each 8 mm wide, centered 25 mm to either side of the shaft midpoint. Cut one circumferential groove beside each collar; each groove is 3 mm wide and 2 mm deep. Add a centered 8 mm diameter blind axial bore, 20 mm deep, from the front end.",
+      "focus": "Exact revolved additions and cuts at two axial locations plus a planar end-face bore.",
+      "expected_intent": {
+        "base": {"profile": "cylinder", "diameter": {"approx": 24, "tolerance": 0.1}, "length": {"approx": 100, "tolerance": 0.1}},
+        "features": [
+          {"operation": "revolved_extrusion", "shape": "rectangle", "width": {"approx": 6, "tolerance": 0.1}, "height": {"approx": 8, "tolerance": 0.1}},
+          {"operation": "revolved_cut", "shape": "rectangle", "width": {"approx": 2, "tolerance": 0.1}, "height": {"approx": 3, "tolerance": 0.1}},
+          {"operation": "cut", "shape": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": {"approx": 20, "tolerance": 0.1}}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "revolve", "profile": "rectangle", "angle": 360, "height": {"approx": 100, "tolerance": 0.1}},
+        "operation_groups": [
+          {"selector": {"type": "add_revolve", "profile": "rectangle", "width": {"approx": 6, "tolerance": 0.1}, "height": {"approx": 8, "tolerance": 0.1}}, "operation_count": 2, "instance_count": 2, "positions": {"point_set": [[15, -25], [15, 25]], "tolerance": 0.2}},
+          {"selector": {"type": "cut_revolve", "profile": "rectangle", "width": {"approx": 2, "tolerance": 0.1}, "height": {"approx": 3, "tolerance": 0.1}}, "operation_count": 2, "instance_count": 2},
+          {"selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": {"approx": 20, "tolerance": 0.1}}, "operation_count": 1, "instance_count": 1}
+        ],
+        "geometry": {"solid_count": 1, "bounding_box": {"xlen": {"approx": 36, "tolerance": 0.2}, "ylen": {"approx": 100, "tolerance": 0.2}, "zlen": {"approx": 36, "tolerance": 0.2}}}
+      }
+    },
+    {
+      "name": "release_triangular_boss_hole_pairs",
+      "prompt": "Create an equilateral triangular plate 110 mm across and 7 mm thick. Add one 14 mm diameter circular boss, 6 mm tall, near each of the three vertices. Cut one concentric 4 mm circular through hole through every boss.",
+      "focus": "A nonrectangular base with three inherited boss-hole placements and correct child ownership.",
+      "expected_intent": {
+        "base": {"profile": "polygon", "sides": 3, "diameter": {"approx": 110, "tolerance": 0.1}, "thickness": {"approx": 7, "tolerance": 0.1}},
+        "features": [
+          {"operation": "extrusion", "shape": "circle", "diameter": {"approx": 14, "tolerance": 0.1}, "distance": {"approx": 6, "tolerance": 0.1}},
+          {"operation": "cut", "shape": "circle", "diameter": {"approx": 4, "tolerance": 0.1}, "depth": "through", "placement": {"type": {"one_of": ["same_as_feature", "near_corners", "explicit"]}}}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "polygon", "sides": 3, "diameter": {"approx": 110, "tolerance": 0.1}, "distance": {"approx": 7, "tolerance": 0.1}},
+        "operation_groups": [
+          {"selector": {"type": "add_extrude", "profile": "circle", "diameter": {"approx": 14, "tolerance": 0.1}}, "operation_count": 1, "instance_count": 3},
+          {"selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 4, "tolerance": 0.1}}, "operation_count": 1, "instance_count": 3}
+        ],
+        "operation_relationships": [
+          {"type": "same_positions", "features": [{"type": "add_extrude", "diameter": {"approx": 14, "tolerance": 0.1}}, {"type": "cut", "diameter": {"approx": 4, "tolerance": 0.1}}]},
+          {"type": "targets_parent", "feature": {"type": "cut", "diameter": {"approx": 4, "tolerance": 0.1}}, "parent": {"type": "add_extrude", "diameter": {"approx": 14, "tolerance": 0.1}}}
+        ],
+        "geometry": {"solid_count": 1, "bounding_box": {"zlen": {"approx": 13, "tolerance": 0.2}}}
+      }
+    },
+    {
+      "name": "release_hub_spokes_offset_bolt_circle",
+      "prompt": "Create a 100 mm diameter circular plate, 6 mm thick. Add a centered 28 mm diameter hub, 10 mm tall. Add six identical raised rectangular spokes, each 32 mm long by 8 mm wide and 6 mm tall, with their centers on a 30 mm radius and evenly spaced around the hub. Cut six 5 mm through bolt holes on an 80 mm bolt circle, evenly spaced and rotated 30 degrees from the spokes.",
+      "focus": "Two independent six-instance circular patterns with different radii and angular offsets.",
+      "expected_intent": {
+        "base": {"profile": "circle", "diameter": {"approx": 100, "tolerance": 0.1}, "thickness": {"approx": 6, "tolerance": 0.1}},
+        "features": [
+          {"role": "hub", "operation": "extrusion", "shape": "circle", "diameter": {"approx": 28, "tolerance": 0.1}, "distance": {"approx": 10, "tolerance": 0.1}, "placement": {"type": "centered"}},
+          {"role": "spoke", "operation": "extrusion", "shape": "rectangle", "width": {"approx": 32, "tolerance": 0.1}, "height": {"approx": 8, "tolerance": 0.1}, "distance": {"approx": 6, "tolerance": 0.1}, "placement": {"type": "circular_pattern", "count": 6, "radius": {"approx": 30, "tolerance": 0.1}}},
+          {"role": "bolt_hole", "operation": "cut", "shape": "circle", "diameter": {"approx": 5, "tolerance": 0.1}, "depth": "through", "placement": {"type": "circular_pattern", "count": 6, "radius": {"approx": 40, "tolerance": 0.1}, "start_angle_degrees": {"approx": 30, "tolerance": 0.1}}}
+        ]
+      },
+      "expected_concepts": {
+        "operation_groups": [
+          {"selector": {"type": "add_extrude", "profile": "circle", "diameter": {"approx": 28, "tolerance": 0.1}}, "operation_count": 1, "instance_count": 1},
+          {"selector": {"type": "add_extrude", "profile": "rectangle", "width": {"approx": 32, "tolerance": 0.1}, "height": {"approx": 8, "tolerance": 0.1}}, "operation_count": 1, "instance_count": 6},
+          {"selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 5, "tolerance": 0.1}}, "operation_count": 1, "instance_count": 6}
+        ],
+        "operations": [
+          {"type": "add_extrude", "profile": "rectangle", "positions": {"circular_pattern": {"count": 6, "radius": 30, "tolerance": 0.2}}},
+          {"type": "cut", "profile": "circle", "positions": {"circular_pattern": {"count": 6, "radius": 40, "tolerance": 0.2, "start_angle_degrees": 30, "angle_tolerance_degrees": 0.2}}}
+        ],
+        "operation_relationships": [
+          {
+            "type": "circular_pattern_angular_offset",
+            "features": [
+              {"type": "add_extrude", "profile": "rectangle", "width": {"approx": 32, "tolerance": 0.1}},
+              {"type": "cut", "profile": "circle", "diameter": {"approx": 5, "tolerance": 0.1}}
+            ],
+            "offset_degrees": 30,
+            "tolerance_degrees": 0.2
+          }
+        ],
+        "geometry": {"solid_count": 1, "bounding_box": {"xlen": {"approx": 100, "tolerance": 0.2}, "ylen": {"approx": 100, "tolerance": 0.2}, "zlen": {"approx": 16, "tolerance": 0.2}}}
+      }
+    },
+    {
+      "name": "release_open_tray_rim_drain",
+      "prompt": "Create a 120 mm by 80 mm rectangular tray with an overall height of 20 mm before the rim, 4 mm wall thickness, a 4 mm thick bottom, and an open top. Start with a 120 mm by 80 mm by 20 mm solid body and remove a centered 112 mm by 72 mm pocket 16 mm deep. Add a 3 mm tall hollow raised rim around the complete top opening. Cut one centered 8 mm circular drain hole through only the remaining 4 mm tray bottom.",
+      "focus": "A true open cavity, preserved bottom thickness, hollow raised rim, and a drain that removes the floor.",
+      "expected_intent": {
+        "base": {"profile": "rectangle", "width": {"approx": 120, "tolerance": 0.1}, "height": {"approx": 80, "tolerance": 0.1}, "thickness": {"approx": 20, "tolerance": 0.1}},
+        "features": [
+          {"role": "pocket", "operation": "cut", "shape": "rectangle", "width": {"approx": 112, "tolerance": 0.2}, "height": {"approx": 72, "tolerance": 0.2}, "depth": {"approx": 16, "tolerance": 0.2}, "placement": {"type": "centered"}},
+          {"role": "rim", "operation": "extrusion", "shape": "rectangle", "distance": {"approx": 3, "tolerance": 0.1}, "placement": {"type": "centered"}},
+          {"operation": "cut", "shape": "rectangle", "depth": {"approx": 3, "tolerance": 0.1}, "placement": {"type": "centered"}},
+          {"role": "drain", "operation": "cut", "shape": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": "through", "placement": {"type": "centered"}}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "rectangle", "width": {"approx": 120, "tolerance": 0.1}, "height": {"approx": 80, "tolerance": 0.1}, "distance": {"approx": 20, "tolerance": 0.1}},
+        "operations": [
+          {"type": "cut", "profile": "rectangle", "width": {"approx": 112, "tolerance": 0.2}, "height": {"approx": 72, "tolerance": 0.2}, "depth": {"approx": 16, "tolerance": 0.2}},
+          {"type": "add_extrude", "profile": "rectangle", "distance": {"approx": 3, "tolerance": 0.1}},
+          {"type": "cut", "profile": "rectangle", "depth": {"approx": 3, "tolerance": 0.1}},
+          {"type": "cut", "profile": "circle", "diameter": {"approx": 8, "tolerance": 0.1}, "depth": "through"}
+        ],
+        "operation_relationships": [
+          {"type": "targets_parent", "feature": {"type": "cut", "profile": "rectangle", "depth": {"approx": 3, "tolerance": 0.1}}, "parent": {"type": "add_extrude", "profile": "rectangle", "distance": {"approx": 3, "tolerance": 0.1}}}
+        ],
+        "geometry": {"solid_count": 1, "bounding_box": {"xlen": {"approx": 120, "tolerance": 0.2}, "ylen": {"approx": 80, "tolerance": 0.2}, "zlen": {"approx": 23, "tolerance": 0.2}}}
+      }
+    },
+    {
+      "name": "release_d_plate_tabs_child_holes",
+      "prompt": "Create a D-shaped mounting plate 100 mm wide by 70 mm high and 8 mm thick, with a straight left edge and rounded right side. Add one coplanar rectangular mounting tab extending 10 mm outward from the left side and one matching tab extending 10 mm outward from the right side. Each tab spans 18 mm along the plate height and remains 8 mm thick. Build the tabs from the plate side faces, not as raised pads. Cut one centered 6 mm through hole through each tab.",
+      "focus": "Arc-based base geometry, two attached side features, and one child hole per tab.",
+      "expected_intent": {
+        "base": {"profile": "d_shape", "width": {"approx": 100, "tolerance": 0.1}, "height": {"approx": 70, "tolerance": 0.1}, "thickness": {"approx": 8, "tolerance": 0.1}},
+        "features": [
+          {"role": "tab", "operation": "extrusion", "shape": "rectangle", "target": {"contains": ".left"}, "distance": {"approx": 10, "tolerance": 0.1}},
+          {"role": "tab", "operation": "extrusion", "shape": "rectangle", "target": {"contains": ".right"}, "distance": {"approx": 10, "tolerance": 0.1}},
+          {"role": "hole", "operation": "cut", "shape": "circle", "diameter": {"approx": 6, "tolerance": 0.1}, "depth": "through"}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "sketch", "distance": {"approx": 8, "tolerance": 0.1}},
+        "operation_groups": [
+          {"selector": {"type": "add_extrude", "profile": "rectangle", "distance": {"approx": 10, "tolerance": 0.1}}, "operation_count": 2, "instance_count": 2, "unique_target_count": 2},
+          {"selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 6, "tolerance": 0.1}}, "operation_count": {"min": 1}, "instance_count": 2}
+        ],
+        "geometry": {"solid_count": 1, "bounding_box": {"xlen": {"approx": 120, "tolerance": 1}, "ylen": {"approx": 70, "tolerance": 1}, "zlen": {"approx": 8, "tolerance": 0.2}}}
+      }
+    },
+    {
+      "name": "release_rounded_plate_slots_holes",
+      "prompt": "Create a 100 mm by 60 mm rectangular plate, 8 mm thick. Fillet the four vertical outside corners to an 8 mm radius. Cut two horizontal rounded-end slots, each 36 mm long by 8 mm wide, centered at Y equals plus 15 mm and minus 15 mm. Cut four 5 mm circular through holes near the corners, with each hole center 10 mm from its nearest two original plate edges.",
+      "focus": "Native corner fillets, two exact slot instances, four corner holes, and preserved overall envelope.",
+      "expected_intent": {
+        "base": {"profile": "rectangle", "width": {"approx": 100, "tolerance": 0.1}, "height": {"approx": 60, "tolerance": 0.1}, "thickness": {"approx": 8, "tolerance": 0.1}},
+        "features": [
+          {"operation": "cut", "shape": "slot", "length": {"approx": 36, "tolerance": 0.1}, "width": {"approx": 8, "tolerance": 0.1}, "depth": "through"},
+          {"operation": "cut", "shape": "circle", "diameter": {"approx": 5, "tolerance": 0.1}, "depth": "through"}
+        ],
+        "edge_treatments": [
+          {"treatment": "fillet", "edge_selector": "vertical_edges", "radius": {"approx": 8, "tolerance": 0.1}}
+        ]
+      },
+      "expected_concepts": {
+        "base": {"type": "extrude", "profile": "rectangle", "width": {"approx": 100, "tolerance": 0.1}, "height": {"approx": 60, "tolerance": 0.1}, "distance": {"approx": 8, "tolerance": 0.1}},
+        "operation_groups": [
+          {"selector": {"type": "cut", "profile": "sketch", "depth": "through"}, "operation_count": 1, "instance_count": 2, "positions": {"point_set": [[0, -15], [0, 15]], "tolerance": 0.2}},
+          {"selector": {"type": "cut", "profile": "circle", "diameter": {"approx": 5, "tolerance": 0.1}}, "operation_count": 1, "instance_count": 4, "positions": {"point_set": [[-40, -20], [-40, 20], [40, -20], [40, 20]], "tolerance": 0.2}},
+          {"selector": {"type": "fillet", "radius": {"approx": 8, "tolerance": 0.1}}, "operation_count": 1, "instance_count": 1}
+        ],
+        "geometry": {"solid_count": 1, "bounding_box": {"xlen": {"approx": 100, "tolerance": 0.2}, "ylen": {"approx": 60, "tolerance": 0.2}, "zlen": {"approx": 8, "tolerance": 0.2}}}
+      }
+    }
+  ]
+}

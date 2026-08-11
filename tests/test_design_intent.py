@@ -1615,3 +1615,124 @@ def test_planar_countersink_lowers_to_native_tapered_hole_feature():
     assert countersinks["angle"] == 90
     assert countersinks["positions"] == model_data["operations"][1]["positions"]
     assert check_model_data(model_data)["passed"] is True
+
+
+def test_same_as_additive_feature_retargets_child_from_base_to_parent_top():
+    intent = {
+        "base": {
+            "id": "triangular_plate",
+            "profile": "polygon",
+            "diameter": 110,
+            "sides": 3,
+            "thickness": 7,
+        },
+        "features": [
+            {
+                "id": "vertex_bosses",
+                "operation": "extrusion",
+                "target": "triangular_plate.top",
+                "shape": "circle",
+                "diameter": 14,
+                "distance": 6,
+                "placement": {
+                    "type": "circular_pattern",
+                    "count": 3,
+                    "radius": 24,
+                    "start_angle_degrees": 90,
+                },
+            },
+            {
+                "id": "boss_holes",
+                "operation": "cut",
+                "target": "triangular_plate.top",
+                "shape": "circle",
+                "diameter": 4,
+                "depth": "through",
+                "placement": {
+                    "type": "same_as_feature",
+                    "source_feature": "vertex_bosses",
+                },
+            },
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][2]["target"] == "vertex_bosses.top"
+    assert (
+        model_data["operations"][2]["positions"]
+        == model_data["operations"][1]["positions"]
+    )
+    assert check_model_data(model_data)["passed"] is True
+
+
+def test_same_as_subtractive_feature_keeps_material_support_target():
+    intent = {
+        "base": {
+            "id": "plate",
+            "profile": "rectangle",
+            "width": 80,
+            "height": 50,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "through_holes",
+                "operation": "cut",
+                "target": "plate.top",
+                "shape": "circle",
+                "diameter": 5,
+                "depth": "through",
+                "placement": {"type": "centered"},
+            },
+            {
+                "id": "counterbores",
+                "operation": "cut",
+                "target": "through_holes.top",
+                "shape": "circle",
+                "diameter": 10,
+                "depth": 3,
+                "placement": {
+                    "type": "same_as_feature",
+                    "source_feature": "through_holes",
+                },
+            },
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][2]["target"] == "base.top"
+
+
+def test_revolved_explicit_placement_accepts_axial_first_coordinate():
+    intent = {
+        "base": {
+            "id": "shaft",
+            "profile": "cylinder",
+            "diameter": 24,
+            "length": 100,
+        },
+        "features": [
+            {
+                "id": "collar",
+                "operation": "revolved_extrusion",
+                "target": "shaft",
+                "shape": "rectangle",
+                "width": 6,
+                "height": 8,
+                "placement": {
+                    "type": "explicit",
+                    "positions": [[25, 0]],
+                },
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    model_data = intent_to_model_data(intent)
+
+    assert model_data["operations"][1]["positions"] == [[15, 25]]
+    assert check_model_data(model_data)["passed"] is True

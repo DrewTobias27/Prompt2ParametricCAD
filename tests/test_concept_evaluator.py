@@ -1,5 +1,7 @@
 """Tests for concept-level generated CAD evaluation."""
 
+import math
+
 from prompt2cad.concept_evaluator import evaluate_model_concepts
 
 
@@ -346,3 +348,238 @@ def test_concept_evaluator_reports_cross_feature_relationship_failures():
     assert any("same positions" in failure for failure in result.failures)
     assert any("targets 'base.top'" in failure for failure in result.failures)
     assert any("to be smaller" in failure for failure in result.failures)
+
+
+def test_concept_evaluator_groups_patterned_and_separate_feature_instances():
+    model_data = {
+        "operations": [
+            {"type": "extrude", "id": "base"},
+            {
+                "type": "add_extrude",
+                "id": "walls",
+                "profile": "rectangle",
+                "target": "base.top",
+                "positions": [[-40, 0], [40, 0]],
+            },
+            {
+                "type": "cut",
+                "id": "left_hole",
+                "profile": "circle",
+                "target": "walls.front",
+                "positions": [[0, 0]],
+            },
+            {
+                "type": "cut",
+                "id": "right_hole",
+                "profile": "circle",
+                "target": "walls.back",
+                "positions": [[0, 0]],
+            },
+        ]
+    }
+
+    result = evaluate_model_concepts(
+        model_data,
+        {
+            "operation_groups": [
+                {
+                    "selector": {
+                        "type": "add_extrude",
+                        "profile": "rectangle",
+                    },
+                    "operation_count": 1,
+                    "instance_count": 2,
+                },
+                {
+                    "selector": {"type": "cut", "profile": "circle"},
+                    "operation_count": 2,
+                    "instance_count": 2,
+                    "unique_target_count": 2,
+                    "unique_target_parent_count": 1,
+                },
+            ]
+        },
+    )
+
+    assert result.passed is True
+
+
+def test_concept_evaluator_reports_missing_group_instances():
+    model_data = {
+        "operations": [
+            {"type": "extrude", "id": "base"},
+            {
+                "type": "cut",
+                "id": "corner_holes",
+                "profile": "circle",
+                "positions": [[-30, -20], [30, -20], [30, 20]],
+            },
+        ]
+    }
+
+    result = evaluate_model_concepts(
+        model_data,
+        {
+            "operation_groups": [
+                {
+                    "selector": {"type": "cut", "profile": "circle"},
+                    "operation_count": {"min": 1},
+                    "instance_count": 4,
+                }
+            ]
+        },
+    )
+
+    assert result.passed is False
+    assert any("feature instances" in failure for failure in result.failures)
+
+
+def test_concept_evaluator_checks_group_positions_without_order_dependency():
+    model_data = {
+        "operations": [
+            {"type": "extrude", "id": "base"},
+            {
+                "type": "cut",
+                "id": "corner_holes",
+                "profile": "circle",
+                "positions": [[40, 25], [-40, -25], [-40, 25], [40, -25]],
+            },
+        ]
+    }
+
+    result = evaluate_model_concepts(
+        model_data,
+        {
+            "operation_groups": [
+                {
+                    "selector": {"type": "cut", "profile": "circle"},
+                    "positions": {
+                        "point_set": [
+                            [-40, -25],
+                            [-40, 25],
+                            [40, -25],
+                            [40, 25],
+                        ],
+                        "tolerance": 0.01,
+                    },
+                }
+            ]
+        },
+    )
+
+    assert result.passed is True
+
+
+def test_concept_evaluator_rejects_wrong_group_positions():
+    model_data = {
+        "operations": [
+            {"type": "extrude", "id": "base"},
+            {
+                "type": "cut",
+                "id": "corner_holes",
+                "profile": "circle",
+                "positions": [[35, 20], [-35, -20], [-35, 20], [35, -20]],
+            },
+        ]
+    }
+
+    result = evaluate_model_concepts(
+        model_data,
+        {
+            "operation_groups": [
+                {
+                    "selector": {"type": "cut", "profile": "circle"},
+                    "positions": {
+                        "point_set": [
+                            [-40, -25],
+                            [-40, 25],
+                            [40, -25],
+                            [40, 25],
+                        ],
+                        "tolerance": 0.01,
+                    },
+                }
+            ]
+        },
+    )
+
+    assert result.passed is False
+    assert any("positions to match" in failure for failure in result.failures)
+
+
+def test_concept_evaluator_checks_circular_pattern_angular_offset():
+    def circular_positions(start_degrees):
+        return [
+            [
+                20 * math.cos(math.radians(angle)),
+                20 * math.sin(math.radians(angle)),
+            ]
+            for angle in range(start_degrees, start_degrees + 360, 60)
+        ]
+
+    model_data = {
+        "operations": [
+            {"type": "extrude", "id": "base"},
+            {
+                "type": "add_extrude",
+                "id": "spokes",
+                "positions": circular_positions(0),
+            },
+            {
+                "type": "cut",
+                "id": "holes",
+                "positions": circular_positions(30),
+            },
+        ]
+    }
+
+    result = evaluate_model_concepts(
+        model_data,
+        {
+            "operation_relationships": [
+                {
+                    "type": "circular_pattern_angular_offset",
+                    "features": ["spokes", "holes"],
+                    "offset_degrees": 30,
+                    "tolerance_degrees": 0.01,
+                }
+            ]
+        },
+    )
+
+    assert result.passed is True
+
+
+def test_concept_evaluator_rejects_wrong_circular_pattern_offset():
+    model_data = {
+        "operations": [
+            {"type": "extrude", "id": "base"},
+            {
+                "type": "add_extrude",
+                "id": "spokes",
+                "positions": [[20, 0], [0, 20], [-20, 0], [0, -20]],
+            },
+            {
+                "type": "cut",
+                "id": "holes",
+                "positions": [[20, 0], [0, 20], [-20, 0], [0, -20]],
+            },
+        ]
+    }
+
+    result = evaluate_model_concepts(
+        model_data,
+        {
+            "operation_relationships": [
+                {
+                    "type": "circular_pattern_angular_offset",
+                    "features": ["spokes", "holes"],
+                    "offset_degrees": 45,
+                    "tolerance_degrees": 0.01,
+                }
+            ]
+        },
+    )
+
+    assert result.passed is False
+    assert any("angular offset" in failure for failure in result.failures)

@@ -167,3 +167,154 @@ def test_intent_coverage_recognizes_ring_from_circle_and_center_hole():
 
     assert intent_coverage_failures(design_intent) == []
     assert {"ring", "rim"}.issubset(covered_intent_concepts(design_intent))
+
+
+def test_intent_coverage_rejects_rim_opening_depth_mismatch():
+    design_intent = {
+        "required_concepts": ["rim"],
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 120,
+            "height": 80,
+            "thickness": 4,
+        },
+        "features": [
+            {
+                "id": "left_wall",
+                "role": "wall",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "rectangle",
+                "width": 4,
+                "height": 80,
+                "distance": 20,
+                "placement": {
+                    "type": "offset_from_edge",
+                    "edge": "left",
+                    "offset": 2,
+                    "along": 0,
+                },
+            },
+            {
+                "id": "top_rim",
+                "role": "rim",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "rectangle",
+                "width": 120,
+                "height": 80,
+                "distance": 23,
+                "placement": {"type": "centered"},
+            },
+            {
+                "id": "rim_opening",
+                "role": "cutout",
+                "operation": "cut",
+                "target": "top_rim.top",
+                "shape": "rectangle",
+                "width": 112,
+                "height": 72,
+                "depth": 3,
+                "placement": {"type": "centered"},
+            },
+        ],
+        "edge_treatments": [],
+    }
+
+    failures = intent_coverage_failures(design_intent)
+
+    assert any("only 3 mm deep" in failure for failure in failures)
+    assert any("starts from the base" in failure for failure in failures)
+
+
+def test_intent_coverage_accepts_hollow_rim_from_wall_top():
+    design_intent = {
+        "required_concepts": ["rim"],
+        "base": {
+            "id": "base",
+            "profile": "rectangle",
+            "width": 120,
+            "height": 80,
+            "thickness": 4,
+        },
+        "features": [
+            {
+                "id": "left_wall",
+                "role": "wall",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "rectangle",
+                "width": 4,
+                "height": 80,
+                "distance": 20,
+                "placement": {
+                    "type": "offset_from_edge",
+                    "edge": "left",
+                    "offset": 2,
+                    "along": 0,
+                },
+            },
+            {
+                "id": "top_rim",
+                "role": "rim",
+                "operation": "extrusion",
+                "target": "left_wall.top",
+                "shape": "rectangle",
+                "width": 120,
+                "height": 80,
+                "distance": 3,
+                "placement": {"type": "centered"},
+            },
+            {
+                "id": "rim_opening",
+                "role": "cutout",
+                "operation": "cut",
+                "target": "top_rim.top",
+                "shape": "rectangle",
+                "width": 112,
+                "height": 72,
+                "depth": 3,
+                "placement": {"type": "centered"},
+            },
+        ],
+        "edge_treatments": [],
+    }
+
+    assert intent_coverage_failures(design_intent) == []
+
+
+def test_intent_coverage_rejects_raised_top_tab_for_coplanar_extension():
+    design_intent = {
+        "required_concepts": ["tab"],
+        "base": {
+            "id": "base",
+            "profile": "d_shape",
+            "width": 100,
+            "height": 70,
+            "thickness": 8,
+        },
+        "features": [
+            {
+                "id": "left_tab",
+                "role": "tab",
+                "operation": "extrusion",
+                "target": "base.top",
+                "shape": "rectangle",
+                "width": 10,
+                "height": 18,
+                "distance": 8,
+                "placement": {
+                    "type": "offset_from_edge",
+                    "edge": "left",
+                    "offset": -5,
+                    "along": 0,
+                },
+            }
+        ],
+        "edge_treatments": [],
+    }
+
+    failures = intent_coverage_failures(design_intent)
+
+    assert any("coplanar side extension" in failure for failure in failures)

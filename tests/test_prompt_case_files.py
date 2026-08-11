@@ -9,6 +9,7 @@ PROMPT_CASE_FILES = [
     PROJECT_ROOT / "evals" / "intent_gap_tests.json",
     PROJECT_ROOT / "evals" / "intent_stress_cases.json",
     PROJECT_ROOT / "evals" / "intent_stress_cases_2.json",
+    PROJECT_ROOT / "evals" / "release_semantic_cases.json",
 ]
 
 
