@@ -7,13 +7,69 @@ param(
 
     [string]$TemplatePath,
 
+    [string]$ExistingPartPath,
+
+    [string]$MutationPath,
+
     [switch]$Visible
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$solidWorksRoot = Join-Path $env:ProgramFiles "SOLIDWORKS Corp\SOLIDWORKS"
+function Resolve-SolidWorksRoot {
+    $candidates = New-Object System.Collections.Generic.List[string]
+    if ($env:P2P_SOLIDWORKS_ROOT) {
+        $candidates.Add($env:P2P_SOLIDWORKS_ROOT)
+    }
+    if ($env:ProgramFiles) {
+        $candidates.Add((Join-Path $env:ProgramFiles "SOLIDWORKS Corp\SOLIDWORKS"))
+    }
+
+    foreach ($registryRoot in @(
+        "HKLM:\SOFTWARE\SolidWorks",
+        "HKLM:\SOFTWARE\WOW6432Node\SolidWorks"
+    )) {
+        if (-not (Test-Path -LiteralPath $registryRoot)) {
+            continue
+        }
+        Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue |
+            Where-Object { $_.PSChildName -match '^SOLIDWORKS\s+\d{4}$' } |
+            Sort-Object PSChildName -Descending |
+            ForEach-Object {
+                $setupKey = Join-Path $_.PSPath "Setup"
+                if (Test-Path -LiteralPath $setupKey) {
+                    $setupProperties = Get-ItemProperty `
+                        -LiteralPath $setupKey `
+                        -ErrorAction SilentlyContinue
+                    $folderProperty = $setupProperties.PSObject.Properties[
+                        "SolidWorks Folder"
+                    ]
+                    if ($null -ne $folderProperty -and $folderProperty.Value) {
+                        $candidates.Add([string]$folderProperty.Value)
+                    }
+                }
+            }
+    }
+
+    foreach ($candidate in $candidates | Select-Object -Unique) {
+        $redist = Join-Path $candidate "api\redist"
+        if (
+            (Test-Path -LiteralPath (Join-Path $redist "SolidWorks.Interop.sldworks.dll")) -and
+            (Test-Path -LiteralPath (Join-Path $redist "SolidWorks.Interop.swconst.dll"))
+        ) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    throw (
+        "Could not locate a SolidWorks API installation. Install SolidWorks " +
+        "or set P2P_SOLIDWORKS_ROOT to the folder containing api\redist. " +
+        "Checked: " + (($candidates | Select-Object -Unique) -join "; ")
+    )
+}
+
+$solidWorksRoot = Resolve-SolidWorksRoot
 $interopRoot = Join-Path $solidWorksRoot "api\redist"
 $sldWorksInterop = Join-Path $interopRoot "SolidWorks.Interop.sldworks.dll"
 $constantsInterop = Join-Path $interopRoot "SolidWorks.Interop.swconst.dll"
@@ -38,12 +94,26 @@ try {
             "System.Xml.dll"
         )
 
-    $result = [Prompt2Cad.SolidWorks.NativeReplayRunner]::Execute(
-        [System.IO.Path]::GetFullPath($PlanPath),
-        [System.IO.Path]::GetFullPath($OutputPath),
-        $TemplatePath,
-        $Visible.IsPresent
-    )
+    if ($MutationPath) {
+        if (-not $ExistingPartPath) {
+            throw "ExistingPartPath is required when MutationPath is supplied."
+        }
+        $result = [Prompt2Cad.SolidWorks.NativeReplayRunner]::VerifyEditablePart(
+            [System.IO.Path]::GetFullPath($PlanPath),
+            [System.IO.Path]::GetFullPath($ExistingPartPath),
+            [System.IO.Path]::GetFullPath($OutputPath),
+            [System.IO.Path]::GetFullPath($MutationPath),
+            $Visible.IsPresent
+        )
+    }
+    else {
+        $result = [Prompt2Cad.SolidWorks.NativeReplayRunner]::Execute(
+            [System.IO.Path]::GetFullPath($PlanPath),
+            [System.IO.Path]::GetFullPath($OutputPath),
+            $TemplatePath,
+            $Visible.IsPresent
+        )
+    }
     Write-Output $result
 }
 catch {

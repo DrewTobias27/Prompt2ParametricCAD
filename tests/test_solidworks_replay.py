@@ -16,6 +16,7 @@ from prompt2cad.solidworks_replay import SOLIDWORKS_PARITY_MATRIX
 from prompt2cad.solidworks_replay import SolidWorksExecutionError
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
+from prompt2cad.solidworks_replay import verify_solidworks_editability
 
 
 def native_model_data() -> dict:
@@ -57,6 +58,13 @@ def replay_plan(model_data: dict | None = None):
     return build_solidworks_replay_plan(document)
 
 
+def published_reference_map(feature) -> dict[str, str]:
+    return {
+        reference["semantic_name"]: reference["entity_name"]
+        for reference in feature.publish_references
+    }
+
+
 def test_replay_plan_preserves_native_history_and_named_dependencies():
     plan = replay_plan()
 
@@ -76,7 +84,7 @@ def test_replay_plan_preserves_native_history_and_named_dependencies():
             "normal": [0.0, 0.0, 1.0],
         },
     }
-    assert base.publish_references == {
+    assert published_reference_map(base) == {
         "top": "P2P_base_top",
         "bottom": "P2P_base_bottom",
         "front": "P2P_base_front",
@@ -85,12 +93,28 @@ def test_replay_plan_preserves_native_history_and_named_dependencies():
         "right": "P2P_base_right",
     }
     assert boss.support["entity_name"] == "P2P_base_top"
-    assert boss.publish_references == {
+    assert published_reference_map(boss) == {
         "top": "P2P_boss_top",
         "outer_surface": "P2P_boss_outer_surface",
     }
     assert hole.support["entity_name"] == "P2P_boss_top"
-    assert hole.publish_references == {}
+    assert hole.publish_references == ()
+
+    top_reference = next(
+        reference
+        for reference in base.publish_references
+        if reference["semantic_name"] == "top"
+    )
+    assert top_reference == {
+        "reference_id": "base.top",
+        "semantic_name": "top",
+        "entity_name": "P2P_base_top",
+        "entity_type": "face",
+        "selector": {
+            "kind": "planar_face_direction",
+            "direction": [0.0, 0.0, 1.0],
+        },
+    }
 
 
 def test_replay_plan_maps_sketch_and_feature_dimensions():
@@ -121,6 +145,148 @@ def test_replay_plan_maps_sketch_and_feature_dimensions():
         "depth_mm": None,
         "driving_dimension": None,
     }
+
+
+def test_replay_plan_has_one_canonical_binding_for_each_named_dimension():
+    plan = replay_plan().to_dict()
+
+    for step in plan["features"]:
+        legacy_dimensions = list(step["sketch"]["driving_dimensions"])
+        for control in step["sketch"]["placement_controls"]:
+            legacy_dimensions.extend(
+                dimension
+                for dimension in (
+                    control["x_dimension"],
+                    control["y_dimension"],
+                )
+                if dimension is not None
+            )
+        if step["feature"]["driving_dimension"] is not None:
+            legacy_dimensions.append(step["feature"]["driving_dimension"])
+
+        dimension_bindings = [
+            binding
+            for binding in step["parameter_bindings"]
+            if binding["binding_kind"] == "named_dimension"
+        ]
+        assert {item["parameter_id"] for item in dimension_bindings} == {
+            item["parameter_id"] for item in legacy_dimensions
+        }
+        assert len({item["parameter_id"] for item in step["parameter_bindings"]}) == len(
+            step["parameter_bindings"]
+        )
+
+
+def test_countersink_controls_are_bound_to_hole_wizard_feature_data():
+    model_data = native_model_data()
+    model_data["operations"] = [
+        model_data["operations"][0],
+        {
+            "type": "countersink",
+            "id": "mounting_holes",
+            "target": "base.top",
+            "positions": [[-25, 15], [25, 15]],
+            "diameter": 6,
+            "countersink_diameter": 12,
+            "angle": 82,
+            "depth": 7,
+        },
+    ]
+
+    countersink = replay_plan(model_data).features[1]
+    bindings = {
+        binding["parameter_id"]: binding
+        for binding in countersink.parameter_bindings
+    }
+
+    assert bindings["mounting_holes.feature.diameter"]["native_properties"] == [
+        "Diameter",
+        "HoleDiameter",
+        "ThruHoleDiameter",
+    ]
+    assert bindings["mounting_holes.feature.countersink_diameter"][
+        "native_properties"
+    ] == ["CounterSinkDiameter"]
+    assert bindings["mounting_holes.feature.angle"]["unit"] == "deg"
+    assert bindings["mounting_holes.feature.depth"]["value"] == 7
+    assert all(
+        binding["binding_kind"] == "feature_property"
+        for binding in bindings.values()
+    )
+
+
+@pytest.mark.parametrize(
+    ("pattern", "positions", "expected_properties"),
+    [
+        (
+            {
+                "type": "circular",
+                "seed_position": [20, 0],
+                "center": [0, 0],
+                "count": 4,
+                "total_angle_degrees": 360,
+            },
+            [[20, 0], [0, 20], [-20, 0], [0, -20]],
+            {"TotalInstances", "Spacing"},
+        ),
+        (
+            {
+                "type": "linear",
+                "seed_position": [-20, -10],
+                "direction_1": [1, 0],
+                "count_1": 3,
+                "spacing_1": 20,
+                "direction_2": [0, 1],
+                "count_2": 2,
+                "spacing_2": 20,
+            },
+            [
+                [-20, -10],
+                [0, -10],
+                [20, -10],
+                [-20, 10],
+                [0, 10],
+                [20, 10],
+            ],
+            {"D1TotalInstances", "D1Spacing", "D2TotalInstances", "D2Spacing"},
+        ),
+    ],
+)
+def test_native_pattern_controls_have_editable_feature_property_bindings(
+    pattern,
+    positions,
+    expected_properties,
+):
+    model_data = native_model_data()
+    model_data["operations"] = model_data["operations"][:2]
+    model_data["operations"][1] = {
+        "type": "cut",
+        "id": "boss",
+        "target": "base.top",
+        "profile": "circle",
+        "positions": positions,
+        "pattern": pattern,
+        "diameter": 6,
+        "depth": "through",
+    }
+
+    step = replay_plan(model_data).features[1]
+    pattern_bindings = [
+        binding
+        for binding in step.parameter_bindings
+        if binding["owner_kind"] == "pattern"
+    ]
+
+    assert {binding["native_properties"][0] for binding in pattern_bindings} == (
+        expected_properties
+    )
+    assert {binding["owner_name"] for binding in pattern_bindings} == {
+        "P2P_boss"
+    }
+    assert all(
+        binding["binding_kind"] == "feature_property"
+        for binding in pattern_bindings
+    )
 
 
 def test_replay_plan_maps_stable_profile_placement_controls():
@@ -197,7 +363,7 @@ def test_replay_supports_revolves_and_coordinate_profiles():
     assert revolved.feature["kind"] == "boss_revolve"
     assert revolved.feature["angle_deg"] == 360
     assert revolved.feature["axis_start_mm"] == [0.0, -1.0]
-    assert revolved.publish_references["front"] == "P2P_shaft_front"
+    assert published_reference_map(revolved)["front"] == "P2P_shaft_front"
 
     polyline = replay_plan(
         {
@@ -220,6 +386,38 @@ def test_replay_supports_revolves_and_coordinate_profiles():
     ]
 
 
+@pytest.mark.parametrize(
+    "example_name",
+    [
+        "polygon_base_polygon_cut.json",
+        "polyline_base_rectangular_cut.json",
+        "solidworks_smoke_arc_revolve.json",
+        "solidworks_smoke_patterned_plate.json",
+    ],
+)
+def test_every_native_sketch_has_a_general_constraint_completion_plan(
+    example_name,
+):
+    example_path = Path(__file__).parents[1] / "examples" / "models" / example_name
+    plan = model_path_to_replay_plan(example_path)
+
+    for step in plan.features:
+        if step.sketch is None:
+            continue
+        constraint_plan = step.sketch["constraint_plan"]
+        assert constraint_plan["strategy"] == (
+            "complete_remaining_degrees_of_freedom"
+        )
+        assert constraint_plan["require_fully_defined"] is True
+        assert constraint_plan["source_feature_id"] == step.id
+        assert {
+            "coincident",
+            "horizontal",
+            "vertical",
+            "tangent",
+        }.issubset(constraint_plan["relations"])
+
+
 def test_replay_only_publishes_revolve_faces_that_exist():
     model_data = json.loads(
         (
@@ -232,8 +430,11 @@ def test_replay_only_publishes_revolve_faces_that_exist():
 
     capsule = replay_plan(model_data).features[0]
 
-    assert capsule.publish_references == {
+    assert published_reference_map(capsule) == {
         "outer_surface": "P2P_capsule_outer_surface"
+    }
+    assert capsule.publish_references[0]["selector"] == {
+        "kind": "largest_non_planar_face"
     }
 
 
@@ -618,6 +819,16 @@ def test_replay_maps_topology_aware_edge_treatments(
     assert treatment.support["target_feature_name"] == "P2P_base"
     assert treatment.support["selector"] == "top_outer_edges"
     assert treatment.support["frame"]["normal"] == [0.0, 0.0, 1.0]
+    members = treatment.support["members"]
+    assert len(members) == 4
+    assert {member["reference_id"] for member in members} == {
+        "base.edge.e001",
+        "base.edge.e002",
+        "base.edge.e003",
+        "base.edge.e004",
+    }
+    assert all(len(member["center_mm"]) == 3 for member in members)
+    assert all(len(member["bounding_box_mm"]) == 6 for member in members)
 
 
 def test_solidworks_parity_matrix_covers_every_step_operation_type():
@@ -649,6 +860,53 @@ def test_native_runner_accepts_the_current_replay_plan_version():
     assert "plan.Version != ReplayVersion" in runner_source
 
 
+def test_powershell_runner_discovers_solidworks_without_one_fixed_install_path():
+    script_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "function Resolve-SolidWorksRoot" in script_source
+    assert "$env:P2P_SOLIDWORKS_ROOT" in script_source
+    assert "HKLM:\\SOFTWARE\\SolidWorks" in script_source
+    assert '"SolidWorks Folder"' in script_source
+    assert "Could not locate a SolidWorks API installation" in script_source
+
+
+def test_native_runner_reports_feature_errors_and_sketch_constraint_status():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "InspectNativeHealth(model, plan)" in runner_source
+    assert "GetErrorCode2(out isWarning)" in runner_source
+    assert "GetConstrainedStatus()" in runner_source
+    assert 'return "under_defined"' in runner_source
+    assert "FeatureErrorCount > 0" in runner_source
+
+
+def test_native_runner_completes_remaining_sketch_degrees_of_freedom():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "CompleteRemainingSketchDefinition(" in runner_source
+    assert "sketchManager.FullyDefineSketch(" in runner_source
+    assert "FullyDefineRelationValue(relation)" in runner_source
+    assert '"Point1@Origin"' in runner_source
+    assert "horizontalDatumMark | verticalDatumMark" in runner_source
+    assert "plan.RequireFullyDefined" in runner_source
+    assert '" after generalized constraint completion."' in runner_source
+
+
 def test_native_runner_disables_sketch_snapping_during_profile_creation():
     runner_source = (
         Path(__file__).parents[1]
@@ -661,6 +919,35 @@ def test_native_runner_disables_sketch_snapping_during_profile_creation():
     assert "sketchManager.AddToDB = true;" in runner_source
     assert "sketchManager.AddToDB = previousAddToDatabase;" in runner_source
     assert "finally" in runner_source
+
+
+def test_native_runner_persists_and_reopens_semantic_entity_references():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "NativeReferenceSpec[] PublishReferences" in runner_source
+    assert "CapturePersistentReferenceIds(" in runner_source
+    assert "GetPersistReference3(" in runner_source
+    assert "GetObjectByPersistReference3(" in runner_source
+    assert "Persistent reference '" in runner_source
+
+
+def test_native_runner_resolves_edge_groups_by_canonical_member_geometry():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "SelectFeatureEdgesByMembers(" in runner_source
+    assert "SampleEdgeBoundingBoxMillimeters(" in runner_source
+    assert "EdgeDescriptorError(" in runner_source
+    assert "did not match native topology within 0.5 mm" in runner_source
 
 
 def test_native_runner_dimensions_rectangles_in_their_local_feature_frame():
@@ -759,6 +1046,115 @@ def test_export_reports_runner_failure_and_requires_sldprt(tmp_path: Path):
             tmp_path / "part.SLDPRT",
             runner=missing_runner,
         )
+
+
+def test_editability_verification_reopens_and_mutates_bound_parameters(
+    tmp_path: Path,
+):
+    plan = replay_plan()
+    source_path = tmp_path / "source.SLDPRT"
+    output_path = tmp_path / "mutated.SLDPRT"
+    result_path = tmp_path / "editability-result.json"
+    source_path.write_bytes(b"source-native-part")
+    captured: dict = {}
+
+    def fake_runner(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        mutation_path = Path(command[command.index("-MutationPath") + 1])
+        captured["mutations"] = json.loads(
+            mutation_path.read_text(encoding="utf-8")
+        )
+        actual_output = Path(command[command.index("-OutputPath") + 1])
+        actual_output.write_bytes(b"mutated-native-part")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(
+                {
+                    "status": "success",
+                    "mutation_count": 2,
+                    "reopened": True,
+                }
+            ),
+            stderr="",
+        )
+
+    exported = verify_solidworks_editability(
+        plan,
+        source_path,
+        output_path,
+        {
+            "base.sketch.width": 90,
+            "boss.feature.distance": 12,
+        },
+        result_output_path=result_path,
+        runner=fake_runner,
+    )
+
+    assert exported == output_path.resolve()
+    assert captured["mutations"] == {
+        "format": "prompt2cad.solidworks-mutations",
+        "version": 1,
+        "mutations": [
+            {
+                "parameter_id": "base.sketch.width",
+                "value": 90.0,
+                "unit": "mm",
+            },
+            {
+                "parameter_id": "boss.feature.distance",
+                "value": 12.0,
+                "unit": "mm",
+            },
+        ],
+    }
+    assert "-ExistingPartPath" in captured["command"]
+    assert captured["kwargs"] == {
+        "check": False,
+        "capture_output": True,
+        "text": True,
+    }
+    assert json.loads(result_path.read_text(encoding="utf-8"))["reopened"] is True
+
+
+def test_editability_verification_rejects_unknown_or_destructive_inputs(
+    tmp_path: Path,
+):
+    plan = replay_plan()
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+
+    with pytest.raises(SolidWorksExecutionError, match="Unknown native parameter"):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            tmp_path / "mutated.SLDPRT",
+            {"not.a.parameter": 10},
+        )
+    with pytest.raises(SolidWorksExecutionError, match="separate output"):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            source_path,
+            {"base.sketch.width": 90},
+        )
+
+
+def test_native_runner_reopens_and_reverifies_mutated_parts():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "VerifyEditablePart(" in runner_source
+    assert "ApplyParameterMutations(model, plan, mutations)" in runner_source
+    assert "model = OpenNativePart(application, resolvedOutput);" in runner_source
+    assert 'Reopened = true' in runner_source
+    assert "VerifyReplay(" in runner_source
+    assert "RequireHealthyModel(reopenedHealth" in runner_source
 
 
 def test_plan_file_helpers_are_deterministic(tmp_path: Path):

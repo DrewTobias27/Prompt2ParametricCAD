@@ -1,0 +1,18 @@
+{
+  "operations": [
+    {
+      "type": "extrude",
+      "id": "base",
+      "plane": "XY",
+      "profile": "polyline",
+      "points": [[-45, -25], [20, -25], [45, -5], [35, 30], [-40, 25]],
+      "distance": 12
+    },
+    {
+      "type": "chamfer",
+      "id": "top_edge_chamfer",
+      "target": "base.top_outer_edges",
+      "distance": 2
+    }
+  ]
+}

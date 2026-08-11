@@ -30,8 +30,10 @@ Verified against the public deployment on August 10, 2026:
 - The public STEP endpoint returned a non-empty model file.
 - A SolidWorks replay package downloaded from the public site created a native
   `SLDPRT` with one solid, two native features, and twelve editable dimensions.
-- The Python regression suite passed with 404 tests and one skipped test.
-- The native SolidWorks verification suite passed all seven supported cases.
+- The Python regression suite passed with 439 tests and zero skipped tests,
+  including an installed-SolidWorks package build.
+- The native SolidWorks verification suite passed all eight supported cases,
+  including freeform edge selection and partial revolves.
 
 ## Recommended visuals
 

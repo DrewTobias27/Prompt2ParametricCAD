@@ -9,6 +9,8 @@ from pathlib import Path
 import time
 
 from prompt2cad.exporter import export_step
+from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.interpreter import build_model
 from prompt2cad.loader import load_model
 from prompt2cad.schema import validate_model_data
@@ -16,6 +18,7 @@ from prompt2cad.solidworks_export import model_path_to_replay_plan
 from prompt2cad.solidworks_export import save_plan
 from prompt2cad.solidworks_replay import SolidWorksReplayPlan
 from prompt2cad.solidworks_replay import export_solidworks_part
+from prompt2cad.solidworks_replay import verify_solidworks_editability
 
 
 SMOKE_FIXTURE_NAMES = (
@@ -23,10 +26,19 @@ SMOKE_FIXTURE_NAMES = (
     "solidworks_smoke_side_features",
     "solidworks_smoke_revolved_shaft",
     "solidworks_smoke_edge_details",
+    "solidworks_smoke_freeform_edges",
     "solidworks_smoke_coordinate_profiles",
     "solidworks_smoke_arc_revolve",
     "solidworks_smoke_partial_revolve",
 )
+
+EDITABILITY_SCENARIOS = {
+    "solidworks_smoke_patterned_plate": {
+        "base.sketch.width": 120,
+        "bosses.feature.distance": 10,
+        "mounting_holes.feature.diameter": 6,
+    },
+}
 
 
 def project_root() -> Path:
@@ -63,6 +75,8 @@ def run_smoke_suite(
     visible: bool = False,
     template_path: Path | None = None,
     native_exporter: Callable[..., Path] = export_solidworks_part,
+    verify_editability: bool = False,
+    editability_verifier: Callable[..., Path] = verify_solidworks_editability,
 ) -> dict:
     """Build STEP, plan native replay, and optionally execute each fixture."""
     output_root.mkdir(parents=True, exist_ok=True)
@@ -75,6 +89,8 @@ def run_smoke_suite(
         plan_path = output_root / f"{name}.plan.json"
         native_path = output_root / f"{name}.SLDPRT"
         native_result_path = output_root / f"{name}.native-result.json"
+        mutated_native_path = output_root / f"{name}.mutated.SLDPRT"
+        editability_result_path = output_root / f"{name}.editability-result.json"
         result = {
             "name": name,
             "fixture": str(fixture_path),
@@ -122,12 +138,62 @@ def run_smoke_suite(
                 native_result = json.loads(
                     native_result_path.read_text(encoding="utf-8")
                 )
+                native_reference_summary = validate_published_references(
+                    plan,
+                    native_result,
+                    context="native replay",
+                )
+                result["published_references"] = native_reference_summary
                 native_metrics = native_result.get("geometry", {})
                 result["solidworks_geometry"] = native_metrics
                 result["geometry_comparison"] = compare_geometry_metrics(
                     cadquery_metrics,
                     native_metrics,
                 )
+                mutations = EDITABILITY_SCENARIOS.get(name)
+                if verify_editability and mutations is not None:
+                    source_document = model_data_to_editable_document(model_data)
+                    expected_part, _ = rebuild_with_parameter_updates(
+                        source_document,
+                        mutations,
+                    )
+                    expected_edited_metrics = geometry_metrics(expected_part)
+                    editability_verifier(
+                        plan,
+                        native_path,
+                        mutated_native_path,
+                        mutations,
+                        visible=visible,
+                        result_output_path=editability_result_path,
+                    )
+                    editability_result = json.loads(
+                        editability_result_path.read_text(encoding="utf-8")
+                    )
+                    if not editability_result.get("reopened"):
+                        raise RuntimeError(
+                            "Native editability verifier did not reopen the saved part"
+                        )
+                    if editability_result.get("mutation_count") != len(mutations):
+                        raise RuntimeError(
+                            "Native editability verifier did not apply every mutation"
+                        )
+                    editability_reference_summary = validate_published_references(
+                        plan,
+                        editability_result,
+                        context="editability reopen",
+                    )
+                    result["editability"] = {
+                        "mutations": mutations,
+                        "mutated_native_path": str(mutated_native_path),
+                        "result_path": str(editability_result_path),
+                        "geometry_comparison": compare_geometry_metrics(
+                            expected_edited_metrics,
+                            editability_result.get("after_geometry", {}),
+                        ),
+                        "health": editability_result.get("health"),
+                        "published_references": editability_reference_summary,
+                        "reopened": True,
+                    }
             result["status"] = "pass"
         except Exception as error:  # Keep later fixtures running for one report.
             result["error_type"] = type(error).__name__
@@ -141,6 +207,48 @@ def run_smoke_suite(
         "passed": passed,
         "failed": len(results) - passed,
         "results": results,
+    }
+
+
+def validate_published_references(
+    plan: SolidWorksReplayPlan,
+    native_result: dict,
+    *,
+    context: str,
+) -> dict:
+    """Require every planned semantic entity to retain a resolvable PID."""
+    expected = {
+        reference["reference_id"]
+        for feature in plan.features
+        for reference in feature.publish_references
+    }
+    records = native_result.get("published_references")
+    if not isinstance(records, list):
+        raise RuntimeError(f"{context} did not report persistent references")
+
+    actual = {record.get("reference_id") for record in records}
+    if actual != expected:
+        missing = sorted(expected - actual)
+        unexpected = sorted(actual - expected)
+        raise RuntimeError(
+            f"{context} persistent-reference mismatch; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+    invalid = [
+        record.get("reference_id")
+        for record in records
+        if record.get("resolved") is not True
+        or not record.get("persistent_id_base64")
+    ]
+    if invalid:
+        raise RuntimeError(
+            f"{context} has unresolved persistent references: "
+            + ", ".join(str(reference_id) for reference_id in invalid)
+        )
+    return {
+        "expected_count": len(expected),
+        "resolved_count": len(records),
+        "passed": True,
     }
 
 
@@ -244,6 +352,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Show SOLIDWORKS during native execution.",
     )
+    parser.add_argument(
+        "--verify-editability",
+        action="store_true",
+        help=(
+            "For fixtures with mutation scenarios, reopen the native part, "
+            "edit parameters, rebuild, save, reopen, and compare geometry."
+        ),
+    )
     parser.add_argument("--template", type=Path)
     return parser.parse_args()
 
@@ -258,6 +374,7 @@ def main() -> None:
         execute_native=args.execute,
         visible=args.visible,
         template_path=args.template,
+        verify_editability=args.verify_editability,
     )
     report_path = save_report(report, args.output_root / "report.json")
     for result in report["results"]:

@@ -10,6 +10,22 @@ from prompt2cad.solidworks_smoke import compare_geometry_metrics
 from prompt2cad.solidworks_smoke import geometry_metrics
 from prompt2cad.solidworks_smoke import run_smoke_suite
 from prompt2cad.solidworks_smoke import smoke_fixture_paths
+from prompt2cad.solidworks_smoke import validate_published_references
+
+
+def persistent_reference_records(plan) -> list[dict]:
+    return [
+        {
+            "reference_id": reference["reference_id"],
+            "entity_name": reference["entity_name"],
+            "entity_type": reference["entity_type"],
+            "persistent_id_base64": "AQ==",
+            "resolved": True,
+            "resolution_error_code": 0,
+        }
+        for feature in plan.features
+        for reference in feature.publish_references
+    ]
 
 
 def test_every_native_smoke_fixture_builds_and_plans(tmp_path: Path):
@@ -37,7 +53,12 @@ def test_native_smoke_execution_uses_the_validated_plan(tmp_path: Path):
         output_path.write_bytes(b"native-part")
         result_path = kwargs["result_output_path"]
         result_path.write_text(
-            json.dumps({"geometry": expected_geometry}),
+            json.dumps(
+                {
+                    "geometry": expected_geometry,
+                    "published_references": persistent_reference_records(plan),
+                }
+            ),
             encoding="utf-8",
         )
         return output_path
@@ -56,6 +77,95 @@ def test_native_smoke_execution_uses_the_validated_plan(tmp_path: Path):
     assert captured[0][2]["visible"] is True
     assert Path(report["results"][0]["native_path"]).is_file()
     assert report["results"][0]["geometry_comparison"]["passed"] is True
+
+
+def test_native_smoke_editability_rebuilds_and_compares_mutated_geometry(
+    tmp_path: Path,
+):
+    fixture = smoke_fixture_paths(["solidworks_smoke_patterned_plate"])
+    captured = {"exports": 0, "edits": 0}
+
+    def fake_native_exporter(plan, output_path, **kwargs):
+        captured["exports"] += 1
+        output_path.write_bytes(b"native-part")
+        result_path = kwargs["result_output_path"]
+        model_data = load_model(fixture[0])
+        result_path.write_text(
+            json.dumps(
+                {
+                    "geometry": geometry_metrics(build_model(model_data)),
+                    "published_references": persistent_reference_records(plan),
+                }
+            ),
+            encoding="utf-8",
+        )
+        return output_path
+
+    def fake_editability_verifier(
+        plan,
+        source_path,
+        output_path,
+        mutations,
+        **kwargs,
+    ):
+        captured["edits"] += 1
+        assert source_path.is_file()
+        assert mutations == {
+            "base.sketch.width": 120,
+            "bosses.feature.distance": 10,
+            "mounting_holes.feature.diameter": 6,
+        }
+        model_data = load_model(fixture[0])
+        model_data["operations"][0]["width"] = 120
+        model_data["operations"][1]["distance"] = 10
+        model_data["operations"][2]["diameter"] = 6
+        output_path.write_bytes(b"mutated-native-part")
+        kwargs["result_output_path"].write_text(
+            json.dumps(
+                {
+                    "status": "success",
+                    "mutation_count": 3,
+                    "reopened": True,
+                    "after_geometry": geometry_metrics(build_model(model_data)),
+                    "health": {"feature_error_count": 0},
+                    "published_references": persistent_reference_records(plan),
+                }
+            ),
+            encoding="utf-8",
+        )
+        return output_path
+
+    report = run_smoke_suite(
+        fixture,
+        tmp_path,
+        execute_native=True,
+        verify_editability=True,
+        native_exporter=fake_native_exporter,
+        editability_verifier=fake_editability_verifier,
+    )
+
+    assert report["passed"] == 1
+    assert captured == {"exports": 1, "edits": 1}
+    editability = report["results"][0]["editability"]
+    assert editability["reopened"] is True
+    assert editability["geometry_comparison"]["passed"] is True
+    assert editability["health"] == {"feature_error_count": 0}
+    assert editability["published_references"]["passed"] is True
+
+
+def test_persistent_reference_check_rejects_a_missing_semantic_entity():
+    fixture = smoke_fixture_paths(["solidworks_smoke_patterned_plate"])[0]
+    from prompt2cad.solidworks_export import model_path_to_replay_plan
+
+    plan = model_path_to_replay_plan(fixture)
+    incomplete = persistent_reference_records(plan)[1:]
+
+    with pytest.raises(RuntimeError, match="persistent-reference mismatch"):
+        validate_published_references(
+            plan,
+            {"published_references": incomplete},
+            context="test",
+        )
 
 
 def test_unknown_smoke_fixture_is_rejected():

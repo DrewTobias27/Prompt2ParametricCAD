@@ -72,7 +72,9 @@ automation API:
 3. recreate named sketch entities and driving dimensions;
 4. create the corresponding native feature;
 5. resolve later targets from semantic selection recipes after each rebuild;
-6. assign stable feature names and save the resulting `SLDPRT`.
+6. capture persistent SolidWorks reference IDs for published faces and edges;
+7. verify dimensions, sketch constraint state, feature health, geometry, and
+   reference resolution before saving the resulting `SLDPRT`.
 
 The adapter never uses final B-rep edge numbers as its only source of
 truth. It prefers feature ownership, support aliases, local frames, and
@@ -101,18 +103,23 @@ constraints or selection rules:
 - named width, height, diameter, extrusion-distance, and blind-depth driving
   dimensions, plus named revolve angles and stable X/Y locating dimensions for
   non-centered rectangle and circle profiles;
-- fixed sketch-local datum points and geometric relations for centered
-  rectangle and circle profiles, including profiles on rotated side faces;
-- semantic face publication and lookup for parent/child dependencies;
-- in-session verification that every expected sketch, feature, dimension, and
-  published face exists before success is reported.
+- fixed sketch-local datum points, generalized coordinate constraints, and
+  fully defined rectangle, circle, polygon, polyline, and line/arc sketches,
+  including profiles on rotated side faces;
+- semantic face and edge publication backed by persistent SolidWorks reference
+  IDs for parent/child dependencies and later topology lookup;
+- in-session verification that every expected sketch, feature, parameter, and
+  published reference exists before success is reported;
+- save/reopen mutation verification that confirms parameters remain editable
+  and persistent references still resolve after a rebuild.
 
 The runner temporarily disables SolidWorks' interactive dimension-entry prompt
 and restores the user's prior setting after replay. It uses the configured part
 template when available and falls back to the newest installed standard part
-template. Seven real-application smoke models cover every supported profile as
+template. Eight real-application smoke models cover every supported profile as
 well as boss/cut features, through and blind end conditions, patterns, full and
-partial revolves, edge treatments, and multi-level feature dependencies.
+partial revolves, asymmetric freeform edge treatments, and multi-level feature
+dependencies.
 
 Legacy repeated source positions remain exact contours so existing JSON keeps
 working. Operations with canonical pattern metadata instead create one seed
@@ -132,7 +139,7 @@ of treating a saved file as proof of geometry parity.
 | A feature depends on more than one earlier feature | Represent parents as a list even though the current graph usually supplies one. |
 | Build order and semantic ownership are confused | Store `build_predecessor_id` separately from `parent_feature_ids`. |
 | A pattern rule disagrees with its generated positions | Retain exact positions as the geometry oracle and reject inconsistent seed/count metadata before SolidWorks opens. |
-| Polyline or arc sketches have coordinates but no constraints | Expose their coordinates, but mark the sketch as coordinate-driven until constraints are added. |
+| Coordinate-driven sketches become underdefined or drift | Anchor a stable sketch datum, apply generalized relations and dimensions, and reject replay unless required sketches report fully defined. |
 | A failed edit partially mutates the saved model | Deep-copy source operations and return a new document only after a successful rebuild. |
 | Native CAD and CadQuery disagree about a selection | Keep CadQuery as the regression oracle and add adapter-specific replay tests before claiming support. |
 
@@ -155,11 +162,11 @@ The backend now exposes this layer through `/editable-model` and
 known-good revision and exports a new STEP file only after the parameter update,
 schema, rebuild, operation-effect checks, and quality checks succeed.
 
-The next native increment should extend locating constraints from parametric
-rectangle/circle profiles to coordinate-driven polygon, polyline, and arc
-sketches. CadQuery remains the geometry oracle for every native replay
-expansion.
+The next native increment should broaden operation coverage and mutation cases
+without weakening the current contract: CadQuery remains the geometry oracle,
+every declared native parameter must bind and verify, required sketches must be
+fully defined, and every published persistent reference must resolve.
 
 Run `prompt2cad-solidworks-smoke` for the CadQuery build and native-plan phase.
-On a configured Windows workstation, add `--execute` to replay the same seven
+On a configured Windows workstation, add `--execute` to replay the same eight
 fixtures into `SLDPRT` files and record per-fixture failures in one report.

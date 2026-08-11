@@ -16,7 +16,7 @@ from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
-SOLIDWORKS_PACKAGE_VERSION = 1
+SOLIDWORKS_PACKAGE_VERSION = 2
 _FIXED_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 
@@ -63,6 +63,7 @@ def create_solidworks_package(
         "Build-SolidWorks-Part.ps1": _launcher_script(native_filename).encode(
             "utf-8"
         ),
+        "Build-SolidWorks-Part.cmd": _cmd_launcher_script().encode("utf-8"),
         "source-model.json": _json_bytes(model_data),
         "editable-model.json": _json_bytes(document.to_dict()),
         "solidworks-replay-plan.json": _json_bytes(replay_plan.to_dict()),
@@ -73,6 +74,7 @@ def create_solidworks_package(
         "format": SOLIDWORKS_PACKAGE_FORMAT,
         "version": SOLIDWORKS_PACKAGE_VERSION,
         "native_output": native_filename,
+        "native_result": f"{native_filename}.result.json",
         "requirements": {
             "operating_system": "Windows",
             "solidworks": "Installed and licensed SolidWorks",
@@ -142,11 +144,61 @@ def _launcher_script(native_filename: str) -> str:
         param(
             [string]$OutputPath = (Join-Path $PSScriptRoot "{native_filename}"),
             [string]$TemplatePath,
-            [switch]$Visible
+            [switch]$Visible,
+            [switch]$SkipIntegrityCheck
         )
 
         $ErrorActionPreference = "Stop"
         Set-StrictMode -Version Latest
+
+        function Write-Stage([string]$Message) {{
+            Write-Host "[Prompt2CAD] $Message" -ForegroundColor Cyan
+        }}
+
+        Write-Stage "Checking package files"
+        $manifestPath = Join-Path $PSScriptRoot "manifest.json"
+        $requiredFiles = @(
+            $manifestPath,
+            (Join-Path $PSScriptRoot "solidworks-replay-plan.json"),
+            (Join-Path $PSScriptRoot "solidworks_replay.ps1"),
+            (Join-Path $PSScriptRoot "solidworks_replay_runner.cs")
+        )
+        foreach ($requiredFile in $requiredFiles) {{
+            if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {{
+                throw "Required package file is missing: $requiredFile"
+            }}
+        }}
+
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw |
+            ConvertFrom-Json
+        if (-not $SkipIntegrityCheck.IsPresent) {{
+            foreach ($file in $manifest.files) {{
+                $path = Join-Path $PSScriptRoot $file.path
+                if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {{
+                    throw "Integrity check failed; package file is missing: $($file.path)"
+                }}
+                $actualHash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($actualHash -ne $file.sha256) {{
+                    throw "Integrity check failed for $($file.path). Extract a fresh package and try again."
+                }}
+            }}
+        }}
+
+        if (-not [Environment]::Is64BitProcess) {{
+            throw "Use 64-bit Windows PowerShell so it can load the SolidWorks API."
+        }}
+        if ($null -eq [Type]::GetTypeFromProgID("SldWorks.Application")) {{
+            throw "SolidWorks is not registered on this computer. Install and activate SolidWorks, then try again."
+        }}
+
+        $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+        if ([System.IO.Path]::GetExtension($OutputPath) -ne ".SLDPRT") {{
+            throw "OutputPath must end in .SLDPRT: $OutputPath"
+        }}
+        $outputDirectory = [System.IO.Path]::GetDirectoryName($OutputPath)
+        if ($outputDirectory) {{
+            New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+        }}
 
         $arguments = @{{
             PlanPath = (Join-Path $PSScriptRoot "solidworks-replay-plan.json")
@@ -159,8 +211,49 @@ def _launcher_script(native_filename: str) -> str:
             $arguments.Visible = $true
         }}
 
-        & (Join-Path $PSScriptRoot "solidworks_replay.ps1") @arguments
-        Write-Host "Created editable SolidWorks part: $OutputPath"
+        Write-Stage "Building editable SolidWorks part"
+        $resultText = (& (Join-Path $PSScriptRoot "solidworks_replay.ps1") @arguments |
+            Out-String).Trim()
+        try {{
+            $result = $resultText | ConvertFrom-Json
+        }}
+        catch {{
+            throw "SolidWorks returned an unreadable build result: $resultText"
+        }}
+        if ($result.status -ne "success") {{
+            throw "SolidWorks did not report a successful build."
+        }}
+
+        $resultPath = "$OutputPath.result.json"
+        $result | ConvertTo-Json -Depth 20 |
+            Set-Content -LiteralPath $resultPath -Encoding UTF8
+        Write-Host ""
+        Write-Host "Created editable SolidWorks part" -ForegroundColor Green
+        Write-Host "  Part:   $OutputPath"
+        Write-Host "  Report: $resultPath"
+        Write-Host "  Features: $($result.feature_count)"
+        Write-Host "  Verified parameters: $($result.verified_parameter_count)"
+        Write-Host "  Persistent references: $($result.published_references.Count)"
+        """
+    ).lstrip()
+
+
+def _cmd_launcher_script() -> str:
+    return dedent(
+        r"""
+        @echo off
+        setlocal
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Build-SolidWorks-Part.ps1" -Visible
+        set "P2P_EXIT_CODE=%ERRORLEVEL%"
+        echo.
+        if not "%P2P_EXIT_CODE%"=="0" (
+          echo Prompt2ParametricCAD could not build the SolidWorks part.
+          echo Read the error above, then press any key to close this window.
+        ) else (
+          echo Build complete. Press any key to close this window.
+        )
+        pause >nul
+        exit /b %P2P_EXIT_CODE%
         """
     ).lstrip()
 
@@ -184,19 +277,28 @@ def _readme_text(native_filename: str) -> str:
         Build the editable part
         -----------------------
         1. Extract every file in this ZIP into one folder.
-        2. Open PowerShell in that folder.
-        3. Run:
+        2. Double-click Build-SolidWorks-Part.cmd.
+        3. Keep the window open while SolidWorks creates and verifies the part.
+
+        PowerShell alternative
+        ----------------------
+        Open PowerShell in the extracted folder and run:
 
            powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Build-SolidWorks-Part.ps1 -Visible
 
-        The expected output is:
+        Expected outputs
+        ----------------
 
            {native_filename}
+           {native_filename}.result.json
 
-        Keep the files together. The launcher validates the replay-plan version,
-        opens SolidWorks, creates named sketches and ordered native features,
-        rebuilds the model, and saves the SLDPRT file. If replay fails, the
-        terminal reports the feature that could not be created and no successful
-        native export should be assumed.
+        Keep the files together. Before opening SolidWorks, the launcher checks
+        that the package files match their recorded SHA-256 hashes and that the
+        required 64-bit SolidWorks API is available. It then creates named,
+        constrained sketches and ordered native features; verifies parameters,
+        geometry, feature health, and semantic face/edge references; rebuilds;
+        and saves the SLDPRT file. The JSON report records the verified native
+        result. If any stage fails, the window identifies the failing condition
+        and no successful native export should be assumed.
         """
     ).lstrip()

@@ -23,7 +23,7 @@ from prompt2cad.editable_model import EditableModelDocument
 
 
 SOLIDWORKS_REPLAY_FORMAT = "prompt2cad.solidworks-replay-plan"
-SOLIDWORKS_REPLAY_VERSION = 4
+SOLIDWORKS_REPLAY_VERSION = 6
 SUPPORTED_OPERATION_TYPES = {
     "extrude",
     "add_extrude",
@@ -103,7 +103,8 @@ class SolidWorksReplayFeature:
     sketch: dict | None
     feature: dict
     pattern: dict | None = None
-    publish_references: dict[str, str] = field(default_factory=dict)
+    parameter_bindings: tuple[dict, ...] = field(default_factory=tuple)
+    publish_references: tuple[dict, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict:
         """Return a JSON-friendly replay step."""
@@ -116,7 +117,8 @@ class SolidWorksReplayFeature:
             "sketch": self.sketch,
             "feature": self.feature,
             "pattern": self.pattern,
-            "publish_references": self.publish_references,
+            "parameter_bindings": list(self.parameter_bindings),
+            "publish_references": list(self.publish_references),
         }
 
 
@@ -159,6 +161,7 @@ class SolidWorksReplayPlan:
                 "step_operation_parity": SOLIDWORKS_PARITY_MATRIX,
                 "arbitrary_sketch_placement": True,
                 "generated_stable_feature_ids": True,
+                "persistent_entity_reference_contract": True,
             },
         }
 
@@ -201,7 +204,11 @@ def build_solidworks_replay_plan(
         used_feature_names.add(feature_name)
         native_feature_names[feature.id] = feature_name
         native_feature_frames[feature.id] = dict(replay_feature.support.get("frame", {}))
-        published_faces[feature.id] = dict(replay_feature.publish_references)
+        published_faces[feature.id] = {
+            reference["semantic_name"]: reference["entity_name"]
+            for reference in replay_feature.publish_references
+            if reference["entity_type"] == "face"
+        }
 
     if errors:
         raise SolidWorksReplayError(
@@ -313,6 +320,148 @@ def export_solidworks_part(
     return output_path
 
 
+def verify_solidworks_editability(
+    plan: SolidWorksReplayPlan,
+    source_path: Path,
+    output_path: Path,
+    mutations: dict[str, float],
+    *,
+    visible: bool = False,
+    result_output_path: Path | None = None,
+    powershell_executable: str = "powershell.exe",
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> Path:
+    """Reopen, mutate, rebuild, save, and reopen one native part.
+
+    Parameter IDs come from the CAD-neutral editable document.  The canonical
+    replay bindings decide whether each value is changed through a named
+    dimension or a native feature-data property, allowing this workflow to
+    grow with new feature types without adding test-specific mutation code.
+    """
+    source_path = source_path.resolve()
+    output_path = output_path.resolve()
+    if source_path.suffix.lower() != ".sldprt" or output_path.suffix.lower() != ".sldprt":
+        raise SolidWorksExecutionError(
+            "SOLIDWORKS editability verification requires .SLDPRT files"
+        )
+    if not source_path.is_file():
+        raise SolidWorksExecutionError(
+            f"SOLIDWORKS source part was not found: {source_path}"
+        )
+    if source_path == output_path:
+        raise SolidWorksExecutionError(
+            "Editability verification must save to a separate output part"
+        )
+    if not mutations:
+        raise SolidWorksExecutionError(
+            "Editability verification requires at least one parameter mutation"
+        )
+
+    bindings = {
+        binding["parameter_id"]: binding
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    }
+    unknown = sorted(set(mutations) - set(bindings))
+    if unknown:
+        raise SolidWorksExecutionError(
+            "Unknown native parameter IDs: " + ", ".join(unknown)
+        )
+    mutation_document = {
+        "format": "prompt2cad.solidworks-mutations",
+        "version": 1,
+        "mutations": [
+            {
+                "parameter_id": parameter_id,
+                "value": float(value),
+                "unit": bindings[parameter_id]["unit"],
+            }
+            for parameter_id, value in sorted(mutations.items())
+        ],
+    }
+
+    replay_script = Path(__file__).with_name("solidworks_replay.ps1")
+    replay_engine = Path(__file__).with_name("solidworks_replay_runner.cs")
+    missing_assets = [
+        path for path in (replay_script, replay_engine) if not path.is_file()
+    ]
+    if missing_assets:
+        raise SolidWorksExecutionError(
+            "SOLIDWORKS replay assets were not found: "
+            + ", ".join(str(path) for path in missing_assets)
+        )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="prompt2cad-solidworks-edit-") as directory:
+        temporary_root = Path(directory)
+        plan_path = temporary_root / "replay-plan.json"
+        mutation_path = temporary_root / "mutations.json"
+        plan_path.write_text(
+            json.dumps(plan.to_dict(), indent=2) + "\n",
+            encoding="utf-8",
+        )
+        mutation_path.write_text(
+            json.dumps(mutation_document, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        command = [
+            powershell_executable,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(replay_script),
+            "-PlanPath",
+            str(plan_path),
+            "-OutputPath",
+            str(output_path),
+            "-ExistingPartPath",
+            str(source_path),
+            "-MutationPath",
+            str(mutation_path),
+        ]
+        if visible:
+            command.append("-Visible")
+
+        try:
+            completed = runner(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError as error:
+            raise SolidWorksExecutionError(
+                "SOLIDWORKS editability process could not start"
+            ) from error
+        if completed.returncode != 0:
+            message = completed.stderr.strip() or completed.stdout.strip()
+            raise SolidWorksExecutionError(
+                "SOLIDWORKS editability verification failed"
+                + (f": {message}" if message else "")
+            )
+        if not output_path.is_file():
+            raise SolidWorksExecutionError(
+                "SOLIDWORKS reported a successful edit but created no output part"
+            )
+
+        if result_output_path is not None:
+            try:
+                result = json.loads(completed.stdout.strip())
+            except json.JSONDecodeError as error:
+                raise SolidWorksExecutionError(
+                    "SOLIDWORKS returned an unreadable editability result"
+                ) from error
+            result_output_path = result_output_path.resolve()
+            result_output_path.parent.mkdir(parents=True, exist_ok=True)
+            result_output_path.write_text(
+                json.dumps(result, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+    return output_path
+
+
 def _replay_feature(
     feature: EditableFeatureDefinition,
     *,
@@ -386,7 +535,15 @@ def _replay_feature(
     if pattern is not None:
         sketch["positions_mm"] = [pattern["seed_position_mm"]]
         sketch["placement_controls"] = sketch.get("placement_controls", [])[:1]
-    publish_references = _published_reference_names(feature)
+    publish_references = _published_reference_specs(feature, support)
+    parameter_bindings = _native_parameter_bindings(
+        feature,
+        sketch_name=f"{feature_name}_Sketch",
+        feature_name=feature_name,
+        sketch=sketch,
+        native_feature=native_feature,
+        pattern=pattern,
+    )
 
     return SolidWorksReplayFeature(
         id=feature.id,
@@ -397,6 +554,7 @@ def _replay_feature(
         sketch=sketch,
         feature=native_feature,
         pattern=pattern,
+        parameter_bindings=parameter_bindings,
         publish_references=publish_references,
     )
 
@@ -411,6 +569,7 @@ def _native_sketch(feature: EditableFeatureDefinition, profile: str) -> dict:
     geometry: dict[str, object] = {
         "profile": profile,
         "positions_mm": positions,
+        "constraint_plan": _native_constraint_plan(feature, profile),
         "placement_controls": (
             _native_placement_controls(feature, positions)
             if profile in {"rectangle", "circle"}
@@ -479,6 +638,40 @@ def _countersink_position_sketch(feature: EditableFeatureDefinition) -> dict:
         ],
         "driving_dimensions": [],
         "placement_controls": [],
+        "constraint_plan": _native_constraint_plan(feature, "points"),
+    }
+
+
+def _native_constraint_plan(
+    feature: EditableFeatureDefinition,
+    profile: str,
+) -> dict:
+    """Describe how the native sketch must consume its remaining freedom.
+
+    Explicit source dimensions remain authoritative.  SOLIDWORKS only fills
+    degrees of freedom that those dimensions and inferred topology leave
+    behind, which keeps the strategy applicable to future sketch entities
+    without special-casing each final part shape.
+    """
+    return {
+        "strategy": "complete_remaining_degrees_of_freedom",
+        "profile": profile,
+        "relations": [
+            "coincident",
+            "horizontal",
+            "vertical",
+            "collinear",
+            "concentric",
+            "equal",
+            "parallel",
+            "perpendicular",
+            "tangent",
+            "midpoint",
+        ],
+        "horizontal_dimension_scheme": "baseline",
+        "vertical_dimension_scheme": "baseline",
+        "require_fully_defined": True,
+        "source_feature_id": feature.id,
     }
 
 
@@ -663,6 +856,16 @@ def _edge_treatment_replay_feature(
     operation_type = feature.operation_type
     dimension_key = "distance" if operation_type == "chamfer" else "radius"
     value = float(operation[dimension_key])
+    native_feature = {
+        "kind": f"edge_{operation_type}",
+        f"{dimension_key}_mm": value,
+        "driving_dimension": _dimension(
+            feature,
+            parameter_id=f"{feature.id}.feature.{dimension_key}",
+            fallback_name=dimension_key,
+            value=value,
+        ),
+    }
     return SolidWorksReplayFeature(
         id=feature.id,
         operation_type=operation_type,
@@ -674,19 +877,214 @@ def _edge_treatment_replay_feature(
             "target_feature_name": target_feature_name,
             "selector": selector,
             "frame": frame,
+            "members": _native_edge_reference_members(feature),
         },
         sketch=None,
-        feature={
-            "kind": f"edge_{operation_type}",
-            f"{dimension_key}_mm": value,
-            "driving_dimension": _dimension(
-                feature,
-                parameter_id=f"{feature.id}.feature.{dimension_key}",
-                fallback_name=dimension_key,
-                value=value,
-            ),
-        },
+        feature=native_feature,
+        parameter_bindings=_native_parameter_bindings(
+            feature,
+            sketch_name=None,
+            feature_name=feature_name,
+            sketch=None,
+            native_feature=native_feature,
+            pattern=None,
+        ),
     )
+
+
+def _native_edge_reference_members(
+    feature: EditableFeatureDefinition,
+) -> list[dict]:
+    """Preserve canonical edge-group members as geometric selectors."""
+    snapshot = feature.support_reference or {}
+    members = snapshot.get("members", [])
+    result = []
+    for member in members:
+        if member.get("kind") != "edge":
+            continue
+        metadata = member.get("metadata", {})
+        center = metadata.get("center")
+        box = metadata.get("bounding_box")
+        if (
+            not isinstance(center, (list, tuple))
+            or len(center) != 3
+            or not isinstance(box, dict)
+        ):
+            continue
+        result.append(
+            {
+                "reference_id": member["name"],
+                "center_mm": [float(value) for value in center],
+                "bounding_box_mm": [
+                    float(box[key])
+                    for key in ("xmin", "ymin", "zmin", "xmax", "ymax", "zmax")
+                ],
+            }
+        )
+    return result
+
+
+def _native_parameter_bindings(
+    feature: EditableFeatureDefinition,
+    *,
+    sketch_name: str | None,
+    feature_name: str,
+    sketch: dict | None,
+    native_feature: dict,
+    pattern: dict | None,
+) -> tuple[dict, ...]:
+    """Return one canonical manifest for every native editable control.
+
+    Geometry creation still consumes the profile- and feature-specific fields
+    for compatibility.  Verification and future mutation tools consume this
+    manifest instead, so a new operation cannot silently declare a parameter
+    without also describing its native owner and access strategy.
+    """
+    bindings: list[dict] = []
+
+    if sketch is not None and sketch_name is not None:
+        for dimension in sketch.get("driving_dimensions", []):
+            bindings.append(
+                _dimension_binding(
+                    dimension,
+                    owner_kind="sketch",
+                    owner_name=sketch_name,
+                )
+            )
+        for control in sketch.get("placement_controls", []):
+            for dimension in (
+                control.get("x_dimension"),
+                control.get("y_dimension"),
+            ):
+                if dimension is not None:
+                    bindings.append(
+                        _dimension_binding(
+                            dimension,
+                            owner_kind="sketch",
+                            owner_name=sketch_name,
+                        )
+                    )
+
+    native_owner_name = (
+        pattern["seed_feature_name"] if pattern is not None else feature_name
+    )
+    driving_dimension = native_feature.get("driving_dimension")
+    if driving_dimension is not None:
+        bindings.append(
+            _dimension_binding(
+                driving_dimension,
+                owner_kind="feature",
+                owner_name=native_owner_name,
+            )
+        )
+
+    if native_feature.get("kind") == "countersink":
+        property_names = {
+            "diameter": ["Diameter", "HoleDiameter", "ThruHoleDiameter"],
+            "countersink_diameter": ["CounterSinkDiameter"],
+            "angle": ["CounterSinkAngle"],
+            "depth": ["Depth", "HoleDepth"],
+        }
+        for dimension in native_feature.get("driving_dimensions", []):
+            key = dimension["parameter_id"].rsplit(".", 1)[-1]
+            bindings.append(
+                _feature_property_binding(
+                    dimension,
+                    owner_name=native_owner_name,
+                    native_properties=property_names[key],
+                )
+            )
+
+    if pattern is not None:
+        bindings.extend(_pattern_parameter_bindings(feature, feature_name, pattern))
+
+    parameter_ids = [binding["parameter_id"] for binding in bindings]
+    if len(parameter_ids) != len(set(parameter_ids)):
+        raise SolidWorksReplayError(
+            f"feature '{feature.id}' produced duplicate native parameter bindings"
+        )
+    return tuple(bindings)
+
+
+def _dimension_binding(
+    dimension: dict,
+    *,
+    owner_kind: str,
+    owner_name: str,
+) -> dict:
+    return {
+        "parameter_id": dimension["parameter_id"],
+        "native_name": dimension["native_name"],
+        "binding_kind": "named_dimension",
+        "owner_kind": owner_kind,
+        "owner_name": owner_name,
+        "native_properties": [],
+        "value": float(dimension["value_mm"]),
+        "unit": dimension["unit"],
+    }
+
+
+def _feature_property_binding(
+    dimension: dict,
+    *,
+    owner_name: str,
+    native_properties: list[str],
+) -> dict:
+    return {
+        "parameter_id": dimension["parameter_id"],
+        "native_name": dimension["native_name"],
+        "binding_kind": "feature_property",
+        "owner_kind": "feature",
+        "owner_name": owner_name,
+        "native_properties": native_properties,
+        "value": float(dimension["value_mm"]),
+        "unit": dimension["unit"],
+    }
+
+
+def _pattern_parameter_bindings(
+    feature: EditableFeatureDefinition,
+    feature_name: str,
+    pattern: dict,
+) -> list[dict]:
+    values: list[tuple[str, str, float, str]] = []
+    kind = pattern["kind"]
+    if kind == "circular_pattern":
+        values = [
+            ("count", "TotalInstances", float(pattern["count"]), "count"),
+            (
+                "total_angle",
+                "Spacing",
+                float(pattern["total_angle_deg"]),
+                "deg",
+            ),
+        ]
+    elif kind == "linear_pattern":
+        values = [
+            ("count_1", "D1TotalInstances", float(pattern["count_1"]), "count"),
+            ("spacing_1", "D1Spacing", float(pattern["spacing_1_mm"]), "mm"),
+            ("count_2", "D2TotalInstances", float(pattern["count_2"]), "count"),
+            ("spacing_2", "D2Spacing", float(pattern["spacing_2_mm"]), "mm"),
+        ]
+    else:
+        return []
+
+    bindings = []
+    for parameter_name, native_property, value, unit in values:
+        parameter_id = f"{feature.id}.pattern.{parameter_name}"
+        bindings.append(
+            {
+                "parameter_id": parameter_id,
+                "native_name": _dimension_name(parameter_id, parameter_name),
+                "binding_kind": "feature_property",
+                "owner_kind": "pattern",
+                "owner_name": feature_name,
+                "native_properties": [native_property],
+                "value": value,
+                "unit": unit,
+            }
+        )
+    return bindings
 
 
 def _points_close(first: list[float], second: list[float]) -> bool:
@@ -857,12 +1255,19 @@ def _semantic_reference_name(
     return aliases.get(requested_reference, requested_reference)
 
 
-def _published_reference_names(
+def _published_reference_specs(
     feature: EditableFeatureDefinition,
-) -> dict[str, str]:
+    support: dict,
+) -> tuple[dict, ...]:
+    """Return extensible native entity-publication instructions.
+
+    The replay plan describes *how* to resolve each entity instead of relying
+    on fixed fields such as ``top`` or ``right``.  Face and edge selectors can
+    therefore share this contract as the reference vocabulary grows.
+    """
     operation_type = feature.operation_type
     if operation_type not in {"extrude", "add_extrude", "revolve", "add_revolve"}:
-        return {}
+        return ()
 
     profile = feature.source_operation.get("profile")
     if operation_type in {"revolve", "add_revolve"}:
@@ -888,10 +1293,79 @@ def _published_reference_names(
             semantics.append("bottom")
     else:
         semantics = ["top", "bottom"]
+    directions = _published_face_directions(feature, support)
+    references = []
+    for semantic in semantics:
+        selector = (
+            {"kind": "largest_non_planar_face"}
+            if semantic == "outer_surface"
+            else {
+                "kind": "planar_face_direction",
+                "direction": directions[semantic],
+            }
+        )
+        references.append(
+            {
+                "reference_id": f"{feature.id}.{semantic}",
+                "semantic_name": semantic,
+                "entity_name": _entity_name(feature.id, semantic),
+                "entity_type": "face",
+                "selector": selector,
+            }
+        )
+    return tuple(references)
+
+
+def _published_face_directions(
+    feature: EditableFeatureDefinition,
+    support: dict,
+) -> dict[str, list[float]]:
+    frame = support.get("frame") or {}
+    normal = [float(value) for value in frame.get("normal", [0, 0, 1])]
+    x_axis = [float(value) for value in frame.get("x_axis", [1, 0, 0])]
+    y_axis = _cross(normal, x_axis)
+    front = y_axis
+    if feature.operation_type in {"revolve", "add_revolve"}:
+        operation = feature.source_operation
+        axis_start = operation["axis_start"]
+        axis_end = operation["axis_end"]
+        front = _normalize(
+            _add(
+                _scale(x_axis, float(axis_end[0]) - float(axis_start[0])),
+                _scale(y_axis, float(axis_end[1]) - float(axis_start[1])),
+            )
+        )
     return {
-        semantic: _entity_name(feature.id, semantic)
-        for semantic in semantics
+        "top": normal,
+        "bottom": _scale(normal, -1.0),
+        "right": x_axis,
+        "left": _scale(x_axis, -1.0),
+        "front": front,
+        "back": _scale(front, -1.0),
     }
+
+
+def _cross(left: list[float], right: list[float]) -> list[float]:
+    return [
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    ]
+
+
+def _add(left: list[float], right: list[float]) -> list[float]:
+    return [left[index] + right[index] for index in range(3)]
+
+
+def _scale(vector: list[float], factor: float) -> list[float]:
+    return [value * factor for value in vector]
+
+
+def _normalize(vector: list[float]) -> list[float]:
+    magnitude = sum(value * value for value in vector) ** 0.5
+    if magnitude <= 1e-12:
+        raise SolidWorksReplayError("native reference direction cannot be zero")
+    return [value / magnitude for value in vector]
 
 
 def _dimension(

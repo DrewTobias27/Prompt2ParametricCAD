@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
@@ -22,6 +23,32 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "features")]
         public ReplayStep[] Features { get; set; }
+    }
+
+    [DataContract]
+    public sealed class MutationDocument
+    {
+        [DataMember(Name = "format")]
+        public string Format { get; set; }
+
+        [DataMember(Name = "version")]
+        public int Version { get; set; }
+
+        [DataMember(Name = "mutations")]
+        public ParameterMutation[] Mutations { get; set; }
+    }
+
+    [DataContract]
+    public sealed class ParameterMutation
+    {
+        [DataMember(Name = "parameter_id")]
+        public string ParameterId { get; set; }
+
+        [DataMember(Name = "value")]
+        public double Value { get; set; }
+
+        [DataMember(Name = "unit")]
+        public string Unit { get; set; }
     }
 
     [DataContract]
@@ -48,8 +75,11 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "pattern")]
         public PatternSpec Pattern { get; set; }
 
+        [DataMember(Name = "parameter_bindings")]
+        public NativeParameterBinding[] ParameterBindings { get; set; }
+
         [DataMember(Name = "publish_references")]
-        public PublishedReferences PublishReferences { get; set; }
+        public NativeReferenceSpec[] PublishReferences { get; set; }
     }
 
     [DataContract]
@@ -75,6 +105,22 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "frame")]
         public FrameSpec Frame { get; set; }
+
+        [DataMember(Name = "members")]
+        public ReferenceMemberSpec[] Members { get; set; }
+    }
+
+    [DataContract]
+    public sealed class ReferenceMemberSpec
+    {
+        [DataMember(Name = "reference_id")]
+        public string ReferenceId { get; set; }
+
+        [DataMember(Name = "center_mm")]
+        public double[] CenterMillimeters { get; set; }
+
+        [DataMember(Name = "bounding_box_mm")]
+        public double[] BoundingBoxMillimeters { get; set; }
     }
 
     [DataContract]
@@ -128,6 +174,34 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "placement_controls")]
         public PlacementControl[] PlacementControls { get; set; }
+
+        [DataMember(Name = "constraint_plan")]
+        public SketchConstraintPlan ConstraintPlan { get; set; }
+    }
+
+    [DataContract]
+    public sealed class SketchConstraintPlan
+    {
+        [DataMember(Name = "strategy")]
+        public string Strategy { get; set; }
+
+        [DataMember(Name = "profile")]
+        public string Profile { get; set; }
+
+        [DataMember(Name = "relations")]
+        public string[] Relations { get; set; }
+
+        [DataMember(Name = "horizontal_dimension_scheme")]
+        public string HorizontalDimensionScheme { get; set; }
+
+        [DataMember(Name = "vertical_dimension_scheme")]
+        public string VerticalDimensionScheme { get; set; }
+
+        [DataMember(Name = "require_fully_defined")]
+        public bool RequireFullyDefined { get; set; }
+
+        [DataMember(Name = "source_feature_id")]
+        public string SourceFeatureId { get; set; }
     }
 
     [DataContract]
@@ -268,28 +342,60 @@ namespace Prompt2Cad.SolidWorks
     }
 
     [DataContract]
-    public sealed class PublishedReferences
+    public sealed class NativeParameterBinding
     {
-        [DataMember(Name = "top")]
-        public string Top { get; set; }
+        [DataMember(Name = "parameter_id")]
+        public string ParameterId { get; set; }
 
-        [DataMember(Name = "bottom")]
-        public string Bottom { get; set; }
+        [DataMember(Name = "native_name")]
+        public string NativeName { get; set; }
 
-        [DataMember(Name = "front")]
-        public string Front { get; set; }
+        [DataMember(Name = "binding_kind")]
+        public string BindingKind { get; set; }
 
-        [DataMember(Name = "back")]
-        public string Back { get; set; }
+        [DataMember(Name = "owner_kind")]
+        public string OwnerKind { get; set; }
 
-        [DataMember(Name = "left")]
-        public string Left { get; set; }
+        [DataMember(Name = "owner_name")]
+        public string OwnerName { get; set; }
 
-        [DataMember(Name = "right")]
-        public string Right { get; set; }
+        [DataMember(Name = "native_properties")]
+        public string[] NativeProperties { get; set; }
 
-        [DataMember(Name = "outer_surface")]
-        public string OuterSurface { get; set; }
+        [DataMember(Name = "value")]
+        public double Value { get; set; }
+
+        [DataMember(Name = "unit")]
+        public string Unit { get; set; }
+    }
+
+    [DataContract]
+    public sealed class NativeReferenceSpec
+    {
+        [DataMember(Name = "reference_id")]
+        public string ReferenceId { get; set; }
+
+        [DataMember(Name = "semantic_name")]
+        public string SemanticName { get; set; }
+
+        [DataMember(Name = "entity_name")]
+        public string EntityName { get; set; }
+
+        [DataMember(Name = "entity_type")]
+        public string EntityType { get; set; }
+
+        [DataMember(Name = "selector")]
+        public NativeReferenceSelector Selector { get; set; }
+    }
+
+    [DataContract]
+    public sealed class NativeReferenceSelector
+    {
+        [DataMember(Name = "kind")]
+        public string Kind { get; set; }
+
+        [DataMember(Name = "direction")]
+        public double[] Direction { get; set; }
     }
 
     internal sealed class NativeSketchResult
@@ -320,8 +426,20 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "verified_dimension_count")]
         public int VerifiedDimensionCount { get; set; }
 
+        [DataMember(Name = "declared_parameter_count")]
+        public int DeclaredParameterCount { get; set; }
+
+        [DataMember(Name = "verified_parameter_count")]
+        public int VerifiedParameterCount { get; set; }
+
+        [DataMember(Name = "health")]
+        public NativeHealthResult Health { get; set; }
+
         [DataMember(Name = "geometry")]
         public NativeGeometryResult Geometry { get; set; }
+
+        [DataMember(Name = "published_references")]
+        public PersistentReferenceResult[] PublishedReferences { get; set; }
     }
 
     [DataContract]
@@ -337,11 +455,130 @@ namespace Prompt2Cad.SolidWorks
         public double[] BoundingBoxMillimeters { get; set; }
     }
 
+    [DataContract]
+    public sealed class EditabilityResult
+    {
+        [DataMember(Name = "status")]
+        public string Status { get; set; }
+
+        [DataMember(Name = "source_path")]
+        public string SourcePath { get; set; }
+
+        [DataMember(Name = "output_path")]
+        public string OutputPath { get; set; }
+
+        [DataMember(Name = "mutation_count")]
+        public int MutationCount { get; set; }
+
+        [DataMember(Name = "reopened")]
+        public bool Reopened { get; set; }
+
+        [DataMember(Name = "declared_parameter_count")]
+        public int DeclaredParameterCount { get; set; }
+
+        [DataMember(Name = "verified_parameter_count")]
+        public int VerifiedParameterCount { get; set; }
+
+        [DataMember(Name = "before_geometry")]
+        public NativeGeometryResult BeforeGeometry { get; set; }
+
+        [DataMember(Name = "after_geometry")]
+        public NativeGeometryResult AfterGeometry { get; set; }
+
+        [DataMember(Name = "health")]
+        public NativeHealthResult Health { get; set; }
+
+        [DataMember(Name = "published_references")]
+        public PersistentReferenceResult[] PublishedReferences { get; set; }
+    }
+
+    [DataContract]
+    public sealed class PersistentReferenceResult
+    {
+        [DataMember(Name = "reference_id")]
+        public string ReferenceId { get; set; }
+
+        [DataMember(Name = "entity_name")]
+        public string EntityName { get; set; }
+
+        [DataMember(Name = "entity_type")]
+        public string EntityType { get; set; }
+
+        [DataMember(Name = "persistent_id_base64")]
+        public string PersistentIdBase64 { get; set; }
+
+        [DataMember(Name = "resolved")]
+        public bool Resolved { get; set; }
+
+        [DataMember(Name = "resolution_error_code")]
+        public int ResolutionErrorCode { get; set; }
+    }
+
+    [DataContract]
+    public sealed class NativeHealthResult
+    {
+        [DataMember(Name = "features")]
+        public FeatureHealthResult[] Features { get; set; }
+
+        [DataMember(Name = "sketches")]
+        public SketchHealthResult[] Sketches { get; set; }
+
+        [DataMember(Name = "feature_error_count")]
+        public int FeatureErrorCount { get; set; }
+
+        [DataMember(Name = "feature_warning_count")]
+        public int FeatureWarningCount { get; set; }
+
+        [DataMember(Name = "fully_defined_sketch_count")]
+        public int FullyDefinedSketchCount { get; set; }
+
+        [DataMember(Name = "under_defined_sketch_count")]
+        public int UnderDefinedSketchCount { get; set; }
+    }
+
+    [DataContract]
+    public sealed class FeatureHealthResult
+    {
+        [DataMember(Name = "feature_name")]
+        public string FeatureName { get; set; }
+
+        [DataMember(Name = "error_code")]
+        public int ErrorCode { get; set; }
+
+        [DataMember(Name = "is_warning")]
+        public bool IsWarning { get; set; }
+
+        [DataMember(Name = "status")]
+        public string Status { get; set; }
+    }
+
+    [DataContract]
+    public sealed class SketchHealthResult
+    {
+        [DataMember(Name = "sketch_name")]
+        public string SketchName { get; set; }
+
+        [DataMember(Name = "constraint_code")]
+        public int ConstraintCode { get; set; }
+
+        [DataMember(Name = "constraint_status")]
+        public string ConstraintStatus { get; set; }
+
+        [DataMember(Name = "is_valid")]
+        public bool IsValid { get; set; }
+
+        [DataMember(Name = "constraint_strategy")]
+        public string ConstraintStrategy { get; set; }
+
+        [DataMember(Name = "fully_defined_required")]
+        public bool FullyDefinedRequired { get; set; }
+    }
+
     public static class NativeReplayRunner
     {
         private const double MillimetersPerMeter = 1000.0;
         private const string ReplayFormat = "prompt2cad.solidworks-replay-plan";
-        private const int ReplayVersion = 4;
+        private const int ReplayVersion = 6;
         private static string tracePath;
 
         public static string Execute(
@@ -493,10 +730,11 @@ namespace Prompt2Cad.SolidWorks
                                 }
                             }
                         }
-                        if (step.PublishReferences != null)
+                        if (step.PublishReferences != null &&
+                            step.PublishReferences.Length > 0)
                         {
-                            Trace("Publishing named faces for " + step.FeatureName);
-                            PublishNamedFaces(
+                            Trace("Publishing native references for " + step.FeatureName);
+                            PublishNativeReferences(
                                 part,
                                 nativeFeature,
                                 step
@@ -515,7 +753,38 @@ namespace Prompt2Cad.SolidWorks
                 }
 
                 Trace("Verifying native feature history and dimensions");
-                int verifiedDimensionCount = VerifyReplay(model, part, plan);
+                ParameterVerificationResult parameterVerification =
+                    VerifyReplay(model, part, plan);
+                Trace("Checking native feature and sketch health");
+                NativeHealthResult health = InspectNativeHealth(model, plan);
+                if (health.FeatureErrorCount > 0)
+                {
+                    string failedFeatures = String.Join(
+                        ", ",
+                        health.Features
+                            .Where(item => item.ErrorCode != 0 && !item.IsWarning)
+                            .Select(item =>
+                                item.FeatureName + " (code " + item.ErrorCode + ")")
+                    );
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS reports rebuild errors in: " + failedFeatures + "."
+                    );
+                }
+                SketchHealthResult[] invalidSketches = health.Sketches
+                    .Where(item => !item.IsValid)
+                    .ToArray();
+                if (invalidSketches.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS reports invalid sketch constraints in: " +
+                        String.Join(
+                            ", ",
+                            invalidSketches.Select(item =>
+                                item.SketchName + " (" +
+                                item.ConstraintStatus + ")")
+                        ) + "."
+                    );
+                }
                 string resolvedOutput = Path.GetFullPath(outputPath);
                 string outputDirectory = Path.GetDirectoryName(resolvedOutput);
                 if (!String.IsNullOrWhiteSpace(outputDirectory))
@@ -536,6 +805,15 @@ namespace Prompt2Cad.SolidWorks
                         "' (status " + saveStatus + ")."
                     );
                 }
+                IDictionary<string, byte[]> persistentReferenceIds =
+                    CapturePersistentReferenceIds(model, part, plan);
+                PersistentReferenceResult[] publishedReferences =
+                    VerifyPersistentReferenceIds(
+                        model,
+                        part,
+                        plan,
+                        persistentReferenceIds
+                    );
 
                 Trace("Replay complete");
                 NativeGeometryResult geometry = MeasureNativeGeometry(part);
@@ -547,8 +825,15 @@ namespace Prompt2Cad.SolidWorks
                         NativeFeatures = createdNames.ToArray(),
                         FeatureCount = createdNames.Count,
                         VerificationPassed = true,
-                        VerifiedDimensionCount = verifiedDimensionCount,
+                        VerifiedDimensionCount =
+                            parameterVerification.VerifiedDimensionCount,
+                        DeclaredParameterCount =
+                            parameterVerification.DeclaredParameterCount,
+                        VerifiedParameterCount =
+                            parameterVerification.VerifiedParameterCount,
+                        Health = health,
                         Geometry = geometry,
+                        PublishedReferences = publishedReferences,
                     }
                 );
                 if (!String.Equals(
@@ -604,6 +889,216 @@ namespace Prompt2Cad.SolidWorks
             }
         }
 
+        public static string VerifyEditablePart(
+            string planPath,
+            string sourcePath,
+            string outputPath,
+            string mutationPath,
+            bool visible)
+        {
+            ReplayPlan plan = ReadPlan(planPath);
+            if (plan.Format != ReplayFormat || plan.Version != ReplayVersion)
+            {
+                throw new InvalidOperationException(
+                    "Unsupported SOLIDWORKS replay plan format or version."
+                );
+            }
+            MutationDocument mutationDocument = ReadMutations(mutationPath);
+            if (!String.Equals(
+                mutationDocument.Format,
+                "prompt2cad.solidworks-mutations",
+                StringComparison.Ordinal) || mutationDocument.Version != 1)
+            {
+                throw new InvalidOperationException(
+                    "Unsupported SOLIDWORKS mutation document."
+                );
+            }
+            ParameterMutation[] mutations =
+                mutationDocument.Mutations ?? new ParameterMutation[0];
+            if (mutations.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "The mutation document contains no parameter changes."
+                );
+            }
+
+            string resolvedSource = Path.GetFullPath(sourcePath);
+            string resolvedOutput = Path.GetFullPath(outputPath);
+            if (!File.Exists(resolvedSource))
+            {
+                throw new FileNotFoundException(
+                    "The source SOLIDWORKS part was not found.",
+                    resolvedSource
+                );
+            }
+            string outputDirectory = Path.GetDirectoryName(resolvedOutput);
+            if (!String.IsNullOrWhiteSpace(outputDirectory))
+            {
+                Directory.CreateDirectory(outputDirectory);
+            }
+
+            SldWorks application = null;
+            bool startedApplication = false;
+            ModelDoc2 model = null;
+            string modelTitle = null;
+            try
+            {
+                Type applicationType = Type.GetTypeFromProgID(
+                    "SldWorks.Application"
+                );
+                if (applicationType == null)
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS is not registered as a Windows COM application."
+                    );
+                }
+                try
+                {
+                    application = (SldWorks)Marshal.GetActiveObject(
+                        "SldWorks.Application"
+                    );
+                }
+                catch (COMException)
+                {
+                    application = (SldWorks)Activator.CreateInstance(applicationType);
+                    startedApplication = true;
+                }
+                if (visible)
+                {
+                    application.Visible = true;
+                }
+
+                model = OpenNativePart(application, resolvedSource);
+                modelTitle = model.GetTitle();
+                PartDoc part = (PartDoc)model;
+                NativeGeometryResult beforeGeometry = MeasureNativeGeometry(part);
+                IDictionary<string, byte[]> persistentReferenceIds =
+                    CapturePersistentReferenceIds(model, part, plan);
+
+                ApplyParameterMutations(model, plan, mutations);
+                if (!model.EditRebuild3())
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS rebuild failed after parameter mutation."
+                    );
+                }
+                NativeHealthResult beforeSaveHealth = InspectNativeHealth(
+                    model,
+                    plan
+                );
+                RequireHealthyModel(beforeSaveHealth, "after mutation");
+
+                int saveStatus = model.SaveAs3(
+                    resolvedOutput,
+                    (int)swSaveAsVersion_e.swSaveAsCurrentVersion,
+                    (int)swSaveAsOptions_e.swSaveAsOptions_Silent
+                );
+                if (saveStatus != 0 || !File.Exists(resolvedOutput))
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS failed to save mutated part '" +
+                        resolvedOutput + "' (status " + saveStatus + ")."
+                    );
+                }
+
+                application.CloseDoc(model.GetTitle());
+                ReleaseComObject(model);
+                model = null;
+                modelTitle = null;
+
+                model = OpenNativePart(application, resolvedOutput);
+                modelTitle = model.GetTitle();
+                part = (PartDoc)model;
+                ParameterVerificationResult verification = VerifyReplay(
+                    model,
+                    part,
+                    plan
+                );
+                NativeHealthResult reopenedHealth = InspectNativeHealth(
+                    model,
+                    plan
+                );
+                RequireHealthyModel(reopenedHealth, "after reopening");
+                NativeGeometryResult afterGeometry = MeasureNativeGeometry(part);
+                PersistentReferenceResult[] publishedReferences =
+                    VerifyPersistentReferenceIds(
+                        model,
+                        part,
+                        plan,
+                        persistentReferenceIds
+                    );
+
+                return WriteEditabilityJson(
+                    new EditabilityResult
+                    {
+                        Status = "success",
+                        SourcePath = resolvedSource,
+                        OutputPath = resolvedOutput,
+                        MutationCount = mutations.Length,
+                        Reopened = true,
+                        DeclaredParameterCount =
+                            verification.DeclaredParameterCount,
+                        VerifiedParameterCount =
+                            verification.VerifiedParameterCount,
+                        BeforeGeometry = beforeGeometry,
+                        AfterGeometry = afterGeometry,
+                        Health = reopenedHealth,
+                        PublishedReferences = publishedReferences,
+                    }
+                );
+            }
+            finally
+            {
+                if (model != null && application != null &&
+                    !String.IsNullOrWhiteSpace(modelTitle))
+                {
+                    try
+                    {
+                        application.CloseDoc(modelTitle);
+                    }
+                    catch
+                    {
+                    }
+                }
+                if (startedApplication && application != null)
+                {
+                    try
+                    {
+                        application.ExitApp();
+                    }
+                    catch
+                    {
+                    }
+                }
+                ReleaseComObject(model);
+                ReleaseComObject(application);
+            }
+        }
+
+        private static ModelDoc2 OpenNativePart(
+            SldWorks application,
+            string path)
+        {
+            int errors = 0;
+            int warnings = 0;
+            ModelDoc2 model = application.OpenDoc6(
+                path,
+                (int)swDocumentTypes_e.swDocPART,
+                (int)swOpenDocOptions_e.swOpenDocOptions_Silent,
+                "",
+                ref errors,
+                ref warnings
+            ) as ModelDoc2;
+            if (model == null)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS could not open '" + path +
+                    "' (error " + errors + ", warning " + warnings + ")."
+                );
+            }
+            return model;
+        }
+
         private static ReplayPlan ReadPlan(string path)
         {
             var serializer = new DataContractJsonSerializer(typeof(ReplayPlan));
@@ -613,9 +1108,32 @@ namespace Prompt2Cad.SolidWorks
             }
         }
 
+        private static MutationDocument ReadMutations(string path)
+        {
+            var serializer = new DataContractJsonSerializer(
+                typeof(MutationDocument)
+            );
+            using (FileStream stream = File.OpenRead(path))
+            {
+                return (MutationDocument)serializer.ReadObject(stream);
+            }
+        }
+
         private static string WriteJson(ReplayResult result)
         {
             var serializer = new DataContractJsonSerializer(typeof(ReplayResult));
+            using (var stream = new MemoryStream())
+            {
+                serializer.WriteObject(stream, result);
+                return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+            }
+        }
+
+        private static string WriteEditabilityJson(EditabilityResult result)
+        {
+            var serializer = new DataContractJsonSerializer(
+                typeof(EditabilityResult)
+            );
             using (var stream = new MemoryStream())
             {
                 serializer.WriteObject(stream, result);
@@ -829,6 +1347,13 @@ namespace Prompt2Cad.SolidWorks
                 }
             }
 
+            CompleteRemainingSketchDefinition(
+                model,
+                sketchManager,
+                sketchDefinition,
+                step
+            );
+
             Trace("Exiting sketch " + step.SketchName);
             sketchManager.InsertSketch(true);
             Trace("Selecting sketch " + step.SketchName + " for feature creation");
@@ -845,6 +1370,145 @@ namespace Prompt2Cad.SolidWorks
                 Sketch = sketchDefinition,
                 RevolveAxis = revolveAxis,
             };
+        }
+
+        private static void CompleteRemainingSketchDefinition(
+            ModelDoc2 model,
+            SketchManager sketchManager,
+            Sketch sketch,
+            ReplayStep step)
+        {
+            SketchConstraintPlan plan = step.Sketch == null
+                ? null
+                : step.Sketch.ConstraintPlan;
+            if (plan == null || !String.Equals(
+                plan.Strategy,
+                "complete_remaining_degrees_of_freedom",
+                StringComparison.Ordinal))
+            {
+                return;
+            }
+            int initialStatus = sketch.GetConstrainedStatus();
+            if (initialStatus ==
+                (int)swConstrainedStatus_e.swFullyConstrained)
+            {
+                return;
+            }
+            if (initialStatus ==
+                    (int)swConstrainedStatus_e.swOverConstrained ||
+                initialStatus ==
+                    (int)swConstrainedStatus_e.swNoSolution ||
+                initialStatus ==
+                    (int)swConstrainedStatus_e.swInvalidSolution)
+            {
+                throw new InvalidOperationException(
+                    "Sketch '" + step.SketchName +
+                    "' is invalid before constraint completion (" +
+                    ConstraintStatusName(initialStatus) + ")."
+                );
+            }
+
+            int relationMask = 0;
+            foreach (string relation in plan.Relations ?? new string[0])
+            {
+                relationMask |= FullyDefineRelationValue(relation);
+            }
+            int horizontalScheme = String.Equals(
+                plan.HorizontalDimensionScheme,
+                "baseline",
+                StringComparison.OrdinalIgnoreCase
+            ) ? 1 : 0;
+            int verticalScheme = String.Equals(
+                plan.VerticalDimensionScheme,
+                "baseline",
+                StringComparison.OrdinalIgnoreCase
+            ) ? 1 : 0;
+            model.ClearSelection2(true);
+            const int horizontalDatumMark = 2;
+            const int verticalDatumMark = 4;
+            bool selectedOriginDatum = model.Extension.SelectByID2(
+                "Point1@Origin",
+                "EXTSKETCHPOINT",
+                0.0,
+                0.0,
+                0.0,
+                false,
+                horizontalDatumMark | verticalDatumMark,
+                null,
+                0
+            );
+            if (!selectedOriginDatum)
+            {
+                throw new InvalidOperationException(
+                    "Sketch '" + step.SketchName +
+                    "' could not select the model origin as its generalized " +
+                    "horizontal and vertical dimension datum."
+                );
+            }
+            sketchManager.FullyDefineSketch(
+                true,
+                true,
+                relationMask,
+                true,
+                horizontalScheme,
+                null,
+                verticalScheme,
+                null,
+                1,
+                1
+            );
+            int finalStatus = sketch.GetConstrainedStatus();
+            if (plan.RequireFullyDefined && finalStatus !=
+                (int)swConstrainedStatus_e.swFullyConstrained)
+            {
+                throw new InvalidOperationException(
+                    "Sketch '" + step.SketchName +
+                    "' remained " + ConstraintStatusName(finalStatus) +
+                    " after generalized constraint completion."
+                );
+            }
+        }
+
+        private static int FullyDefineRelationValue(string relation)
+        {
+            switch (relation)
+            {
+                case "coincident":
+                    return (int)swSketchFullyDefineRelationType_e
+                        .swSketchFullyDefineRelationType_Coincident;
+                case "horizontal":
+                    return (int)swSketchFullyDefineRelationType_e
+                        .swSketchFullyDefineRelationType_Horizontal;
+                case "vertical":
+                    return (int)swSketchFullyDefineRelationType_e
+                        .swSketchFullyDefineRelationType_Vertical;
+                case "collinear":
+                    return (int)swSketchFullyDefineRelationType_e
+                        .swSketchFullyDefineRelationType_Colinear;
+                case "concentric":
+                    return (int)swSketchFullyDefineRelationType_e
+                        .swSketchFullyDefineRelationType_Concentric;
+                case "equal":
+                    return (int)swSketchFullyDefineRelationType_e
+                        .swSketchFullyDefineRelationType_Equal;
+                case "parallel":
+                    return (int)swSketchFullyDefineRelationType_e
+                        .swSketchFullyDefineRelationType_Parallel;
+                case "perpendicular":
+                    return (int)swSketchFullyDefineRelationType_e
+                        .swSketchFullyDefineRelationType_Perpendicular;
+                case "tangent":
+                    return (int)swSketchFullyDefineRelationType_e
+                        .swSketchFullyDefineRelationType_Tangent;
+                case "midpoint":
+                    return (int)swSketchFullyDefineRelationType_e
+                        .swSketchFullyDefineRelationType_Midpoint;
+                default:
+                    throw new InvalidOperationException(
+                        "Unsupported generalized sketch relation '" +
+                        relation + "'."
+                    );
+            }
         }
 
         private static void SelectSketchSupport(
@@ -2535,10 +3199,20 @@ namespace Prompt2Cad.SolidWorks
                     "' was not found."
                 );
             }
-            IList<Edge> edges = SelectFeatureEdges(
-                targetFeature,
-                step.Support.Frame,
-                step.Support.Selector
+            IList<Edge> edges = step.Support.Members != null &&
+                    step.Support.Members.Length > 0
+                ? SelectFeatureEdgesByMembers(
+                    targetFeature,
+                    step.Support.Members
+                )
+                : SelectFeatureEdges(
+                    targetFeature,
+                    step.Support.Frame,
+                    step.Support.Selector
+                );
+            Trace(
+                "Resolved " + edges.Count + " canonical edge(s) for " +
+                step.FeatureName
             );
             model.ClearSelection2(true);
             foreach (Edge edge in edges)
@@ -2557,10 +3231,10 @@ namespace Prompt2Cad.SolidWorks
             {
                 feature = model.FeatureManager.InsertFeatureChamfer(
                     (int)swFeatureChamferOption_e.swFeatureChamferTangentPropagation,
-                    (int)swChamferType_e.swChamferEqualDistance,
-                    0.0,
-                    0.0,
+                    (int)swChamferType_e.swChamferAngleDistance,
                     ToMeters(step.Feature.DistanceMillimeters),
+                    Math.PI / 4.0,
+                    0.0,
                     0.0,
                     0.0,
                     0.0
@@ -2608,29 +3282,7 @@ namespace Prompt2Cad.SolidWorks
             FrameSpec frame,
             string selector)
         {
-            var edges = new Dictionary<string, Edge>();
-            foreach (object faceObject in ObjectItems(feature.GetFaces()))
-            {
-                Face2 face = faceObject as Face2;
-                if (face == null)
-                {
-                    continue;
-                }
-                foreach (object edgeObject in ObjectItems(face.GetEdges()))
-                {
-                    Edge edge = edgeObject as Edge;
-                    if (edge != null)
-                    {
-                        edges[EdgeIdentityKey(edge)] = edge;
-                    }
-                }
-            }
-            if (edges.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    "The target feature exposes no selectable model edges."
-                );
-            }
+            Dictionary<string, Edge> edges = FeatureEdges(feature);
             if (selector == "all_edges")
             {
                 return edges.Values.ToList();
@@ -2699,6 +3351,182 @@ namespace Prompt2Cad.SolidWorks
                 );
             }
             return selected;
+        }
+
+        private static Dictionary<string, Edge> FeatureEdges(Feature feature)
+        {
+            var edges = new Dictionary<string, Edge>();
+            foreach (object faceObject in ObjectItems(feature.GetFaces()))
+            {
+                Face2 face = faceObject as Face2;
+                if (face == null)
+                {
+                    continue;
+                }
+                foreach (object edgeObject in ObjectItems(face.GetEdges()))
+                {
+                    Edge edge = edgeObject as Edge;
+                    if (edge != null)
+                    {
+                        edges[EdgeIdentityKey(edge)] = edge;
+                    }
+                }
+            }
+            if (edges.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "The target feature exposes no selectable model edges."
+                );
+            }
+            return edges;
+        }
+
+        private static IList<Edge> SelectFeatureEdgesByMembers(
+            Feature feature,
+            ReferenceMemberSpec[] members)
+        {
+            var remaining = FeatureEdges(feature).Values
+                .Select(edge => new EdgeMatch
+                {
+                    Edge = edge,
+                    BoundingBoxMillimeters = SampleEdgeBoundingBoxMillimeters(edge),
+                })
+                .ToList();
+            foreach (EdgeMatch match in remaining)
+            {
+                match.CenterMillimeters = BoundingBoxCenter(
+                    match.BoundingBoxMillimeters
+                );
+            }
+
+            var selected = new List<Edge>();
+            foreach (ReferenceMemberSpec member in members)
+            {
+                EdgeMatch best = remaining
+                    .OrderBy(candidate => EdgeDescriptorError(candidate, member))
+                    .FirstOrDefault();
+                if (best == null)
+                {
+                    throw new InvalidOperationException(
+                        "No native edge remained for canonical reference '" +
+                        member.ReferenceId + "'."
+                    );
+                }
+                double error = EdgeDescriptorError(best, member);
+                if (error > 0.5)
+                {
+                    throw new InvalidOperationException(
+                        "Canonical edge reference '" + member.ReferenceId +
+                        "' did not match native topology within 0.5 mm " +
+                        "(error " + error.ToString(
+                            "R",
+                            CultureInfo.InvariantCulture
+                        ) + " mm)."
+                    );
+                }
+                selected.Add(best.Edge);
+                remaining.Remove(best);
+            }
+            return selected;
+        }
+
+        private sealed class EdgeMatch
+        {
+            public Edge Edge { get; set; }
+            public double[] CenterMillimeters { get; set; }
+            public double[] BoundingBoxMillimeters { get; set; }
+        }
+
+        private static double EdgeDescriptorError(
+            EdgeMatch candidate,
+            ReferenceMemberSpec expected)
+        {
+            if (expected.CenterMillimeters == null ||
+                expected.CenterMillimeters.Length != 3 ||
+                expected.BoundingBoxMillimeters == null ||
+                expected.BoundingBoxMillimeters.Length != 6)
+            {
+                throw new InvalidOperationException(
+                    "Canonical edge reference '" + expected.ReferenceId +
+                    "' has an invalid geometric descriptor."
+                );
+            }
+            double maximum = 0.0;
+            for (int index = 0; index < 3; index += 1)
+            {
+                maximum = Math.Max(
+                    maximum,
+                    Math.Abs(
+                        candidate.CenterMillimeters[index] -
+                        expected.CenterMillimeters[index]
+                    )
+                );
+            }
+            for (int index = 0; index < 6; index += 1)
+            {
+                maximum = Math.Max(
+                    maximum,
+                    Math.Abs(
+                        candidate.BoundingBoxMillimeters[index] -
+                        expected.BoundingBoxMillimeters[index]
+                    )
+                );
+            }
+            return maximum;
+        }
+
+        private static double[] SampleEdgeBoundingBoxMillimeters(Edge edge)
+        {
+            CurveParamData parameters = edge.GetCurveParams3();
+            if (parameters == null)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS did not expose edge parameter data."
+                );
+            }
+            var bounds = new[]
+            {
+                Double.PositiveInfinity,
+                Double.PositiveInfinity,
+                Double.PositiveInfinity,
+                Double.NegativeInfinity,
+                Double.NegativeInfinity,
+                Double.NegativeInfinity,
+            };
+            const int sampleCount = 64;
+            for (int index = 0; index <= sampleCount; index += 1)
+            {
+                double fraction = (double)index / sampleCount;
+                double parameter = parameters.UMinValue +
+                    (parameters.UMaxValue - parameters.UMinValue) * fraction;
+                double[] point = edge.Evaluate(parameter) as double[];
+                if (point == null || point.Length < 3)
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS could not sample a canonical target edge."
+                    );
+                }
+                for (int axis = 0; axis < 3; axis += 1)
+                {
+                    double millimeters = point[axis] * MillimetersPerMeter;
+                    bounds[axis] = Math.Min(bounds[axis], millimeters);
+                    bounds[axis + 3] = Math.Max(
+                        bounds[axis + 3],
+                        millimeters
+                    );
+                }
+            }
+            return bounds;
+        }
+
+        private static double[] BoundingBoxCenter(double[] bounds)
+        {
+            return new[]
+            {
+                (bounds[0] + bounds[3]) / 2.0,
+                (bounds[1] + bounds[4]) / 2.0,
+                (bounds[2] + bounds[5]) / 2.0,
+            };
         }
 
         private static string EdgeIdentityKey(Edge edge)
@@ -2783,67 +3611,67 @@ namespace Prompt2Cad.SolidWorks
             return new[] { minimum, maximum };
         }
 
-        private static void PublishNamedFaces(
+        private static void PublishNativeReferences(
             PartDoc part,
             Feature feature,
             ReplayStep step)
         {
-            FrameSpec frame = step.Support.Frame;
-            if (frame == null)
+            foreach (NativeReferenceSpec reference in
+                step.PublishReferences ?? new NativeReferenceSpec[0])
             {
-                throw new InvalidOperationException(
-                    "Cannot publish native references without a feature frame."
-                );
-            }
-            double[] yAxis = Cross(frame.Normal, frame.XAxis);
-            double[] frontDirection = yAxis;
-            if ((step.Feature.Kind == "boss_revolve" ||
-                 step.Feature.Kind == "cut_revolve") &&
-                step.Feature.AxisStartMillimeters != null &&
-                step.Feature.AxisEndMillimeters != null)
-            {
-                double axisX =
-                    step.Feature.AxisEndMillimeters[0] -
-                    step.Feature.AxisStartMillimeters[0];
-                double axisY =
-                    step.Feature.AxisEndMillimeters[1] -
-                    step.Feature.AxisStartMillimeters[1];
-                frontDirection = Normalize(Add(
-                    Scale(frame.XAxis, axisX),
-                    Scale(yAxis, axisY)
-                ));
-            }
-            var requests = new[]
-            {
-                new { Name = step.PublishReferences.Top, Direction = frame.Normal, Curved = false },
-                new { Name = step.PublishReferences.Bottom, Direction = Negate(frame.Normal), Curved = false },
-                new { Name = step.PublishReferences.Right, Direction = frame.XAxis, Curved = false },
-                new { Name = step.PublishReferences.Left, Direction = Negate(frame.XAxis), Curved = false },
-                new { Name = step.PublishReferences.Front, Direction = frontDirection, Curved = false },
-                new { Name = step.PublishReferences.Back, Direction = Negate(frontDirection), Curved = false },
-                new { Name = step.PublishReferences.OuterSurface, Direction = frame.Normal, Curved = true },
-            };
-
-            foreach (var request in requests)
-            {
-                if (String.IsNullOrWhiteSpace(request.Name))
+                if (!String.Equals(
+                    reference.EntityType,
+                    "face",
+                    StringComparison.Ordinal))
                 {
-                    continue;
+                    throw new InvalidOperationException(
+                        "Unsupported native reference entity type '" +
+                        reference.EntityType + "' for '" +
+                        reference.ReferenceId + "'."
+                    );
                 }
-                Face2 face = request.Curved
-                    ? FindLargestNonPlanarFace(feature)
-                    : FindPlanarFace(feature, request.Direction);
+                NativeReferenceSelector selector = reference.Selector;
+                if (selector == null)
+                {
+                    throw new InvalidOperationException(
+                        "Native reference '" + reference.ReferenceId +
+                        "' is missing its geometric selector."
+                    );
+                }
+                Face2 face;
+                if (String.Equals(
+                    selector.Kind,
+                    "planar_face_direction",
+                    StringComparison.Ordinal))
+                {
+                    face = FindPlanarFace(feature, selector.Direction);
+                }
+                else if (String.Equals(
+                    selector.Kind,
+                    "largest_non_planar_face",
+                    StringComparison.Ordinal))
+                {
+                    face = FindLargestNonPlanarFace(feature);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        "Unsupported native reference selector '" +
+                        selector.Kind + "' for '" + reference.ReferenceId + "'."
+                    );
+                }
                 if (face == null)
                 {
                     throw new InvalidOperationException(
-                        "Could not resolve native face '" + request.Name +
+                        "Could not resolve native face '" + reference.ReferenceId +
                         "' on '" + feature.Name + "'."
                     );
                 }
-                if (!part.SetEntityName(face, request.Name))
+                if (!part.SetEntityName(face, reference.EntityName))
                 {
                     throw new InvalidOperationException(
-                        "Could not publish native face name '" + request.Name + "'."
+                        "Could not publish native face name '" +
+                        reference.EntityName + "'."
                     );
                 }
             }
@@ -2947,7 +3775,463 @@ namespace Prompt2Cad.SolidWorks
             return null;
         }
 
-        private static int VerifyReplay(
+        private sealed class ParameterVerificationResult
+        {
+            public int DeclaredParameterCount { get; set; }
+            public int VerifiedParameterCount { get; set; }
+            public int VerifiedDimensionCount { get; set; }
+        }
+
+        private static NativeHealthResult InspectNativeHealth(
+            ModelDoc2 model,
+            ReplayPlan plan)
+        {
+            var featureResults = new List<FeatureHealthResult>();
+            var sketchResults = new List<SketchHealthResult>();
+            var inspectedFeatures = new HashSet<string>(StringComparer.Ordinal);
+            var inspectedSketches = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (ReplayStep step in plan.Features)
+            {
+                if (!String.IsNullOrWhiteSpace(step.FeatureName) &&
+                    inspectedFeatures.Add(step.FeatureName))
+                {
+                    Feature nativeFeature = FindFeatureByName(
+                        model,
+                        step.FeatureName
+                    );
+                    if (nativeFeature == null)
+                    {
+                        throw new InvalidOperationException(
+                            "Health inspection could not find feature '" +
+                            step.FeatureName + "'."
+                        );
+                    }
+                    bool isWarning;
+                    int errorCode = nativeFeature.GetErrorCode2(out isWarning);
+                    featureResults.Add(
+                        new FeatureHealthResult
+                        {
+                            FeatureName = step.FeatureName,
+                            ErrorCode = errorCode,
+                            IsWarning = errorCode != 0 && isWarning,
+                            Status = errorCode == 0
+                                ? "healthy"
+                                : isWarning ? "warning" : "error",
+                        }
+                    );
+                }
+
+                if (!String.IsNullOrWhiteSpace(step.SketchName) &&
+                    inspectedSketches.Add(step.SketchName))
+                {
+                    Feature sketchFeature = FindFeatureByName(
+                        model,
+                        step.SketchName
+                    );
+                    Sketch sketch = sketchFeature == null
+                        ? null
+                        : sketchFeature.GetSpecificFeature2() as Sketch;
+                    if (sketch == null)
+                    {
+                        throw new InvalidOperationException(
+                            "Health inspection could not read sketch '" +
+                            step.SketchName + "'."
+                        );
+                    }
+                    int constraintCode = sketch.GetConstrainedStatus();
+                    SketchConstraintPlan constraintPlan = step.Sketch == null
+                        ? null
+                        : step.Sketch.ConstraintPlan;
+                    bool fullyDefinedRequired = constraintPlan != null &&
+                        constraintPlan.RequireFullyDefined;
+                    bool validConstraintState = constraintCode !=
+                            (int)swConstrainedStatus_e.swOverConstrained &&
+                        constraintCode !=
+                            (int)swConstrainedStatus_e.swNoSolution &&
+                        constraintCode !=
+                            (int)swConstrainedStatus_e.swInvalidSolution;
+                    sketchResults.Add(
+                        new SketchHealthResult
+                        {
+                            SketchName = step.SketchName,
+                            ConstraintCode = constraintCode,
+                            ConstraintStatus = ConstraintStatusName(
+                                constraintCode
+                            ),
+                            IsValid = validConstraintState &&
+                                (!fullyDefinedRequired || constraintCode ==
+                                    (int)swConstrainedStatus_e
+                                        .swFullyConstrained),
+                            ConstraintStrategy = constraintPlan == null
+                                ? "none"
+                                : constraintPlan.Strategy,
+                            FullyDefinedRequired = fullyDefinedRequired,
+                        }
+                    );
+                }
+            }
+
+            return new NativeHealthResult
+            {
+                Features = featureResults.ToArray(),
+                Sketches = sketchResults.ToArray(),
+                FeatureErrorCount = featureResults.Count(item =>
+                    item.ErrorCode != 0 && !item.IsWarning),
+                FeatureWarningCount = featureResults.Count(item =>
+                    item.ErrorCode != 0 && item.IsWarning),
+                FullyDefinedSketchCount = sketchResults.Count(item =>
+                    item.ConstraintCode ==
+                    (int)swConstrainedStatus_e.swFullyConstrained),
+                UnderDefinedSketchCount = sketchResults.Count(item =>
+                    item.ConstraintCode ==
+                    (int)swConstrainedStatus_e.swUnderConstrained),
+            };
+        }
+
+        private static string ConstraintStatusName(int constraintCode)
+        {
+            switch ((swConstrainedStatus_e)constraintCode)
+            {
+                case swConstrainedStatus_e.swUnknownConstraint:
+                    return "unknown";
+                case swConstrainedStatus_e.swUnderConstrained:
+                    return "under_defined";
+                case swConstrainedStatus_e.swFullyConstrained:
+                    return "fully_defined";
+                case swConstrainedStatus_e.swOverConstrained:
+                    return "over_defined";
+                case swConstrainedStatus_e.swNoSolution:
+                    return "no_solution";
+                case swConstrainedStatus_e.swInvalidSolution:
+                    return "invalid_solution";
+                case swConstrainedStatus_e.swAutosolveOff:
+                    return "autosolve_off";
+                default:
+                    return "unrecognized_" + constraintCode;
+            }
+        }
+
+        private static void RequireHealthyModel(
+            NativeHealthResult health,
+            string stage)
+        {
+            FeatureHealthResult[] errors = health.Features
+                .Where(item => item.ErrorCode != 0 && !item.IsWarning)
+                .ToArray();
+            SketchHealthResult[] invalidSketches = health.Sketches
+                .Where(item => !item.IsValid)
+                .ToArray();
+            if (errors.Length == 0 && invalidSketches.Length == 0)
+            {
+                return;
+            }
+            var problems = new List<string>();
+            problems.AddRange(errors.Select(item =>
+                item.FeatureName + " feature error " + item.ErrorCode));
+            problems.AddRange(invalidSketches.Select(item =>
+                item.SketchName + " sketch status " + item.ConstraintStatus));
+            throw new InvalidOperationException(
+                "SOLIDWORKS model is unhealthy " + stage + ": " +
+                String.Join(", ", problems) + "."
+            );
+        }
+
+        private static void ApplyParameterMutations(
+            ModelDoc2 model,
+            ReplayPlan plan,
+            ParameterMutation[] mutations)
+        {
+            var bindings = new Dictionary<string, NativeParameterBinding>(
+                StringComparer.Ordinal
+            );
+            foreach (ReplayStep step in plan.Features)
+            {
+                foreach (NativeParameterBinding binding in
+                    step.ParameterBindings ?? new NativeParameterBinding[0])
+                {
+                    if (bindings.ContainsKey(binding.ParameterId))
+                    {
+                        throw new InvalidOperationException(
+                            "Replay plan contains duplicate parameter binding '" +
+                            binding.ParameterId + "'."
+                        );
+                    }
+                    bindings.Add(binding.ParameterId, binding);
+                }
+            }
+
+            var mutated = new HashSet<string>(StringComparer.Ordinal);
+            foreach (ParameterMutation mutation in mutations)
+            {
+                if (!mutated.Add(mutation.ParameterId))
+                {
+                    throw new InvalidOperationException(
+                        "Mutation document repeats parameter '" +
+                        mutation.ParameterId + "'."
+                    );
+                }
+                NativeParameterBinding binding;
+                if (!bindings.TryGetValue(mutation.ParameterId, out binding))
+                {
+                    throw new InvalidOperationException(
+                        "Mutation references unknown parameter '" +
+                        mutation.ParameterId + "'."
+                    );
+                }
+                if (!String.Equals(
+                    mutation.Unit,
+                    binding.Unit,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "Mutation unit for '" + mutation.ParameterId +
+                        "' does not match its replay binding."
+                    );
+                }
+
+                if (String.Equals(
+                    binding.BindingKind,
+                    "named_dimension",
+                    StringComparison.Ordinal))
+                {
+                    SetNamedDimension(model, binding, mutation.Value);
+                }
+                else if (String.Equals(
+                    binding.BindingKind,
+                    "feature_property",
+                    StringComparison.Ordinal))
+                {
+                    SetFeatureProperty(model, binding, mutation.Value);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        "Parameter '" + mutation.ParameterId +
+                        "' uses unsupported mutation strategy '" +
+                        binding.BindingKind + "'."
+                    );
+                }
+                binding.Value = mutation.Value;
+            }
+        }
+
+        private static void SetNamedDimension(
+            ModelDoc2 model,
+            NativeParameterBinding binding,
+            double value)
+        {
+            string qualifiedName = binding.NativeName + "@" + binding.OwnerName;
+            Dimension dimension = model.Parameter(qualifiedName) as Dimension;
+            if (dimension == null)
+            {
+                throw new InvalidOperationException(
+                    "Cannot mutate missing dimension '" + qualifiedName + "'."
+                );
+            }
+            int status = dimension.SetSystemValue3(
+                ToSystemValue(value, binding.Unit),
+                (int)swSetValueInConfiguration_e.swSetValue_InAllConfigurations,
+                null
+            );
+            if (status != (int)swSetValueReturnStatus_e.swSetValue_Successful)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS rejected mutation for dimension '" +
+                    qualifiedName + "'."
+                );
+            }
+        }
+
+        private static void SetFeatureProperty(
+            ModelDoc2 model,
+            NativeParameterBinding binding,
+            double value)
+        {
+            Feature owner = FindFeatureByName(model, binding.OwnerName);
+            if (owner == null)
+            {
+                throw new InvalidOperationException(
+                    "Cannot mutate missing feature '" + binding.OwnerName + "'."
+                );
+            }
+            object definition = owner.GetDefinition();
+            if (definition == null)
+            {
+                throw new InvalidOperationException(
+                    "Feature '" + binding.OwnerName +
+                    "' exposes no editable feature data."
+                );
+            }
+            string propertyName = ResolveFeaturePropertyName(
+                definition,
+                binding
+            );
+            bool selectionAccessed;
+            try
+            {
+                selectionAccessed = TryAccessSelections(definition, model);
+            }
+            catch (Exception error)
+            {
+                throw new InvalidOperationException(
+                    "Could not access selections for feature-data property '" +
+                    propertyName + "@" + binding.OwnerName + "'.",
+                    error
+                );
+            }
+            try
+            {
+                object nativeValue = String.Equals(
+                    binding.Unit,
+                    "count",
+                    StringComparison.OrdinalIgnoreCase
+                )
+                    ? (object)Convert.ToInt32(
+                        Math.Round(value),
+                        CultureInfo.InvariantCulture
+                    )
+                    : ToSystemValue(value, binding.Unit);
+                try
+                {
+                    definition.GetType().InvokeMember(
+                        propertyName,
+                        BindingFlags.SetProperty,
+                        null,
+                        definition,
+                        new[] { nativeValue },
+                        CultureInfo.InvariantCulture
+                    );
+                }
+                catch (Exception error)
+                {
+                    throw new InvalidOperationException(
+                        "Could not set feature-data property '" +
+                        propertyName + "@" + binding.OwnerName + "'.",
+                        error
+                    );
+                }
+                if (!owner.ModifyDefinition(definition, model, null))
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS rejected mutation of '" + propertyName +
+                        "@" + binding.OwnerName + "'."
+                    );
+                }
+            }
+            finally
+            {
+                if (selectionAccessed)
+                {
+                    TryReleaseSelectionAccess(definition);
+                }
+            }
+        }
+
+        private static bool TryAccessSelections(
+            object definition,
+            ModelDoc2 model)
+        {
+            WizardHoleFeatureData2 holeData =
+                definition as WizardHoleFeatureData2;
+            if (holeData != null)
+            {
+                if (!holeData.AccessSelections(model, null))
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS denied Hole Wizard selection access."
+                    );
+                }
+                return true;
+            }
+            CircularPatternFeatureData circularData =
+                definition as CircularPatternFeatureData;
+            if (circularData != null)
+            {
+                if (!circularData.AccessSelections(model, null))
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS denied circular-pattern selection access."
+                    );
+                }
+                return true;
+            }
+            LinearPatternFeatureData linearData =
+                definition as LinearPatternFeatureData;
+            if (linearData != null)
+            {
+                if (!linearData.AccessSelections(model, null))
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS denied linear-pattern selection access."
+                    );
+                }
+                return true;
+            }
+            try
+            {
+                object result = definition.GetType().InvokeMember(
+                    "AccessSelections",
+                    BindingFlags.InvokeMethod,
+                    null,
+                    definition,
+                    new object[] { model, null },
+                    CultureInfo.InvariantCulture
+                );
+                if (result is bool && !(bool)result)
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS denied feature-data selection access."
+                    );
+                }
+                return true;
+            }
+            catch (MissingMethodException)
+            {
+                return false;
+            }
+        }
+
+        private static void TryReleaseSelectionAccess(object definition)
+        {
+            WizardHoleFeatureData2 holeData =
+                definition as WizardHoleFeatureData2;
+            if (holeData != null)
+            {
+                holeData.ReleaseSelectionAccess();
+                return;
+            }
+            CircularPatternFeatureData circularData =
+                definition as CircularPatternFeatureData;
+            if (circularData != null)
+            {
+                circularData.ReleaseSelectionAccess();
+                return;
+            }
+            LinearPatternFeatureData linearData =
+                definition as LinearPatternFeatureData;
+            if (linearData != null)
+            {
+                linearData.ReleaseSelectionAccess();
+                return;
+            }
+            try
+            {
+                definition.GetType().InvokeMember(
+                    "ReleaseSelectionAccess",
+                    BindingFlags.InvokeMethod,
+                    null,
+                    definition,
+                    null,
+                    CultureInfo.InvariantCulture
+                );
+            }
+            catch (MissingMethodException)
+            {
+            }
+        }
+
+        private static ParameterVerificationResult VerifyReplay(
             ModelDoc2 model,
             PartDoc part,
             ReplayPlan plan)
@@ -2961,7 +4245,9 @@ namespace Prompt2Cad.SolidWorks
                 current = current.GetNextFeature() as Feature;
             }
 
-            int dimensionCount = 0;
+            int declaredParameterCount = 0;
+            int verifiedParameterCount = 0;
+            int verifiedDimensionCount = 0;
             foreach (ReplayStep step in plan.Features)
             {
                 if (!String.IsNullOrWhiteSpace(step.SketchName) &&
@@ -2978,87 +4264,317 @@ namespace Prompt2Cad.SolidWorks
                     );
                 }
 
-                foreach (DimensionSpec dimension in
-                    step.Sketch == null
-                        ? new DimensionSpec[0]
-                        : step.Sketch.DrivingDimensions ?? new DimensionSpec[0])
+                NativeParameterBinding[] bindings =
+                    step.ParameterBindings ?? new NativeParameterBinding[0];
+                foreach (NativeParameterBinding binding in bindings)
                 {
-                    VerifyDimension(model, dimension, step.SketchName);
-                    dimensionCount += 1;
-                }
-                foreach (PlacementControl control in
-                    step.Sketch == null
-                        ? new PlacementControl[0]
-                        : step.Sketch.PlacementControls ?? new PlacementControl[0])
-                {
-                    foreach (DimensionSpec dimension in new[]
+                    declaredParameterCount += 1;
+                    if (String.Equals(
+                        binding.BindingKind,
+                        "named_dimension",
+                        StringComparison.Ordinal))
                     {
-                        control.XDimension,
-                        control.YDimension,
-                    })
-                    {
-                        if (dimension == null)
-                        {
-                            continue;
-                        }
-                        VerifyDimension(model, dimension, step.SketchName);
-                        dimensionCount += 1;
+                        VerifyDimension(
+                            model,
+                            new DimensionSpec
+                            {
+                                ParameterId = binding.ParameterId,
+                                NativeName = binding.NativeName,
+                                ValueMillimeters = binding.Value,
+                                Unit = binding.Unit,
+                            },
+                            binding.OwnerName
+                        );
+                        verifiedDimensionCount += 1;
                     }
-                }
-                if (step.Feature.DrivingDimension != null)
-                {
-                    VerifyDimension(
-                        model,
-                        step.Feature.DrivingDimension,
-                        step.Pattern == null
-                            ? step.FeatureName
-                            : step.Pattern.SeedFeatureName
-                    );
-                    dimensionCount += 1;
+                    else if (String.Equals(
+                        binding.BindingKind,
+                        "feature_property",
+                        StringComparison.Ordinal))
+                    {
+                        VerifyFeaturePropertyBinding(model, binding);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException(
+                            "Unsupported native parameter binding kind '" +
+                            binding.BindingKind + "' for '" +
+                            binding.ParameterId + "'."
+                        );
+                    }
+                    verifiedParameterCount += 1;
                 }
 
-                foreach (string entityName in PublishedEntityNames(
-                    step.PublishReferences
-                ))
+                foreach (NativeReferenceSpec reference in
+                    step.PublishReferences ?? new NativeReferenceSpec[0])
                 {
+                    if (!String.Equals(
+                        reference.EntityType,
+                        "face",
+                        StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(
+                            "Saved-history verification does not support native " +
+                            "reference type '" + reference.EntityType + "'."
+                        );
+                    }
                     if (part.GetEntityByName(
-                        entityName,
+                        reference.EntityName,
                         (int)swSelectType_e.swSelFACES
                     ) == null)
                     {
                         throw new InvalidOperationException(
                             "Saved history is missing named face '" +
-                            entityName + "'."
+                            reference.EntityName + "'."
                         );
                     }
                 }
             }
-            return dimensionCount;
+            return new ParameterVerificationResult
+            {
+                DeclaredParameterCount = declaredParameterCount,
+                VerifiedParameterCount = verifiedParameterCount,
+                VerifiedDimensionCount = verifiedDimensionCount,
+            };
         }
 
-        private static IEnumerable<string> PublishedEntityNames(
-            PublishedReferences references)
+        private static IDictionary<string, byte[]> CapturePersistentReferenceIds(
+            ModelDoc2 model,
+            PartDoc part,
+            ReplayPlan plan)
         {
-            if (references == null)
+            var captured = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            foreach (ReplayStep step in plan.Features)
             {
-                yield break;
-            }
-            foreach (string name in new[]
-            {
-                references.Top,
-                references.Bottom,
-                references.Front,
-                references.Back,
-                references.Left,
-                references.Right,
-                references.OuterSurface,
-            })
-            {
-                if (!String.IsNullOrWhiteSpace(name))
+                foreach (NativeReferenceSpec reference in
+                    step.PublishReferences ?? new NativeReferenceSpec[0])
                 {
-                    yield return name;
+                    if (captured.ContainsKey(reference.ReferenceId))
+                    {
+                        throw new InvalidOperationException(
+                            "Duplicate native reference ID '" +
+                            reference.ReferenceId + "'."
+                        );
+                    }
+                    object entity = part.GetEntityByName(
+                        reference.EntityName,
+                        ReferenceSelectType(reference.EntityType)
+                    );
+                    if (entity == null)
+                    {
+                        throw new InvalidOperationException(
+                            "Cannot capture persistent ID for missing entity '" +
+                            reference.EntityName + "'."
+                        );
+                    }
+                    object rawIdentifier = model.Extension.GetPersistReference3(
+                        entity
+                    );
+                    byte[] identifier = PersistentReferenceBytes(rawIdentifier);
+                    if (identifier.Length == 0)
+                    {
+                        throw new InvalidOperationException(
+                            "SOLIDWORKS returned an empty persistent ID for '" +
+                            reference.ReferenceId + "'."
+                        );
+                    }
+                    captured.Add(reference.ReferenceId, identifier);
                 }
             }
+            return captured;
+        }
+
+        private static PersistentReferenceResult[] VerifyPersistentReferenceIds(
+            ModelDoc2 model,
+            PartDoc part,
+            ReplayPlan plan,
+            IDictionary<string, byte[]> identifiers)
+        {
+            var results = new List<PersistentReferenceResult>();
+            foreach (ReplayStep step in plan.Features)
+            {
+                foreach (NativeReferenceSpec reference in
+                    step.PublishReferences ?? new NativeReferenceSpec[0])
+                {
+                    byte[] identifier;
+                    if (!identifiers.TryGetValue(reference.ReferenceId, out identifier))
+                    {
+                        throw new InvalidOperationException(
+                            "No captured persistent ID exists for '" +
+                            reference.ReferenceId + "'."
+                        );
+                    }
+                    int errorCode = 0;
+                    object resolved = model.Extension.GetObjectByPersistReference3(
+                        identifier,
+                        out errorCode
+                    );
+                    if (resolved == null)
+                    {
+                        throw new InvalidOperationException(
+                            "Persistent reference '" + reference.ReferenceId +
+                            "' did not resolve (error " + errorCode + ")."
+                        );
+                    }
+                    object named = part.GetEntityByName(
+                        reference.EntityName,
+                        ReferenceSelectType(reference.EntityType)
+                    );
+                    if (named == null)
+                    {
+                        throw new InvalidOperationException(
+                            "Persistent reference '" + reference.ReferenceId +
+                            "' resolved, but its semantic entity name '" +
+                            reference.EntityName + "' was missing."
+                        );
+                    }
+                    results.Add(
+                        new PersistentReferenceResult
+                        {
+                            ReferenceId = reference.ReferenceId,
+                            EntityName = reference.EntityName,
+                            EntityType = reference.EntityType,
+                            PersistentIdBase64 = Convert.ToBase64String(identifier),
+                            Resolved = true,
+                            ResolutionErrorCode = errorCode,
+                        }
+                    );
+                }
+            }
+            return results.ToArray();
+        }
+
+        private static int ReferenceSelectType(string entityType)
+        {
+            if (String.Equals(entityType, "face", StringComparison.Ordinal))
+            {
+                return (int)swSelectType_e.swSelFACES;
+            }
+            throw new InvalidOperationException(
+                "Unsupported persistent-reference entity type '" + entityType + "'."
+            );
+        }
+
+        private static byte[] PersistentReferenceBytes(object value)
+        {
+            byte[] bytes = value as byte[];
+            if (bytes != null)
+            {
+                return bytes;
+            }
+            Array values = value as Array;
+            if (values == null)
+            {
+                return new byte[0];
+            }
+            var converted = new byte[values.Length];
+            for (int index = 0; index < values.Length; index += 1)
+            {
+                converted[index] = Convert.ToByte(
+                    values.GetValue(index),
+                    CultureInfo.InvariantCulture
+                );
+            }
+            return converted;
+        }
+
+        private static void VerifyFeaturePropertyBinding(
+            ModelDoc2 model,
+            NativeParameterBinding binding)
+        {
+            Feature owner = FindFeatureByName(model, binding.OwnerName);
+            if (owner == null)
+            {
+                throw new InvalidOperationException(
+                    "Parameter '" + binding.ParameterId +
+                    "' references missing native feature '" +
+                    binding.OwnerName + "'."
+                );
+            }
+            object definition = owner.GetDefinition();
+            if (definition == null)
+            {
+                throw new InvalidOperationException(
+                    "Native feature '" + binding.OwnerName +
+                    "' exposes no editable feature data for parameter '" +
+                    binding.ParameterId + "'."
+                );
+            }
+
+            ResolveFeaturePropertyName(definition, binding);
+        }
+
+        private static string ResolveFeaturePropertyName(
+            object definition,
+            NativeParameterBinding binding)
+        {
+            string matchedProperty = null;
+            Exception lastError = null;
+            var observedValues = new List<string>();
+            double expected = ToSystemValue(binding.Value, binding.Unit);
+            double tolerance = String.Equals(
+                binding.Unit,
+                "count",
+                StringComparison.OrdinalIgnoreCase
+            )
+                ? 0.0
+                : Math.Max(1e-9, Math.Abs(expected) * 1e-6);
+            foreach (string propertyName in
+                binding.NativeProperties ?? new string[0])
+            {
+                try
+                {
+                    object actualObject = definition.GetType().InvokeMember(
+                        propertyName,
+                        BindingFlags.GetProperty,
+                        null,
+                        definition,
+                        null,
+                        CultureInfo.InvariantCulture
+                    );
+                    double actual = Convert.ToDouble(
+                        actualObject,
+                        CultureInfo.InvariantCulture
+                    );
+                    observedValues.Add(
+                        propertyName + "=" +
+                        actual.ToString("R", CultureInfo.InvariantCulture)
+                    );
+                    if (Math.Abs(actual - expected) <= tolerance)
+                    {
+                        matchedProperty = propertyName;
+                        break;
+                    }
+                }
+                catch (Exception error)
+                {
+                    lastError = error;
+                }
+            }
+            if (observedValues.Count == 0)
+            {
+                string candidates = String.Join(
+                    ", ",
+                    binding.NativeProperties ?? new string[0]
+                );
+                throw new InvalidOperationException(
+                    "Native feature '" + binding.OwnerName +
+                    "' does not expose any expected property for '" +
+                    binding.ParameterId + "' (tried " + candidates + ").",
+                    lastError
+                );
+            }
+            if (matchedProperty == null)
+            {
+                throw new InvalidOperationException(
+                    "Native properties on '" + binding.OwnerName +
+                    "' have values [" + String.Join(", ", observedValues) +
+                    "], expected " +
+                    expected.ToString("R", CultureInfo.InvariantCulture) +
+                    " for parameter '" + binding.ParameterId + "'."
+                );
+            }
+            return matchedProperty;
         }
 
         private static void CollectFeatureAndChildren(
@@ -3101,6 +4617,27 @@ namespace Prompt2Cad.SolidWorks
                     "Dimension '" + qualifiedName + "' was not named deterministically."
                 );
             }
+            object systemValues = nativeDimension.GetSystemValue3(
+                (int)swInConfigurationOpts_e.swThisConfiguration,
+                null
+            );
+            double actual = ObjectItems(systemValues)
+                .Select(value => Convert.ToDouble(
+                    value,
+                    CultureInfo.InvariantCulture
+                ))
+                .First();
+            double expected = ToSystemValue(dimension);
+            double tolerance = Math.Max(1e-9, Math.Abs(expected) * 1e-6);
+            if (Math.Abs(actual - expected) > tolerance)
+            {
+                throw new InvalidOperationException(
+                    "Dimension '" + qualifiedName + "' has value " +
+                    actual.ToString("R", CultureInfo.InvariantCulture) +
+                    ", expected " +
+                    expected.ToString("R", CultureInfo.InvariantCulture) + "."
+                );
+            }
         }
 
         private static IEnumerable<object> ObjectItems(object value)
@@ -3128,11 +4665,20 @@ namespace Prompt2Cad.SolidWorks
 
         private static double ToSystemValue(DimensionSpec specification)
         {
-            if (String.Equals(specification.Unit, "deg", StringComparison.OrdinalIgnoreCase))
+            return ToSystemValue(specification.ValueMillimeters, specification.Unit);
+        }
+
+        private static double ToSystemValue(double value, string unit)
+        {
+            if (String.Equals(unit, "deg", StringComparison.OrdinalIgnoreCase))
             {
-                return DegreesToRadians(specification.ValueMillimeters);
+                return DegreesToRadians(value);
             }
-            return ToMeters(specification.ValueMillimeters);
+            if (String.Equals(unit, "count", StringComparison.OrdinalIgnoreCase))
+            {
+                return value;
+            }
+            return ToMeters(value);
         }
 
         private static double DegreesToRadians(double degrees)

@@ -51,7 +51,9 @@ The hosted application exports STEP, editable model data, and a validated
 SolidWorks replay package. The package is generated in memory and contains no
 API credentials. Native `SLDPRT` creation remains a local Windows step because
 it requires an installed and licensed SolidWorks application: extract the ZIP
-and run `Build-SolidWorks-Part.ps1` from Windows PowerShell.
+and double-click `Build-SolidWorks-Part.cmd`. The package checks its payload,
+discovers the installed SolidWorks API, and writes both the native part and a
+JSON verification report.
 
 ## Public-release gate
 
@@ -76,6 +78,6 @@ The public-release gate was exercised on August 10, 2026. The deployed site
 generated and refined a valid multi-feature model, both public download paths
 returned non-empty artifacts, and a package downloaded from the public URL
 created a native SolidWorks part with editable features and dimensions. The
-native parity suite passed all seven supported cases. Repeat the short human
+native parity suite passed all eight supported cases. Repeat the short human
 check immediately before publishing because the hosted service and external
 API remain live dependencies.

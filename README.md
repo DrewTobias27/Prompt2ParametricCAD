@@ -21,8 +21,8 @@ and represented as a dependency graph for validated editing and native replay.
 - CadQuery solid construction and STEP export
 - Feature graph with stable IDs, parents, children, sketches, faces, and edges
 - Versioned editable-model document with named parameters and validated rebuilds
-- Verified native SolidWorks replay with sketches, dimensions, patterns, and
-  ordered features
+- Verified native SolidWorks replay with fully defined sketches, editable
+  dimensions, patterns, persistent semantic references, and ordered features
 - Automatic repair fallback with structured diagnostics
 - Focused result refinement that preserves prior design intent and validates each revision
 - Deterministic fixtures and API benchmarks for semantic and geometric quality
@@ -189,15 +189,18 @@ prompt2cad-solidworks-smoke --execute
 The native replay planner covers every operation in the STEP builder:
 rectangle, circle, polygon, polyline, and line/arc sketches; blind/through
 extrusions and cuts; full or partial revolves; circular, linear, and mirrored
-patterns; countersinks; chamfers; and fillets. It preserves semantic face
-targets, local placement frames, and deterministic feature names rather than
-importing a featureless STEP body. Planning, serialization, and the automation
-runner are regression-tested without opening SolidWorks; each installed
+patterns; countersinks; chamfers; and fillets. It preserves semantic face and
+edge targets, persistent native reference IDs, local placement frames, and
+deterministic feature names rather than importing a featureless STEP body. The
+runner verifies declared parameters, fully defined sketches, feature health,
+geometry parity, and persistent-reference resolution. Planning, serialization,
+and automation are regression-tested without opening SolidWorks; each installed
 SolidWorks version still requires a native smoke test before release use.
 The hosted application packages the source model, editable-model document,
 validated replay plan, and local runner into a ZIP. After extraction, run
-`Build-SolidWorks-Part.ps1` on Windows with SolidWorks installed; no API
-credential is included in the package.
+`Build-SolidWorks-Part.cmd` on Windows with SolidWorks installed. The launcher
+checks package hashes and local prerequisites before creating the SLDPRT and a
+machine-readable verification report. No API credential is included.
 
 Run the automated tests:
 
@@ -251,8 +254,8 @@ Current priorities are:
 
 1. Broader design-intent vocabulary and more reliable spatial relationships.
 2. Real-application smoke fixtures across supported SolidWorks versions.
-3. Stable face and edge references after topology-changing native edits.
-4. Stronger semantic evaluation, sketch constraints, and locating dimensions.
+3. Broader native operation coverage while retaining STEP/SolidWorks parity.
+4. More mutation cases for topology-changing edits and reference recovery.
 
 For implementation details and known constraints, see
 [docs/architecture.md](docs/architecture.md) and the

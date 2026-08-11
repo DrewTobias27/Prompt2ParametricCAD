@@ -11,7 +11,7 @@ from prompt2cad.schema import validate_model_data
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE_PATHS = sorted((PROJECT_ROOT / "examples").glob("*.json"))
+EXAMPLE_PATHS = sorted((PROJECT_ROOT / "examples" / "models").glob("*.json"))
 
 
 def test_rectangular_base_dimensions():
