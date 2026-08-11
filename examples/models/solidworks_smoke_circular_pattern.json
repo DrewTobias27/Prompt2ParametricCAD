@@ -1,0 +1,44 @@
+{
+  "operations": [
+    {
+      "type": "extrude",
+      "id": "base",
+      "plane": "XY",
+      "profile": "circle",
+      "diameter": 100,
+      "distance": 8
+    },
+    {
+      "type": "add_extrude",
+      "id": "radial_posts",
+      "target": "base.top",
+      "profile": "circle",
+      "positions": [
+        [32, 0],
+        [16, 27.712813],
+        [-16, 27.712813],
+        [-32, 0],
+        [-16, -27.712813],
+        [16, -27.712813]
+      ],
+      "diameter": 12,
+      "distance": 8,
+      "pattern": {
+        "type": "circular",
+        "seed_position": [32, 0],
+        "center": [0, 0],
+        "count": 6,
+        "total_angle_degrees": 360
+      }
+    },
+    {
+      "type": "cut",
+      "id": "fourth_post_hole",
+      "target": "radial_posts.inst004.top",
+      "profile": "circle",
+      "positions": [[0, 0]],
+      "diameter": 4,
+      "depth": "through"
+    }
+  ]
+}

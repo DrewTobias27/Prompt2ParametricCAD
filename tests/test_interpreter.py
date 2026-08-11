@@ -1396,6 +1396,47 @@ def test_cut_revolved_front_face():
     )
 
 
+def test_child_feature_references_do_not_depend_on_global_face_extrema():
+    """A rectangular child remains targetable on a faceted parent body."""
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "polygon",
+                "sides": 6,
+                "diameter": 76,
+                "distance": 12,
+            },
+            {
+                "type": "add_extrude",
+                "id": "boss",
+                "target": "base.top",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "width": 14,
+                "height": 10,
+                "distance": 7,
+            },
+            {
+                "type": "cut",
+                "id": "side_hole",
+                "target": "boss.front",
+                "profile": "circle",
+                "positions": [[0, 3.5]],
+                "diameter": 4,
+                "depth": "through",
+            },
+        ]
+    }
+
+    part = build_model(model_data)
+
+    assert len(part.solids().vals()) == 1
+    assert part.val().isValid()
+
+
 def test_cut_revolve_discards_disconnected_scrap():
     model_data = {
         "operations": [

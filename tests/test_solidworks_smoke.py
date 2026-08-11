@@ -3,11 +3,15 @@ from pathlib import Path
 
 import pytest
 
+from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.interpreter import build_model
 from prompt2cad.loader import load_model
 from prompt2cad.solidworks_smoke import SMOKE_FIXTURE_NAMES
+from prompt2cad.solidworks_smoke import EDITABILITY_SCENARIOS
 from prompt2cad.solidworks_smoke import compare_geometry_metrics
 from prompt2cad.solidworks_smoke import geometry_metrics
+from prompt2cad.solidworks_smoke import native_parameter_coverage
 from prompt2cad.solidworks_smoke import run_smoke_suite
 from prompt2cad.solidworks_smoke import smoke_fixture_paths
 from prompt2cad.solidworks_smoke import validate_published_references
@@ -41,6 +45,43 @@ def test_every_native_smoke_fixture_builds_and_plans(tmp_path: Path):
         assert Path(result["step_path"]).is_file()
         assert Path(result["plan_path"]).is_file()
         assert result["operation_count"] == result["native_feature_count"]
+
+
+def test_every_native_fixture_has_a_valid_bound_editability_scenario():
+    from prompt2cad.solidworks_export import model_path_to_replay_plan
+
+    fixtures = smoke_fixture_paths()
+    assert set(EDITABILITY_SCENARIOS) == set(SMOKE_FIXTURE_NAMES)
+
+    for fixture in fixtures:
+        model_data = load_model(fixture)
+        document = model_data_to_editable_document(model_data)
+        mutations = EDITABILITY_SCENARIOS[fixture.stem]
+        rebuilt_part, _ = rebuild_with_parameter_updates(document, mutations)
+        assert len(rebuilt_part.solids().vals()) == 1
+
+        plan = model_path_to_replay_plan(fixture)
+        binding_ids = {
+            binding["parameter_id"]
+            for feature in plan.features
+            for binding in feature.parameter_bindings
+        }
+        assert set(mutations) <= binding_ids
+
+
+def test_parameter_coverage_exposes_unbound_coordinate_profiles():
+    from prompt2cad.solidworks_export import model_path_to_replay_plan
+
+    fixture = smoke_fixture_paths(["solidworks_smoke_coordinate_profiles"])[0]
+    model_data = load_model(fixture)
+    coverage = native_parameter_coverage(
+        model_data,
+        model_path_to_replay_plan(fixture),
+    )
+
+    assert coverage["bound_count"] > 0
+    assert coverage["coverage_ratio"] < 1
+    assert "base.sketch.point003.x" in coverage["unbound_parameter_ids"]
 
 
 def test_native_smoke_execution_uses_the_validated_plan(tmp_path: Path):

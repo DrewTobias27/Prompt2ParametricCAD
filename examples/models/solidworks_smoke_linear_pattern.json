@@ -1,0 +1,49 @@
+{
+  "operations": [
+    {
+      "type": "extrude",
+      "id": "base",
+      "plane": "XY",
+      "profile": "rectangle",
+      "width": 120,
+      "height": 80,
+      "distance": 8
+    },
+    {
+      "type": "add_extrude",
+      "id": "mounting_pads",
+      "target": "base.top",
+      "profile": "rectangle",
+      "positions": [
+        [-35, -20],
+        [0, -20],
+        [35, -20],
+        [-35, 20],
+        [0, 20],
+        [35, 20]
+      ],
+      "width": 14,
+      "height": 10,
+      "distance": 7,
+      "pattern": {
+        "type": "linear",
+        "seed_position": [-35, -20],
+        "direction_1": [1, 0],
+        "count_1": 3,
+        "spacing_1": 35,
+        "direction_2": [0, 1],
+        "count_2": 2,
+        "spacing_2": 40
+      }
+    },
+    {
+      "type": "cut",
+      "id": "sixth_pad_hole",
+      "target": "mounting_pads.inst006.top",
+      "profile": "circle",
+      "positions": [[0, 0]],
+      "diameter": 4,
+      "depth": "through"
+    }
+  ]
+}

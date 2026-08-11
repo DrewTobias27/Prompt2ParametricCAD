@@ -23,6 +23,8 @@ from prompt2cad.solidworks_replay import verify_solidworks_editability
 
 SMOKE_FIXTURE_NAMES = (
     "solidworks_smoke_patterned_plate",
+    "solidworks_smoke_circular_pattern",
+    "solidworks_smoke_linear_pattern",
     "solidworks_smoke_side_features",
     "solidworks_smoke_revolved_shaft",
     "solidworks_smoke_edge_details",
@@ -37,6 +39,49 @@ EDITABILITY_SCENARIOS = {
         "base.sketch.width": 120,
         "bosses.feature.distance": 10,
         "mounting_holes.feature.diameter": 6,
+    },
+    "solidworks_smoke_circular_pattern": {
+        "base.feature.distance": 10,
+        "radial_posts.sketch.diameter": 14,
+        "radial_posts.feature.distance": 10,
+        "fourth_post_hole.sketch.diameter": 5,
+    },
+    "solidworks_smoke_linear_pattern": {
+        "base.sketch.width": 130,
+        "mounting_pads.sketch.width": 16,
+        "mounting_pads.feature.distance": 9,
+        "sixth_pad_hole.sketch.diameter": 5,
+    },
+    "solidworks_smoke_side_features": {
+        "base.sketch.width": 90,
+        "right_tab.feature.distance": 10,
+        "tab_hole.sketch.diameter": 5,
+    },
+    "solidworks_smoke_revolved_shaft": {
+        "shaft.sketch.height": 90,
+        "collar.sketch.width": 5,
+        "groove.sketch.height": 8,
+        "end_bore.sketch.diameter": 7,
+    },
+    "solidworks_smoke_edge_details": {
+        "corner_fillets.feature.radius": 5,
+        "boss.sketch.width": 34,
+        "boss_chamfer.feature.distance": 1.5,
+    },
+    "solidworks_smoke_freeform_edges": {
+        "base.feature.distance": 15,
+        "top_edge_chamfer.feature.distance": 2.5,
+    },
+    "solidworks_smoke_coordinate_profiles": {
+        "base.feature.distance": 10,
+        "hex_boss.feature.distance": 12,
+    },
+    "solidworks_smoke_arc_revolve": {
+        "capsule.feature.angle": 270,
+    },
+    "solidworks_smoke_partial_revolve": {
+        "half_cylinder.sketch.height": 60,
+        "half_cylinder.feature.angle": 220,
     },
 }
 
@@ -118,6 +163,10 @@ def run_smoke_suite(
             result["native_operation_types"] = [
                 feature.operation_type for feature in plan.features
             ]
+            result["native_parameter_coverage"] = native_parameter_coverage(
+                model_data,
+                plan,
+            )
 
             if execute_native:
                 native_exporter(
@@ -207,6 +256,47 @@ def run_smoke_suite(
         "passed": passed,
         "failed": len(results) - passed,
         "results": results,
+    }
+
+
+def native_parameter_coverage(
+    model_data: dict,
+    plan: SolidWorksReplayPlan,
+    *,
+    document=None,
+) -> dict:
+    """Report which numeric source parameters have native edit bindings.
+
+    This is diagnostic rather than a pass/fail gate because coordinate-driven
+    sketch parameters are deliberately preserved in the editable document even
+    when the native adapter cannot edit them yet.  Keeping the gap explicit
+    prevents new profile families from silently reducing editability coverage.
+    """
+    if document is None:
+        document = model_data_to_editable_document(model_data)
+    source_parameter_ids = {
+        parameter.id
+        for feature in document.features
+        for parameter in feature.parameters
+        if parameter.driving and isinstance(parameter.value, (int, float))
+        and not isinstance(parameter.value, bool)
+    }
+    binding_ids = {
+        binding["parameter_id"]
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    }
+    bound_source_ids = source_parameter_ids & binding_ids
+    return {
+        "numeric_source_count": len(source_parameter_ids),
+        "bound_count": len(bound_source_ids),
+        "coverage_ratio": (
+            len(bound_source_ids) / len(source_parameter_ids)
+            if source_parameter_ids
+            else 1.0
+        ),
+        "unbound_parameter_ids": sorted(source_parameter_ids - binding_ids),
+        "native_only_parameter_ids": sorted(binding_ids - source_parameter_ids),
     }
 
 

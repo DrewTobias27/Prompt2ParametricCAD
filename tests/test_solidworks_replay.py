@@ -845,6 +845,87 @@ def test_solidworks_parity_matrix_covers_every_step_operation_type():
     }
 
 
+def test_native_polygon_uses_the_same_positive_x_phase_as_cadquery():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+    polygon_section = runner_source[
+        runner_source.index('if (sketch.Profile == "polygon")') :
+        runner_source.index('if (sketch.Profile == "polyline")')
+    ]
+
+    assert "double angle = 2.0 * Math.PI * index / sketch.Sides;" in (
+        polygon_section
+    )
+    assert "(Math.PI / 2.0)" not in polygon_section
+
+
+def test_native_edge_matching_has_a_cardinality_guarded_semantic_fallback():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "semanticEdges.Count != step.Support.Members.Length" in runner_source
+    assert "Canonical curve descriptors differed across kernels" in runner_source
+
+
+@pytest.mark.parametrize("profile", ["polyline", "sketch"])
+def test_merged_freeform_extrusion_does_not_publish_consumed_bottom_face(
+    profile,
+):
+    profile_fields = (
+        {
+            "points": [[-8, -5], [8, -5], [7, 5], [-7, 5]],
+        }
+        if profile == "polyline"
+        else {
+            "start": [-8, -5],
+            "segments": [
+                {"type": "line", "to": [8, -5]},
+                {"type": "line", "to": [8, 5]},
+                {"type": "line", "to": [-8, 5]},
+            ],
+            "close": True,
+        }
+    )
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "width": 60,
+                "height": 40,
+                "distance": 8,
+            },
+            {
+                "type": "add_extrude",
+                "id": "boss",
+                "target": "base.top",
+                "profile": profile,
+                "positions": [[0, 0]],
+                "distance": 6,
+                **profile_fields,
+            },
+        ]
+    }
+
+    plan = replay_plan(model_data)
+    published = {
+        item["semantic_name"] for item in plan.features[1].publish_references
+    }
+
+    assert "top" in published
+    assert "bottom" not in published
+
+
 def test_native_runner_accepts_the_current_replay_plan_version():
     runner_source = (
         Path(__file__).parents[1]
@@ -948,6 +1029,55 @@ def test_native_runner_resolves_edge_groups_by_canonical_member_geometry():
     assert "SampleEdgeBoundingBoxMillimeters(" in runner_source
     assert "EdgeDescriptorError(" in runner_source
     assert "did not match native topology within 0.5 mm" in runner_source
+
+
+def test_native_circular_pattern_uses_a_reference_axis_feature():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "model.InsertAxis2(true)" in runner_source
+    assert "model.IFeatureByPositionReverse(0)" in runner_source
+    assert "SelectCircularPatternAxis(references.CircularAxis)" in runner_source
+    assert "axis.Select2(true, 1)" in runner_source
+    assert "swFeatureNameID_e.swFmCirPattern" in runner_source
+    assert "definition.Axis = axisEntity" in runner_source
+    assert "definition.PatternFeatureArray" not in runner_source
+    assert "RequireReferenceAxisDirection(" in runner_source
+    assert "FeatureCircularPattern5(" not in runner_source
+
+
+def test_native_geometry_bounds_exclude_reference_geometry():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "body.GetBodyBox()" in runner_source
+    assert "part.GetPartBox(" not in runner_source
+
+
+def test_native_replay_tracks_the_saved_document_title_for_cleanup():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    save_position = runner_source.index("int saveStatus = model.SaveAs3(")
+    refresh_position = runner_source.index(
+        "modelTitle = model.GetTitle();", save_position
+    )
+    close_position = runner_source.index(
+        "application.CloseDoc(modelTitle);", refresh_position
+    )
+    assert save_position < refresh_position < close_position
 
 
 def test_native_runner_dimensions_rectangles_in_their_local_feature_frame():

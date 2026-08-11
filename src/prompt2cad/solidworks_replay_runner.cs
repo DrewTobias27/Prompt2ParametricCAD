@@ -805,6 +805,7 @@ namespace Prompt2Cad.SolidWorks
                         "' (status " + saveStatus + ")."
                     );
                 }
+                modelTitle = model.GetTitle();
                 IDictionary<string, byte[]> persistentReferenceIds =
                     CapturePersistentReferenceIds(model, part, plan);
                 PersistentReferenceResult[] publishedReferences =
@@ -1155,6 +1156,7 @@ namespace Prompt2Cad.SolidWorks
             }
 
             double volumeCubicMeters = 0.0;
+            double[] boundingBox = null;
             foreach (object bodyObject in bodyObjects)
             {
                 Body2 body = bodyObject as Body2;
@@ -1175,18 +1177,37 @@ namespace Prompt2Cad.SolidWorks
                     );
                 }
                 volumeCubicMeters += massProperties[3];
+                double[] bodyBox = ObjectItems(body.GetBodyBox())
+                    .Select(value => Convert.ToDouble(
+                        value,
+                        CultureInfo.InvariantCulture
+                    ) * MillimetersPerMeter)
+                    .ToArray();
+                if (bodyBox.Length != 6)
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS did not return a six-value solid-body " +
+                        "bounding box."
+                    );
+                }
+                if (boundingBox == null)
+                {
+                    boundingBox = bodyBox;
+                }
+                else
+                {
+                    boundingBox[0] = Math.Min(boundingBox[0], bodyBox[0]);
+                    boundingBox[1] = Math.Min(boundingBox[1], bodyBox[1]);
+                    boundingBox[2] = Math.Min(boundingBox[2], bodyBox[2]);
+                    boundingBox[3] = Math.Max(boundingBox[3], bodyBox[3]);
+                    boundingBox[4] = Math.Max(boundingBox[4], bodyBox[4]);
+                    boundingBox[5] = Math.Max(boundingBox[5], bodyBox[5]);
+                }
             }
-
-            double[] boundingBox = ObjectItems(part.GetPartBox(true))
-                .Select(value => Convert.ToDouble(
-                    value,
-                    CultureInfo.InvariantCulture
-                ) * MillimetersPerMeter)
-                .ToArray();
-            if (boundingBox.Length != 6)
+            if (boundingBox == null)
             {
                 throw new InvalidOperationException(
-                    "SOLIDWORKS did not return a six-value part bounding box."
+                    "SOLIDWORKS did not return a solid-body bounding box."
                 );
             }
             return new NativeGeometryResult
@@ -1903,8 +1924,10 @@ namespace Prompt2Cad.SolidWorks
                 var points = new List<double[]>();
                 for (int index = 0; index < sketch.Sides; index++)
                 {
-                    double angle = (2.0 * Math.PI * index / sketch.Sides) +
-                        (Math.PI / 2.0);
+                    // CadQuery starts a regular polygon on the positive local
+                    // X axis. Match that phase so downstream placements and
+                    // bounding boxes are identical in both CAD kernels.
+                    double angle = 2.0 * Math.PI * index / sketch.Sides;
                     points.Add(new[]
                     {
                         center[0] + radius * Math.Cos(angle),
@@ -2907,23 +2930,40 @@ namespace Prompt2Cad.SolidWorks
                         "Could not select the circular-pattern seed feature."
                     );
                 }
-                SelectPatternDirection(model, references.Direction1, 1);
-                patternFeature = model.FeatureManager.FeatureCircularPattern5(
-                    pattern.Count,
-                    DegreesToRadians(pattern.TotalAngleDegrees),
-                    false,
-                    "NULL",
-                    true,
-                    true,
-                    false,
-                    false,
-                    false,
-                    false,
-                    0,
-                    0.0,
-                    "NULL",
-                    false
+                SelectCircularPatternAxis(references.CircularAxis);
+                object definitionObject = model.FeatureManager.CreateDefinition(
+                    (int)swFeatureNameID_e.swFmCirPattern
                 );
+                CircularPatternFeatureData definition =
+                    definitionObject as CircularPatternFeatureData;
+                if (definition == null)
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS did not create circular-pattern feature data."
+                    );
+                }
+                object axisEntity = references.CircularAxis.GetSpecificFeature2();
+                if (axisEntity == null)
+                {
+                    throw new InvalidOperationException(
+                        "Could not retrieve the circular-pattern reference axis."
+                    );
+                }
+                definition.Axis = axisEntity;
+                definition.PatternElement =
+                    (int)swPatternElementSelection_e.swFeatureFaces;
+                definition.BodyPattern = false;
+                definition.TotalInstances = pattern.Count;
+                definition.Spacing = DegreesToRadians(
+                    pattern.TotalAngleDegrees
+                );
+                definition.EqualSpacing = true;
+                definition.ReverseDirection = false;
+                definition.Direction2 = false;
+                definition.GeometryPattern = true;
+                definition.VarySketch = false;
+                definition.PropagateVisualProperty = true;
+                patternFeature = model.FeatureManager.CreateFeature(definition);
             }
             else if (pattern.Kind == "linear_pattern")
             {
@@ -2992,6 +3032,10 @@ namespace Prompt2Cad.SolidWorks
                     "SOLIDWORKS did not create pattern '" + step.FeatureName + "'."
                 );
             }
+            if (pattern.Kind == "circular_pattern")
+            {
+                TraceCircularPatternDefinition(patternFeature, model);
+            }
             patternFeature.Name = step.FeatureName;
             if (!model.EditRebuild3())
             {
@@ -3008,6 +3052,7 @@ namespace Prompt2Cad.SolidWorks
             public Feature SketchFeature { get; set; }
             public SketchSegment Direction1 { get; set; }
             public SketchSegment Direction2 { get; set; }
+            public Feature CircularAxis { get; set; }
         }
 
         private static PatternReferenceSketch CreatePatternReferenceSketch(
@@ -3075,12 +3120,144 @@ namespace Prompt2Cad.SolidWorks
                 second.ConstructionGeometry = true;
             }
             model.Insert3DSketch2(true);
+            Feature circularAxis = null;
+            if (circular)
+            {
+                model.ClearSelection2(true);
+                SelectionMgr selectionManager =
+                    (SelectionMgr)model.SelectionManager;
+                SelectData axisSource = selectionManager.CreateSelectData();
+                axisSource.Mark = 0;
+                if (!first.Select4(false, axisSource))
+                {
+                    throw new InvalidOperationException(
+                        "Could not select circular-pattern axis geometry."
+                    );
+                }
+                int featureCountBeforeAxis = model.GetFeatureCount();
+                if (!model.InsertAxis2(true))
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS did not create the circular-pattern axis."
+                    );
+                }
+                if (model.GetFeatureCount() != featureCountBeforeAxis + 1)
+                {
+                    throw new InvalidOperationException(
+                        "Circular-pattern axis creation changed the feature " +
+                        "tree unexpectedly."
+                    );
+                }
+                circularAxis = model.IFeatureByPositionReverse(0);
+                if (circularAxis == null)
+                {
+                    throw new InvalidOperationException(
+                        "Could not retrieve the circular-pattern axis feature."
+                    );
+                }
+                circularAxis.Name = step.FeatureName + "_Axis";
+                RequireReferenceAxisDirection(
+                    circularAxis,
+                    direction1,
+                    step.FeatureName
+                );
+            }
             return new PatternReferenceSketch
             {
                 SketchFeature = sketchFeature,
                 Direction1 = first,
                 Direction2 = second,
+                CircularAxis = circularAxis,
             };
+        }
+
+        private static void SelectCircularPatternAxis(Feature axis)
+        {
+            if (axis == null || !axis.Select2(true, 1))
+            {
+                throw new InvalidOperationException(
+                    "Could not select the native circular-pattern axis."
+                );
+            }
+        }
+
+        private static void RequireReferenceAxisDirection(
+            Feature axisFeature,
+            double[] expectedDirection,
+            string featureName)
+        {
+            RefAxis axis = axisFeature.GetSpecificFeature2() as RefAxis;
+            if (axis == null)
+            {
+                throw new InvalidOperationException(
+                    "Circular pattern '" + featureName +
+                    "' does not have a readable reference axis."
+                );
+            }
+            double[] parameters = axis.GetRefAxisParams() as double[];
+            if (parameters == null || parameters.Length < 6)
+            {
+                throw new InvalidOperationException(
+                    "Circular pattern '" + featureName +
+                    "' returned incomplete reference-axis data."
+                );
+            }
+            double[] actualDirection = Normalize(new[]
+            {
+                parameters[3] - parameters[0],
+                parameters[4] - parameters[1],
+                parameters[5] - parameters[2],
+            });
+            double alignment = Math.Abs(
+                actualDirection[0] * expectedDirection[0] +
+                actualDirection[1] * expectedDirection[1] +
+                actualDirection[2] * expectedDirection[2]
+            );
+            if (alignment < 0.999)
+            {
+                throw new InvalidOperationException(
+                    "Circular pattern '" + featureName +
+                    "' reference axis does not align with its support normal."
+                );
+            }
+        }
+
+        private static void TraceCircularPatternDefinition(
+            Feature patternFeature,
+            ModelDoc2 model)
+        {
+            CircularPatternFeatureData definition =
+                patternFeature.GetDefinition() as CircularPatternFeatureData;
+            if (definition == null || !definition.AccessSelections(model, null))
+            {
+                Trace("Could not inspect stored circular-pattern definition");
+                return;
+            }
+            try
+            {
+                object axisEntity = definition.Axis;
+                RefAxis referenceAxis = axisEntity as RefAxis;
+                Feature axisFeature = axisEntity as Feature;
+                if (referenceAxis == null && axisFeature != null)
+                {
+                    referenceAxis = axisFeature.GetSpecificFeature2() as RefAxis;
+                }
+                double[] parameters = referenceAxis == null
+                    ? null
+                    : referenceAxis.GetRefAxisParams() as double[];
+                Trace(
+                    "Stored circular pattern axis_type=" + definition.GetAxisType() +
+                    " instances=" + definition.TotalInstances +
+                    " spacing=" + definition.Spacing +
+                    " axis=" + (parameters == null
+                        ? "unavailable"
+                        : "[" + String.Join(",", parameters) + "]")
+                );
+            }
+            finally
+            {
+                definition.ReleaseSelectionAccess();
+            }
         }
 
         private static void SelectPatternDirection(
@@ -3199,17 +3376,55 @@ namespace Prompt2Cad.SolidWorks
                     "' was not found."
                 );
             }
-            IList<Edge> edges = step.Support.Members != null &&
-                    step.Support.Members.Length > 0
-                ? SelectFeatureEdgesByMembers(
-                    targetFeature,
-                    step.Support.Members
-                )
-                : SelectFeatureEdges(
+            IList<Edge> edges;
+            if (step.Support.Members != null &&
+                step.Support.Members.Length > 0)
+            {
+                try
+                {
+                    edges = SelectFeatureEdgesByMembers(
+                        targetFeature,
+                        step.Support.Members
+                    );
+                }
+                catch (InvalidOperationException canonicalError)
+                {
+                    // Curves can have equivalent geometry but different
+                    // parameterization in the OCC and SOLIDWORKS kernels.
+                    // Fall back only when the semantic group is unambiguous:
+                    // it must resolve exactly as many native edges as the
+                    // canonical contract expected.
+                    IList<Edge> semanticEdges = SelectFeatureEdges(
+                        targetFeature,
+                        step.Support.Frame,
+                        step.Support.Selector
+                    );
+                    if (semanticEdges.Count != step.Support.Members.Length)
+                    {
+                        throw new InvalidOperationException(
+                            canonicalError.Message + " Semantic selector '" +
+                            step.Support.Selector + "' found " +
+                            semanticEdges.Count + " edge(s), but the canonical " +
+                            "group requires " + step.Support.Members.Length + ".",
+                            canonicalError
+                        );
+                    }
+                    Trace(
+                        "Canonical curve descriptors differed across kernels; " +
+                        "used unambiguous semantic selector '" +
+                        step.Support.Selector + "'."
+                    );
+                    edges = semanticEdges;
+                }
+            }
+            else
+            {
+                edges = SelectFeatureEdges(
                     targetFeature,
                     step.Support.Frame,
                     step.Support.Selector
                 );
+            }
             Trace(
                 "Resolved " + edges.Count + " canonical edge(s) for " +
                 step.FeatureName

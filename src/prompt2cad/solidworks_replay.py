@@ -1292,7 +1292,12 @@ def _published_reference_specs(
         if operation_type == "extrude":
             semantics.append("bottom")
     else:
-        semantics = ["top", "bottom"]
+        # The support interface of a merged additive feature is consumed by
+        # the union and is not a native face that can be named persistently.
+        # A standalone base extrusion still owns its bottom face.
+        semantics = ["top"]
+        if operation_type == "extrude":
+            semantics.append("bottom")
     directions = _published_face_directions(feature, support)
     references = []
     for semantic in semantics:

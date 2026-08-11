@@ -245,21 +245,13 @@ def build_base_extrusion(
     workplane = create_profile(workplane, operation, operation_number)
     part = workplane.extrude(distance)
 
-    default_face_tags = {
-        "top": ">Z",
-        "bottom": "<Z",
-    }
-    if operation["profile"] == "rectangle":
-        default_face_tags.update(
-            {
-                "front": ">Y",
-                "back": "<Y",
-                "right": ">X",
-                "left": "<X",
-            }
-        )
-
-    face_tags = operation.get("face_tags", default_face_tags)
+    # Semantic references are registered from the feature's own local frame
+    # below.  Global CadQuery selectors such as ``>Y`` inspect the complete
+    # result body, so after later features are added they can select a parent
+    # face—or several non-coplanar faces—instead of this feature's face.
+    # Keep selector tags only as an explicit backwards-compatibility escape
+    # hatch for callers that supply ``face_tags`` themselves.
+    face_tags = operation.get("face_tags", {})
     if operation["profile"] == "rectangle" and feature_graph is not None:
         feature_graph.registry.register_rectangular_prism_faces(
             feature_id,
@@ -791,21 +783,12 @@ def apply_add_extrusion_face_tags(
     if not feature_id:
         return part
 
-    default_face_tags = {
-        "top": ">Z",
-        "bottom": "<Z",
-    }
-    if operation["profile"] == "rectangle":
-        default_face_tags.update(
-            {
-                "front": ">Y",
-                "back": "<Y",
-                "right": ">X",
-                "left": "<X",
-            }
-        )
-
-    face_tags = operation.get("face_tags", default_face_tags)
+    # The feature registry owns default semantic references.  Applying global
+    # extreme-face selectors to the fused body is both redundant and unsafe:
+    # the extreme face may belong to the parent, and faceted parents can
+    # produce several non-coplanar matches.  Explicit legacy tags remain
+    # supported for imported/hand-authored operation data.
+    face_tags = operation.get("face_tags", {})
     return apply_face_tags(part, feature_id, face_tags)
 
 
@@ -1185,14 +1168,9 @@ def build_revolve(
     part = build_revolve_tool(operation, operation_number)
     register_revolve_references(feature_graph, operation, part)
 
-    default_face_tags = {}
-    if operation["profile"] == "rectangle":
-        default_face_tags = {
-            "front": ">Y",
-            "back": "<Y",
-        }
-
-    face_tags = operation.get("face_tags", default_face_tags)
+    # Revolved semantic faces and the revolve axis are registered from the
+    # actual revolved tool.  Do not duplicate them with global body selectors.
+    face_tags = operation.get("face_tags", {})
     return apply_face_tags(part, feature_id, face_tags)
 
 

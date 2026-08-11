@@ -44,6 +44,7 @@ it.
 | `editable_model.py` | Versioned features, named parameters, source paths, and transactional rebuilds |
 | `solidworks_replay.py` | Validates and lowers the supported editable subset into a deterministic native replay plan |
 | `solidworks_replay_runner.cs` | Replays native sketches, dimensions, dependencies, boss/cut features, and `SLDPRT` output through the installed SolidWorks API |
+| `capability_audit.py` | Generates profile/operation composition cases and verifies schema, STEP, repair, and optional native SolidWorks parity |
 | `quality.py` | Schema, structure, build, export, and geometry quality gates |
 | `operation_effects.py` | Verifies each feature materially changed geometry |
 | `web_app.py` | FastAPI endpoints and production frontend hosting |
@@ -118,7 +119,7 @@ transactional updates and exports only a successful rebuild.
   optional SolidWorks adapter separately replays all current operation
   categories as native features, subject to installed-version smoke testing.
 - Topological names can change after cuts, fillets, chamfers, and shelling.
-- Curved or highly irregular target surfaces need stronger local-frame support.
+- Direct child sketches require published planar faces; arbitrary curved-surface sketch supports remain outside the release contract.
 - Some compound CAD concepts still lower into multiple primitive operations.
 - Semantic correctness is harder to prove than geometric validity.
 

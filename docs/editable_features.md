@@ -116,10 +116,11 @@ constraints or selection rules:
 The runner temporarily disables SolidWorks' interactive dimension-entry prompt
 and restores the user's prior setting after replay. It uses the configured part
 template when available and falls back to the newest installed standard part
-template. Eight real-application smoke models cover every supported profile as
+template. Ten real-application smoke models cover every supported profile as
 well as boss/cut features, through and blind end conditions, patterns, full and
 partial revolves, asymmetric freeform edge treatments, and multi-level feature
-dependencies.
+dependencies. A separate generated release matrix expands this to 286
+profile/operation/face/pattern combinations and multi-feature repair chains.
 
 Legacy repeated source positions remain exact contours so existing JSON keeps
 working. Operations with canonical pattern metadata instead create one seed
@@ -162,11 +163,16 @@ The backend now exposes this layer through `/editable-model` and
 known-good revision and exports a new STEP file only after the parameter update,
 schema, rebuild, operation-effect checks, and quality checks succeed.
 
+Arbitrary coordinate sketches and polygons remain native editable sketches,
+but not every vertex coordinate or polygon topology value has a named automated
+mutation binding. The audit reports native construction and parameter-binding
+coverage separately.
+
 The next native increment should broaden operation coverage and mutation cases
 without weakening the current contract: CadQuery remains the geometry oracle,
 every declared native parameter must bind and verify, required sketches must be
 fully defined, and every published persistent reference must resolve.
 
 Run `prompt2cad-solidworks-smoke` for the CadQuery build and native-plan phase.
-On a configured Windows workstation, add `--execute` to replay the same eight
+On a configured Windows workstation, add `--execute` to replay the same ten
 fixtures into `SLDPRT` files and record per-fixture failures in one report.

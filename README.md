@@ -23,6 +23,7 @@ and represented as a dependency graph for validated editing and native replay.
 - Versioned editable-model document with named parameters and validated rebuilds
 - Verified native SolidWorks replay with fully defined sketches, editable
   dimensions, patterns, persistent semantic references, and ordered features
+- Generated 286-case STEP/SolidWorks composition and mutation audit
 - Automatic repair fallback with structured diagnostics
 - Focused result refinement that preserves prior design intent and validates each revision
 - Deterministic fixtures and API benchmarks for semantic and geometric quality
@@ -43,7 +44,7 @@ to regenerate its STEP files locally.
 | Base profiles | Rectangle, circle, polygon, polyline, line/arc sketch |
 | Base operations | Extrude, full revolve, partial revolve |
 | Added features | Extrude, cut, revolve, revolved cut |
-| Feature placement | Face targets, offsets, symmetry, linear and circular patterns |
+| Feature placement | Named planar faces, offsets, symmetry, linear and circular patterns |
 | Hole features | Through, blind, counterbore, countersink |
 | Detail features | Fillet, chamfer, rounded slots and pockets |
 | References | Canonical face/edge IDs plus readable aliases such as `base.top` |
@@ -186,6 +187,14 @@ prompt2cad-solidworks-smoke
 prompt2cad-solidworks-smoke --execute
 ```
 
+Run the generated operation-composition matrix through STEP, or through an
+installed SolidWorks application with save/reopen mutation verification:
+
+```powershell
+prompt2cad-capability-audit --export-steps
+prompt2cad-capability-audit --execute-native --verify-native-editability
+```
+
 The native replay planner covers every operation in the STEP builder:
 rectangle, circle, polygon, polyline, and line/arc sketches; blind/through
 extrusions and cuts; full or partial revolves; circular, linear, and mirrored
@@ -257,6 +266,8 @@ Current priorities are:
 3. Broader native operation coverage while retaining STEP/SolidWorks parity.
 4. More mutation cases for topology-changing edits and reference recovery.
 
+For the exact tested operation boundary, construction/repair workflow, and
+release commands, see [release capabilities](docs/release_capabilities.md).
 For implementation details and known constraints, see
 [docs/architecture.md](docs/architecture.md) and the
 [editable feature architecture](docs/editable_features.md).
