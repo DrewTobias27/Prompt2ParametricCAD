@@ -633,7 +633,48 @@ def design_intent_from_openai(intent: dict[str, Any]) -> dict[str, Any]:
             for feature in intent.get("features", [])
         ],
     }
-    return normalized
+    return normalize_intent_placement_fields(normalized)
+
+
+CIRCULAR_PATTERN_START_ANGLE_ALIASES = (
+    "angle_offset",
+    "angle_offset_degrees",
+    "start_angle",
+)
+
+
+def normalize_intent_placement_fields(
+    intent: dict[str, Any],
+) -> dict[str, Any]:
+    """Canonicalize equivalent placement fields at the intent boundary.
+
+    Structured output normally restricts the model to the canonical schema,
+    but repaired or previously saved intent can still contain an intuitive
+    alias.  Normalize that vocabulary before validation so a requested
+    circular-pattern phase cannot be silently discarded.
+    """
+    features = []
+    for feature in intent.get("features", []):
+        placement = feature.get("placement")
+        if not isinstance(placement, dict):
+            features.append(feature)
+            continue
+
+        normalized_placement = dict(placement)
+        if placement.get("type") == "circular_pattern":
+            if "start_angle_degrees" not in normalized_placement:
+                for alias in CIRCULAR_PATTERN_START_ANGLE_ALIASES:
+                    if alias in normalized_placement:
+                        normalized_placement["start_angle_degrees"] = (
+                            normalized_placement[alias]
+                        )
+                        break
+            for alias in CIRCULAR_PATTERN_START_ANGLE_ALIASES:
+                normalized_placement.pop(alias, None)
+
+        features.append({**feature, "placement": normalized_placement})
+
+    return {**intent, "features": features}
 
 
 def feature_intent_from_openai(feature: dict[str, Any]) -> dict[str, Any]:
@@ -809,6 +850,7 @@ def prepare_design_intent_for_lowering(
 ) -> dict[str, Any]:
     """Return the canonical intent representation consumed by the lowerer."""
     intent = remove_null_values(intent)
+    intent = normalize_intent_placement_fields(intent)
     # Validate enums and structural fields before dimension inference. This
     # turns model-invented profile or placement names into actionable schema
     # feedback instead of downstream KeyError messages.

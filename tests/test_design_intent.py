@@ -3,6 +3,7 @@
 import pytest
 
 from prompt2cad.design_intent import intent_to_model_data
+from prompt2cad.design_intent import normalize_intent_placement_fields
 from prompt2cad.design_intent import offset_from_edge_position
 from prompt2cad.design_intent import validate_design_intent
 from prompt2cad.diagnostics import check_model_data
@@ -124,6 +125,57 @@ def test_circular_pattern_intent_computes_evenly_spaced_positions():
         "count": 4,
         "total_angle_degrees": 360,
     }
+    validate_model_data(model_data)
+
+
+def test_circular_pattern_angle_alias_is_canonicalized_before_lowering():
+    intent = {
+        "base": {
+            "id": "base",
+            "profile": "circle",
+            "diameter": 100,
+            "thickness": 6,
+        },
+        "features": [
+            {
+                "id": "bolt_holes",
+                "role": "bolt_hole",
+                "operation": "cut",
+                "target": "base.top",
+                "shape": "circle",
+                "diameter": 5,
+                "depth": "through",
+                "placement": {
+                    "type": "circular_pattern",
+                    "count": 6,
+                    "radius": 40,
+                    "angle_offset": 30,
+                },
+            }
+        ],
+    }
+
+    normalized = normalize_intent_placement_fields(intent)
+    model_data = intent_to_model_data(intent)
+
+    assert normalized["features"][0]["placement"] == {
+        "type": "circular_pattern",
+        "count": 6,
+        "radius": 40,
+        "start_angle_degrees": 30,
+    }
+    assert model_data["operations"][1]["positions"] == [
+        [34.641016, 20],
+        [0, 40],
+        [-34.641016, 20],
+        [-34.641016, -20],
+        [0, -40],
+        [34.641016, -20],
+    ]
+    assert model_data["operations"][1]["pattern"]["seed_position"] == [
+        34.641016,
+        20,
+    ]
     validate_model_data(model_data)
 
 

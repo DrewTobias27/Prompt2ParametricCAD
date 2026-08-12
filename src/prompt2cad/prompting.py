@@ -474,7 +474,9 @@ schema. Return only fields that apply to that variant. Examples:
 - A near_corners placement should include count and may use margin null when
   the backend should choose a default.
 - A circular_pattern placement should include count and may use radius null
-  when the backend should choose a reasonable radius.
+  when the backend should choose a reasonable radius. Use
+  start_angle_degrees for the pattern phase or a requested angular offset;
+  do not invent alternate field names such as angle_offset.
 
 Do not use null for dimensions required by the chosen base profile, feature
 shape, or operation. If the user asks for a hole, boss, slot, flange, or other
