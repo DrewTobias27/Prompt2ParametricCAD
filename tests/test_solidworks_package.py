@@ -11,9 +11,12 @@ from zipfile import ZipFile
 
 import pytest
 
+from prompt2cad.interpreter import build_model
 from prompt2cad.solidworks_package import create_solidworks_package
 from prompt2cad.solidworks_package import SOLIDWORKS_PACKAGE_FORMAT
 from prompt2cad.solidworks_package import SOLIDWORKS_PACKAGE_VERSION
+from prompt2cad.solidworks_smoke import compare_geometry_metrics
+from prompt2cad.solidworks_smoke import geometry_metrics
 
 
 PROJECT_ROOT = Path(__file__).parents[1]
@@ -28,6 +31,65 @@ def fixture_model_data() -> dict:
             / "circular_base_rectangular_boss.json"
         ).read_text(encoding="utf-8")
     )
+
+
+def curved_side_attachment_model_data() -> dict:
+    return {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "sketch",
+                "distance": 8,
+                "start": [-50, -35],
+                "segments": [
+                    {"type": "line", "to": [15, -35]},
+                    {"type": "arc", "through": [50, 0], "to": [15, 35]},
+                    {"type": "line", "to": [-50, 35]},
+                ],
+                "close": True,
+            },
+            {
+                "type": "add_extrude",
+                "id": "left_tab",
+                "target": "base.left",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 10,
+                "width": 18,
+                "height": 8,
+            },
+            {
+                "type": "add_extrude",
+                "id": "right_tab",
+                "target": "base.right",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 10,
+                "width": 18,
+                "height": 8,
+            },
+            {
+                "type": "cut",
+                "id": "left_hole",
+                "target": "left_tab.global_top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "depth": "through",
+                "diameter": 6,
+            },
+            {
+                "type": "cut",
+                "id": "right_hole",
+                "target": "right_tab.global_top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "depth": "through",
+                "diameter": 6,
+            },
+        ]
+    }
 
 
 def package_files(content: bytes) -> dict[str, bytes]:
@@ -209,3 +271,50 @@ def test_extracted_package_builds_verified_native_part(tmp_path: Path):
     assert report["health"]["under_defined_sketch_count"] == 0
     assert report["published_references"]
     assert all(item["resolved"] for item in report["published_references"])
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_NATIVE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_NATIVE=1 to open installed SolidWorks",
+)
+def test_curved_side_attachment_matches_cadquery_in_native_solidworks(
+    tmp_path: Path,
+):
+    model_data = curved_side_attachment_model_data()
+    expected_geometry = geometry_metrics(build_model(model_data))
+    package = create_solidworks_package(
+        model_data,
+        "Curved side attachment",
+    )
+    extract_package(package.content, tmp_path)
+    output_path = tmp_path / "curved-side-attachment.SLDPRT"
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "Build-SolidWorks-Part.ps1"),
+            "-OutputPath",
+            str(output_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output_path.is_file()
+    report_path = Path(f"{output_path}.result.json")
+    assert report_path.is_file()
+    report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+    assert report["status"] == "success"
+    assert report["feature_count"] == 5
+    assert report["verified_parameter_count"] == report["declared_parameter_count"]
+    assert report["health"]["feature_error_count"] == 0
+    assert report["health"]["under_defined_sketch_count"] == 0
+    comparison = compare_geometry_metrics(expected_geometry, report["geometry"])
+    assert comparison["passed"] is True

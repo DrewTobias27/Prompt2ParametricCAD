@@ -394,12 +394,19 @@ def _editable_parameters(feature_node: FeatureNode) -> list[EditableParameter]:
 
     _add_coordinate_geometry_parameters(operation, add_parameter)
 
-    for field_name in ("distance", "depth", "angle", "radius"):
+    for field_name in (
+        "distance",
+        "attachment_depth",
+        "depth",
+        "angle",
+        "radius",
+    ):
         if field_name not in operation:
             continue
 
         value_type = {
             "distance": "length",
+            "attachment_depth": "length",
             "depth": "end_condition",
             "angle": "angle",
             "radius": "length",
@@ -521,6 +528,7 @@ def _feature_control_name(operation_type: str, field_name: str) -> str:
     names = {
         ("extrude", "distance"): "Extrusion distance",
         ("add_extrude", "distance"): "Extrusion distance",
+        ("add_extrude", "attachment_depth"): "Attachment depth",
         ("cut", "depth"): "Cut depth",
         ("countersink", "depth"): "Hole depth",
         ("revolve", "angle"): "Revolve angle",

@@ -377,6 +377,34 @@ def test_validate_model_data_accepts_named_multi_position_add_extrude():
     validate_model_data(model_data)
 
 
+def test_validate_model_data_accepts_resolved_attachment_depth():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "circle",
+                "diameter": 70,
+                "distance": 8,
+            },
+            {
+                "type": "add_extrude",
+                "id": "side_tab",
+                "target": "base.right",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "width": 18,
+                "height": 8,
+                "distance": 10,
+                "attachment_depth": 1.2,
+            },
+        ]
+    }
+
+    validate_model_data(model_data)
+
+
 def test_validate_model_data_accepts_relationships():
     model_data = {
         "operations": [

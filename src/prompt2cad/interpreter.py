@@ -1,6 +1,7 @@
 """Interpret structured CAD operations and build a CadQuery model."""
 
 import math
+from copy import deepcopy
 
 import cadquery as cq
 
@@ -12,6 +13,9 @@ BASE_OPERATION_TYPES = {"extrude", "revolve"}
 SIDE_FACE_NAMES = {"front", "back", "left", "right"}
 GEOMETRY_TOLERANCE = 1e-9
 EDGE_MATCH_TOLERANCE = 1e-6
+VIRTUAL_ATTACHMENT_MIN_OVERLAP_RATIO = 0.5
+VIRTUAL_ATTACHMENT_INITIAL_SPAN_FRACTION = 0.001
+VIRTUAL_ATTACHMENT_MAX_SPAN_FRACTION = 0.25
 
 
 def apply_face_tags(
@@ -519,6 +523,27 @@ def keep_largest_connected_solid(part: cq.Workplane) -> cq.Workplane:
 
     largest_solid = max(solids, key=lambda solid: solid.Volume())
     return part.newObject([largest_solid])
+
+
+def total_solid_volume(part: cq.Workplane) -> float:
+    """Return the combined volume of every solid in a workplane."""
+    return sum(solid.Volume() for solid in part.solids().vals())
+
+
+def projected_bounding_box_span(
+    part: cq.Workplane,
+    direction: cq.Vector,
+) -> float:
+    """Return an axis-aligned bounding-box span along a world direction."""
+    bounding_box = part.val().BoundingBox()
+    if direction.Length <= GEOMETRY_TOLERANCE:
+        raise ValueError("Attachment direction cannot be zero")
+    normal = direction.multiply(1 / direction.Length)
+    return (
+        abs(normal.x) * bounding_box.xlen
+        + abs(normal.y) * bounding_box.ylen
+        + abs(normal.z) * bounding_box.zlen
+    )
 
 
 def edge_touches_outer_box(edge, bounding_box) -> bool:
@@ -1039,6 +1064,97 @@ def apply_countersink_operation(
     return keep_largest_connected_solid(part.cut(cutting_tool))
 
 
+def build_add_extrusion_tool(
+    target_workplane: cq.Workplane,
+    operation: dict,
+    operation_number: int,
+    positions: list,
+    distance: float,
+) -> cq.Workplane:
+    """Build one additive extrusion tool in either sketch-normal direction."""
+    workplane = target_workplane.pushPoints(positions)
+    workplane = create_profile(workplane, operation, operation_number)
+    return workplane.extrude(distance)
+
+
+def add_extrusion_tool_with_attachment(
+    target_workplane: cq.Workplane,
+    operation: dict,
+    operation_number: int,
+    positions: list,
+    outward_tool: cq.Workplane,
+    attachment_depth: float,
+) -> tuple[cq.Workplane, cq.Workplane]:
+    """Return the joined tool and its inward-only attachment volume."""
+    inward_tool = build_add_extrusion_tool(
+        target_workplane,
+        operation,
+        operation_number,
+        positions,
+        -attachment_depth,
+    )
+    return outward_tool.union(inward_tool), inward_tool
+
+
+def add_virtual_side_attachment(
+    part: cq.Workplane,
+    target_workplane: cq.Workplane,
+    operation: dict,
+    operation_number: int,
+    positions: list,
+    outward_tool: cq.Workplane,
+) -> tuple[cq.Workplane, float | None]:
+    """Find a stable inward extent while preserving the outward dimension.
+
+    A sketch on a tangent plane of a curved body can touch that body along only
+    a line, which CAD kernels correctly treat as a separate solid. Search for
+    the smallest bounded second-direction depth whose tool has substantial
+    volumetric overlap with the existing body. The requested outward distance
+    remains unchanged.
+    """
+    body_span = projected_bounding_box_span(
+        part,
+        target_workplane.plane.zDir,
+    )
+    initial_depth = max(
+        body_span * VIRTUAL_ATTACHMENT_INITIAL_SPAN_FRACTION,
+        0.001,
+    )
+    max_depth = min(
+        max(body_span * VIRTUAL_ATTACHMENT_MAX_SPAN_FRACTION, initial_depth),
+        max(float(operation["distance"]), initial_depth),
+    )
+    original_result = part.union(outward_tool)
+    depth = initial_depth
+
+    while True:
+        combined_tool, inward_tool = add_extrusion_tool_with_attachment(
+            target_workplane,
+            operation,
+            operation_number,
+            positions,
+            outward_tool,
+            depth,
+        )
+        candidate = part.union(combined_tool)
+        if len(candidate.solids().vals()) == 1:
+            inward_volume = total_solid_volume(inward_tool)
+            overlap_volume = total_solid_volume(part.intersect(inward_tool))
+            overlap_ratio = (
+                overlap_volume / inward_volume
+                if inward_volume > GEOMETRY_TOLERANCE
+                else 0
+            )
+            if overlap_ratio >= VIRTUAL_ATTACHMENT_MIN_OVERLAP_RATIO:
+                return candidate, round(depth, 6)
+
+        if depth >= max_depth:
+            break
+        depth = min(depth * 2, max_depth)
+
+    return original_result, None
+
+
 def apply_add_extrusion(
     part: cq.Workplane,
     operation: dict,
@@ -1063,10 +1179,41 @@ def apply_add_extrusion(
     )
 
     if is_virtual_target:
-        workplane = target_workplane.pushPoints(positions)
-        workplane = create_profile(workplane, operation, operation_number)
-        extrusion_tool = workplane.extrude(distance)
-        result = part.union(extrusion_tool)
+        extrusion_tool = build_add_extrusion_tool(
+            target_workplane,
+            operation,
+            operation_number,
+            positions,
+            distance,
+        )
+        attachment_depth = operation.get("attachment_depth")
+        if attachment_depth is not None:
+            validate_positive_number(attachment_depth, "Attachment depth")
+            combined_tool, _ = add_extrusion_tool_with_attachment(
+                target_workplane,
+                operation,
+                operation_number,
+                positions,
+                extrusion_tool,
+                attachment_depth,
+            )
+            result = part.union(combined_tool)
+        else:
+            result = part.union(extrusion_tool)
+            if (
+                is_side_target(target)
+                and len(result.solids().vals()) != 1
+            ):
+                result, attachment_depth = add_virtual_side_attachment(
+                    part,
+                    target_workplane,
+                    operation,
+                    operation_number,
+                    positions,
+                    extrusion_tool,
+                )
+                if attachment_depth is not None:
+                    operation["attachment_depth"] = attachment_depth
         register_add_extrusion_references(
             feature_graph,
             part,
@@ -1314,6 +1461,7 @@ def build_model_with_graph(model_data: dict) -> tuple[cq.Workplane, FeatureGraph
                 f"unsupported operation type: {operation_type}"
             )
 
+        feature_node.operation = deepcopy(operation)
         feature_graph.refresh_created_references(feature_node.id)
 
     if part is None:

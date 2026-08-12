@@ -405,6 +405,7 @@ def build_add_extrude_schema(
     require_id: bool = False,
     include_face_tags: bool = True,
     include_pattern: bool = True,
+    include_runtime_fields: bool = True,
 ) -> dict:
     """Build a schema for an additive extrusion operation."""
     properties = {
@@ -436,6 +437,8 @@ def build_add_extrude_schema(
         }
     if include_optional_fields and include_pattern:
         properties["pattern"] = FEATURE_PATTERN_SCHEMA
+    if include_optional_fields and include_runtime_fields:
+        properties["attachment_depth"] = POSITIVE_NUMBER_SCHEMA
 
     required = [
         "type",
@@ -637,6 +640,7 @@ RELATIONAL_OPENAI_RECTANGLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     require_id=True,
     include_face_tags=False,
     include_pattern=False,
+    include_runtime_fields=False,
 )
 RELATIONAL_OPENAI_CIRCLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "circle",
@@ -644,6 +648,7 @@ RELATIONAL_OPENAI_CIRCLE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     require_id=True,
     include_face_tags=False,
     include_pattern=False,
+    include_runtime_fields=False,
 )
 RELATIONAL_OPENAI_POLYGON_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "polygon",
@@ -651,6 +656,7 @@ RELATIONAL_OPENAI_POLYGON_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     require_id=True,
     include_face_tags=False,
     include_pattern=False,
+    include_runtime_fields=False,
 )
 RELATIONAL_OPENAI_POLYLINE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "polyline",
@@ -658,6 +664,7 @@ RELATIONAL_OPENAI_POLYLINE_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     require_id=True,
     include_face_tags=False,
     include_pattern=False,
+    include_runtime_fields=False,
 )
 RELATIONAL_OPENAI_SKETCH_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     "sketch",
@@ -665,6 +672,7 @@ RELATIONAL_OPENAI_SKETCH_ADD_EXTRUDE_SCHEMA = build_add_extrude_schema(
     require_id=True,
     include_face_tags=False,
     include_pattern=False,
+    include_runtime_fields=False,
 )
 
 

@@ -91,6 +91,18 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "name")]
         public string Name { get; set; }
 
+        [DataMember(Name = "datum_name")]
+        public string DatumName { get; set; }
+
+        [DataMember(Name = "offset_mm")]
+        public double OffsetMillimeters { get; set; }
+
+        [DataMember(Name = "flip_offset")]
+        public bool FlipOffset { get; set; }
+
+        [DataMember(Name = "reverse_direction")]
+        public bool ReverseDirection { get; set; }
+
         [DataMember(Name = "entity_name")]
         public string EntityName { get; set; }
 
@@ -245,11 +257,17 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "depth_mm")]
         public double? DepthMillimeters { get; set; }
 
+        [DataMember(Name = "reverse_depth_mm")]
+        public double? ReverseDepthMillimeters { get; set; }
+
         [DataMember(Name = "merge_result")]
         public bool MergeResult { get; set; }
 
         [DataMember(Name = "driving_dimension")]
         public DimensionSpec DrivingDimension { get; set; }
+
+        [DataMember(Name = "reverse_driving_dimension")]
+        public DimensionSpec ReverseDrivingDimension { get; set; }
 
         [DataMember(Name = "angle_deg")]
         public double AngleDegrees { get; set; }
@@ -578,7 +596,7 @@ namespace Prompt2Cad.SolidWorks
     {
         private const double MillimetersPerMeter = 1000.0;
         private const string ReplayFormat = "prompt2cad.solidworks-replay-plan";
-        private const int ReplayVersion = 6;
+        private const int ReplayVersion = 7;
         private static string tracePath;
 
         public static string Execute(
@@ -1281,7 +1299,7 @@ namespace Prompt2Cad.SolidWorks
             ReplayStep step)
         {
             Trace("Selecting support for " + step.SketchName);
-            SelectSketchSupport(model, part, step.Support);
+            SelectSketchSupport(application, model, part, step.Support);
             SketchManager sketchManager = model.SketchManager;
             Trace("Entering sketch " + step.SketchName);
             sketchManager.InsertSketch(true);
@@ -1533,6 +1551,7 @@ namespace Prompt2Cad.SolidWorks
         }
 
         private static void SelectSketchSupport(
+            SldWorks application,
             ModelDoc2 model,
             PartDoc part,
             SketchSupport support)
@@ -1557,6 +1576,11 @@ namespace Prompt2Cad.SolidWorks
                         "Could not select datum plane '" + support.Name + "'."
                     );
                 }
+                return;
+            }
+            if (support.Kind == "offset_plane")
+            {
+                SelectOrCreateOffsetPlane(application, model, support);
                 return;
             }
             if (support.Kind == "resolved_feature_face")
@@ -1615,6 +1639,172 @@ namespace Prompt2Cad.SolidWorks
             {
                 throw new InvalidOperationException(
                     "Named support face '" + support.EntityName + "' could not be selected."
+                );
+            }
+        }
+
+        private static void SelectOrCreateOffsetPlane(
+            SldWorks application,
+            ModelDoc2 model,
+            SketchSupport support)
+        {
+            bool selectedExisting = model.Extension.SelectByID2(
+                support.Name,
+                "PLANE",
+                0.0,
+                0.0,
+                0.0,
+                false,
+                0,
+                null,
+                0
+            );
+            if (selectedExisting)
+            {
+                Feature existingPlane = FindFeatureByName(model, support.Name);
+                ValidateOffsetPlaneTransform(
+                    application,
+                    existingPlane,
+                    support
+                );
+                return;
+            }
+            if (String.IsNullOrWhiteSpace(support.DatumName) ||
+                support.OffsetMillimeters <= 0.0)
+            {
+                throw new InvalidOperationException(
+                    "Offset-plane support requires a datum name and a " +
+                    "positive offset."
+                );
+            }
+
+            model.ClearSelection2(true);
+            bool selectedDatum = model.Extension.SelectByID2(
+                support.DatumName,
+                "PLANE",
+                0.0,
+                0.0,
+                0.0,
+                false,
+                0,
+                null,
+                0
+            );
+            if (!selectedDatum)
+            {
+                throw new InvalidOperationException(
+                    "Could not select offset-plane datum '" +
+                    support.DatumName + "'."
+                );
+            }
+
+            int constraint = (int)swRefPlaneReferenceConstraints_e
+                .swRefPlaneReferenceConstraint_Distance;
+            if (support.FlipOffset)
+            {
+                constraint |= (int)swRefPlaneReferenceConstraints_e
+                    .swRefPlaneReferenceConstraint_OptionFlip;
+            }
+            object createdPlane = model.FeatureManager.InsertRefPlane(
+                constraint,
+                ToMeters(support.OffsetMillimeters),
+                0,
+                0.0,
+                0,
+                0.0
+            );
+            Feature planeFeature = createdPlane as Feature;
+            if (planeFeature == null)
+            {
+                planeFeature = model.IFeatureByPositionReverse(0);
+            }
+            if (planeFeature == null)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS did not create offset plane '" +
+                    support.Name + "'."
+                );
+            }
+            planeFeature.Name = support.Name;
+            ValidateOffsetPlaneTransform(application, planeFeature, support);
+            model.ClearSelection2(true);
+            if (!planeFeature.Select2(false, 0))
+            {
+                throw new InvalidOperationException(
+                    "Offset plane '" + support.Name +
+                    "' could not be selected."
+                );
+            }
+        }
+
+        private static void ValidateOffsetPlaneTransform(
+            SldWorks application,
+            Feature planeFeature,
+            SketchSupport support)
+        {
+            RefPlane referencePlane = planeFeature == null
+                ? null
+                : planeFeature.GetSpecificFeature2()
+                as RefPlane;
+            MathTransform transform = referencePlane == null
+                ? null
+                : referencePlane.Transform;
+            double[] values = transform == null
+                ? null
+                : transform.ArrayData as double[];
+            if (values == null || values.Length < 13)
+            {
+                throw new InvalidOperationException(
+                    "Offset plane '" + support.Name +
+                    "' did not expose a readable transform."
+                );
+            }
+
+            MathUtility mathUtility = application == null
+                ? null
+                : application.IGetMathUtility();
+            MathTransform modelToPlane = transform.IInverse();
+            double[] targetOrigin = support.Frame.OriginMillimeters;
+            MathPoint targetWorldPoint = mathUtility == null
+                ? null
+                : mathUtility.CreatePoint(new[]
+                    {
+                        ToMeters(targetOrigin[0]),
+                        ToMeters(targetOrigin[1]),
+                        ToMeters(targetOrigin[2]),
+                    })
+                    as MathPoint;
+            MathPoint targetPlanePoint = targetWorldPoint == null ||
+                modelToPlane == null
+                ? null
+                : targetWorldPoint.IMultiplyTransform(modelToPlane);
+            double[] planeCoordinates = targetPlanePoint == null
+                ? null
+                : targetPlanePoint.ArrayData as double[];
+            if (planeCoordinates == null || planeCoordinates.Length < 3)
+            {
+                throw new InvalidOperationException(
+                    "Offset plane '" + support.Name +
+                    "' transform could not map its requested support point."
+                );
+            }
+            Trace(
+                "Offset plane " + support.Name + " target origin [" +
+                String.Join(",", targetOrigin) +
+                "] maps to plane [" +
+                String.Join(",", planeCoordinates) +
+                "] transform [" + String.Join(",", values) + "]"
+            );
+
+            double normalSeparation = Math.Abs(
+                planeCoordinates[2] * MillimetersPerMeter
+            );
+            if (normalSeparation > 1e-4)
+            {
+                throw new InvalidOperationException(
+                    "Offset plane '" + support.Name + "' was created " +
+                    normalSeparation + " mm from its requested support " +
+                    "location. Check the datum offset direction."
                 );
             }
         }
@@ -1801,15 +1991,22 @@ namespace Prompt2Cad.SolidWorks
             {
                 double halfWidth = sketch.WidthMillimeters / 2.0;
                 double halfHeight = sketch.HeightMillimeters / 2.0;
+                double[] seedCenter = addDrivingDimensions
+                    ? NativeProfileSeedCenter(center)
+                    : center;
                 double[] centerWorld = ToSketchPoint(
                     frame,
-                    center,
+                    seedCenter,
                     mathUtility,
                     modelToSketch
                 );
                 double[] cornerWorld = ToSketchPoint(
                     frame,
-                    new[] { center[0] + halfWidth, center[1] + halfHeight },
+                    new[]
+                    {
+                        seedCenter[0] + halfWidth,
+                        seedCenter[1] + halfHeight,
+                    },
                     mathUtility,
                     modelToSketch
                 );
@@ -1832,19 +2029,20 @@ namespace Prompt2Cad.SolidWorks
                     segments,
                     centerWorld
                 );
-                ApplyPlacementControl(
-                    model,
-                    sketchManager,
-                    frame,
-                    centerPoint,
-                    placementControl,
-                    ref placementAnchor,
-                    mathUtility,
-                    modelToSketch
+                Trace(
+                    "Rectangle constraint status before size dimensions for " +
+                    step.SketchName + ": " + ConstraintStatusName(
+                        segments[0].GetSketch().GetConstrainedStatus()
+                    )
                 );
                 TraceSketchPoints(
                     segments[0].GetSketch(),
                     "Rectangle before dimensions for " + step.SketchName
+                );
+                TraceSketchRelations(
+                    segments[0].GetSketch(),
+                    "Rectangle relations before dimensions for " +
+                    step.SketchName
                 );
                 if (addDrivingDimensions)
                 {
@@ -1858,6 +2056,16 @@ namespace Prompt2Cad.SolidWorks
                         modelToSketch
                     );
                 }
+                ApplyPlacementControl(
+                    model,
+                    sketchManager,
+                    frame,
+                    centerPoint,
+                    placementControl,
+                    ref placementAnchor,
+                    mathUtility,
+                    modelToSketch
+                );
                 TraceSketchPoints(
                     segments[0].GetSketch(),
                     "Rectangle after dimensions for " + step.SketchName
@@ -1868,9 +2076,12 @@ namespace Prompt2Cad.SolidWorks
             if (sketch.Profile == "circle")
             {
                 double radius = ToMeters(sketch.DiameterMillimeters / 2.0);
+                double[] seedCenter = addDrivingDimensions
+                    ? NativeProfileSeedCenter(center)
+                    : center;
                 double[] centerWorld = ToSketchPoint(
                     frame,
-                    center,
+                    seedCenter,
                     mathUtility,
                     modelToSketch
                 );
@@ -1887,16 +2098,6 @@ namespace Prompt2Cad.SolidWorks
                     circle.GetSketch(),
                     centerWorld
                 );
-                ApplyPlacementControl(
-                    model,
-                    sketchManager,
-                    frame,
-                    centerPoint,
-                    placementControl,
-                    ref placementAnchor,
-                    mathUtility,
-                    modelToSketch
-                );
                 if (addDrivingDimensions)
                 {
                     AddCircleDimension(
@@ -1909,6 +2110,16 @@ namespace Prompt2Cad.SolidWorks
                         modelToSketch
                     );
                 }
+                ApplyPlacementControl(
+                    model,
+                    sketchManager,
+                    frame,
+                    centerPoint,
+                    placementControl,
+                    ref placementAnchor,
+                    mathUtility,
+                    modelToSketch
+                );
                 return;
             }
 
@@ -1979,6 +2190,30 @@ namespace Prompt2Cad.SolidWorks
             throw new InvalidOperationException(
                 "Unsupported native sketch profile '" + sketch.Profile + "'."
             );
+        }
+
+        private static double[] NativeProfileSeedCenter(double[] center)
+        {
+            // A profile created exactly on an existing body boundary can
+            // acquire an implicit placement degree of freedom in SOLIDWORKS
+            // even with AddToDB enabled.  Start slightly away from coincident
+            // geometry; named placement controls move it to the exact source
+            // coordinates before the feature is built.
+            const double seedOffsetMillimeters = 0.137;
+            return new[]
+            {
+                SeedCoordinate(center[0], seedOffsetMillimeters),
+                SeedCoordinate(center[1], seedOffsetMillimeters),
+            };
+        }
+
+        private static double SeedCoordinate(double value, double offset)
+        {
+            if (Math.Abs(value) <= 1e-12)
+            {
+                return offset;
+            }
+            return value + Math.Sign(value) * offset;
         }
 
         private static void CreateClosedPolyline(
@@ -2575,6 +2810,34 @@ namespace Prompt2Cad.SolidWorks
                 );
             }
 
+            Trace(
+                "Initial driven state for " + specification.NativeName +
+                ": " + dimension.DrivenState
+            );
+            if (dimension.DrivenState ==
+                (int)swDimensionDrivenState_e.swDimensionDriven)
+            {
+                Trace(
+                    "Converting driven sketch dimension " +
+                    specification.NativeName + " to driving"
+                );
+                dimension.DrivenState =
+                    (int)swDimensionDrivenState_e.swDimensionDriving;
+                Trace(
+                    "Driven state after conversion for " +
+                    specification.NativeName + ": " +
+                    dimension.DrivenState
+                );
+            }
+            if (dimension.DrivenState ==
+                (int)swDimensionDrivenState_e.swDimensionDriven)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS kept dimension '" +
+                    specification.NativeName +
+                    "' driven instead of editable."
+                );
+            }
             dimension.Name = specification.NativeName;
             int status = dimension.SetSystemValue3(
                 ToSystemValue(specification),
@@ -2614,14 +2877,28 @@ namespace Prompt2Cad.SolidWorks
             {
                 depth = ToMeters(step.Feature.DepthMillimeters.Value);
             }
+            bool reverseDirection = step.Support != null &&
+                step.Support.ReverseDirection;
+            bool singleEnded = !step.Feature.ReverseDepthMillimeters.HasValue;
+            double reverseDepth = step.Feature.ReverseDepthMillimeters.HasValue
+                ? ToMeters(step.Feature.ReverseDepthMillimeters.Value)
+                : 0.01;
+            if (step.Feature.ReverseDepthMillimeters.HasValue &&
+                step.Feature.ReverseDepthMillimeters.Value <= 0.0)
+            {
+                throw new InvalidOperationException(
+                    "Reverse extrusion depth must be positive."
+                );
+            }
+            int secondEndCondition = (int)swEndConditions_e.swEndCondBlind;
 
             Feature feature;
             if (step.Feature.Kind == "boss_extrude")
             {
                 feature = manager.FeatureExtrusion3(
-                    true, false, false,
-                    endCondition, 0,
-                    depth, 0.01,
+                    singleEnded, false, reverseDirection,
+                    endCondition, secondEndCondition,
+                    depth, reverseDepth,
                     false, false, false, false,
                     0.0, 0.0,
                     false, false, false, false,
@@ -2633,7 +2910,7 @@ namespace Prompt2Cad.SolidWorks
             else if (step.Feature.Kind == "cut_extrude")
             {
                 feature = manager.FeatureCut4(
-                    true, false, false,
+                    true, false, reverseDirection,
                     endCondition, 0,
                     depth, 0.01,
                     false, false, false, false,
@@ -2746,9 +3023,9 @@ namespace Prompt2Cad.SolidWorks
                 if (step.Feature.Kind == "boss_extrude")
                 {
                     feature = manager.FeatureExtrusion3(
-                        true, false, true,
-                        endCondition, 0,
-                        depth, 0.01,
+                        singleEnded, false, !reverseDirection,
+                        endCondition, secondEndCondition,
+                        depth, reverseDepth,
                         false, false, false, false,
                         0.0, 0.0,
                         false, false, false, false,
@@ -2760,7 +3037,7 @@ namespace Prompt2Cad.SolidWorks
                 else
                 {
                     feature = manager.FeatureCut4(
-                        true, false, true,
+                        true, false, !reverseDirection,
                         endCondition, 0,
                         depth, 0.01,
                         false, false, false, false,
@@ -2789,6 +3066,12 @@ namespace Prompt2Cad.SolidWorks
                 feature,
                 step.Feature.DrivingDimension,
                 step.FeatureName
+            );
+            ConfigureFeatureDrivingDimension(
+                feature,
+                step.Feature.ReverseDrivingDimension,
+                step.FeatureName,
+                "D2"
             );
 
             if (!model.EditRebuild3())
@@ -2877,18 +3160,20 @@ namespace Prompt2Cad.SolidWorks
         private static void ConfigureFeatureDrivingDimension(
             Feature feature,
             DimensionSpec specification,
-            string featureName)
+            string featureName,
+            string dimensionParameter = "D1")
         {
             if (specification == null)
             {
                 return;
             }
-            object dimensionObject = feature.Parameter("D1");
+            object dimensionObject = feature.Parameter(dimensionParameter);
             if (dimensionObject == null)
             {
                 throw new InvalidOperationException(
                     "Native feature '" + featureName +
-                    "' has no D1 driving dimension."
+                    "' has no " + dimensionParameter +
+                    " driving dimension."
                 );
             }
             Dimension dimension = (Dimension)dimensionObject;
@@ -3283,7 +3568,7 @@ namespace Prompt2Cad.SolidWorks
             ReplayStep step,
             Feature seedFeature)
         {
-            SelectSketchSupport(model, part, step.Support);
+            SelectSketchSupport(application, model, part, step.Support);
             SketchManager sketchManager = model.SketchManager;
             sketchManager.InsertSketch(true);
             Feature sketchFeature = model.GetActiveSketch2() as Feature;
@@ -5101,11 +5386,57 @@ namespace Prompt2Cad.SolidWorks
                 if (point != null)
                 {
                     coordinates.Add(
-                        "[" + point.X + "," + point.Y + "," + point.Z + "]"
+                        "[" + point.X + "," + point.Y + "," + point.Z +
+                        ";status=" + point.Status + "]"
+                    );
+                }
+            }
+            foreach (object segmentObject in ObjectItems(
+                sketch.GetSketchSegments()
+            ))
+            {
+                SketchSegment segment = segmentObject as SketchSegment;
+                if (segment != null)
+                {
+                    coordinates.Add(
+                        "segment(status=" + segment.Status +
+                        ",construction=" + segment.ConstructionGeometry + ")"
                     );
                 }
             }
             Trace(label + ": " + String.Join(";", coordinates));
+        }
+
+        private static void TraceSketchRelations(Sketch sketch, string label)
+        {
+            if (!String.Equals(
+                System.Environment.GetEnvironmentVariable(
+                    "P2P_TRACE_COORDINATES"
+                ),
+                "1",
+                StringComparison.Ordinal) || sketch == null)
+            {
+                return;
+            }
+
+            SketchRelationManager manager = sketch.RelationManager;
+            var relations = new List<string>();
+            foreach (object relationObject in ObjectItems(
+                manager.GetRelations(
+                    (int)swSketchRelationFilterType_e.swAll
+                )
+            ))
+            {
+                SketchRelation relation = relationObject as SketchRelation;
+                if (relation != null)
+                {
+                    relations.Add(
+                        ((swConstraintType_e)relation.GetRelationType()) +
+                        "(" + relation.GetEntitiesCount() + ")"
+                    );
+                }
+            }
+            Trace(label + ": " + String.Join(";", relations));
         }
 
         private static void TryDeleteTrace()

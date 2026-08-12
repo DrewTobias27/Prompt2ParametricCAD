@@ -72,6 +72,56 @@ def test_register_rectangular_prism_instance_references():
     assert registry.resolve_reference_name("feature_1.right") is None
 
 
+def test_side_extrusion_exposes_global_top_face_alias():
+    registry = FeatureRegistry()
+    side_plane = cq.Plane(
+        origin=(50, 0, 4),
+        xDir=(0, 1, 0),
+        normal=(1, 0, 0),
+    )
+
+    registry.register_rectangular_prism_faces(
+        feature_id="side_tab",
+        target_plane=side_plane,
+        width=18,
+        height=8,
+        distance=10,
+        position=[0, 0],
+    )
+
+    global_top = registry.get_plane("side_tab.global_top")
+
+    assert global_top is not None
+    assert global_top.origin.toTuple() == pytest.approx((55, 0, 8))
+    assert global_top.zDir.toTuple() == pytest.approx((0, 0, 1))
+    assert registry.resolve_reference_name("side_tab.global_top") == (
+        "side_tab.face.f003"
+    )
+
+
+def test_arbitrary_extrusion_registers_stable_directional_planes():
+    registry = FeatureRegistry()
+    target_plane = cq.Plane.XY()
+    solid = cq.Workplane("XY").circle(35).extrude(8).val()
+
+    registry.register_extruded_solid_references(
+        feature_id="base",
+        reference_scope="base",
+        target_plane=target_plane,
+        solid=solid,
+        distance=8,
+        position=[0, 0],
+    )
+
+    right = registry.get_plane("base.right")
+    global_top = registry.get_plane("base.global_top")
+
+    assert right is not None
+    assert right.origin.toTuple() == pytest.approx((35, 0, 4))
+    assert right.zDir.toTuple() == pytest.approx((1, 0, 0))
+    assert global_top.origin.toTuple() == pytest.approx((0, 0, 8))
+
+
 def test_pattern_planes_keep_shared_parent_origin():
     registry = FeatureRegistry()
     target_plane = cq.Plane.XY(origin=(10, 20, 8))

@@ -9,7 +9,7 @@ Windows PowerShell/COM runner only after every feature has been accepted.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from hashlib import sha1
 import json
 from pathlib import Path
@@ -23,7 +23,7 @@ from prompt2cad.editable_model import EditableModelDocument
 
 
 SOLIDWORKS_REPLAY_FORMAT = "prompt2cad.solidworks-replay-plan"
-SOLIDWORKS_REPLAY_VERSION = 6
+SOLIDWORKS_REPLAY_VERSION = 7
 SUPPORTED_OPERATION_TYPES = {
     "extrude",
     "add_extrude",
@@ -153,6 +153,7 @@ class SolidWorksReplayPlan:
                 "supported_supports": [
                     "XY source datum plane",
                     "named planar feature faces",
+                    "axis-aligned virtual offset planes",
                 ],
                 "multi_instance_sketches": True,
                 "native_patterns": ["circular", "linear", "mirror"],
@@ -183,6 +184,7 @@ def build_solidworks_replay_plan(
     published_faces: dict[str, dict[str, str]] = {}
     native_feature_names: dict[str, str] = {}
     native_feature_frames: dict[str, dict] = {}
+    published_face_planes: dict[tuple, str] = {}
     used_feature_names: set[str] = set()
 
     for build_index, feature in enumerate(document.features):
@@ -200,15 +202,16 @@ def build_solidworks_replay_plan(
             errors.append(f"{feature.id}: {error}")
             continue
 
+        replay_feature, feature_face_map = _deduplicate_coplanar_face_references(
+            feature,
+            replay_feature,
+            published_face_planes,
+        )
         replay_features.append(replay_feature)
         used_feature_names.add(feature_name)
         native_feature_names[feature.id] = feature_name
         native_feature_frames[feature.id] = dict(replay_feature.support.get("frame", {}))
-        published_faces[feature.id] = {
-            reference["semantic_name"]: reference["entity_name"]
-            for reference in replay_feature.publish_references
-            if reference["entity_type"] == "face"
-        }
+        published_faces[feature.id] = feature_face_map
 
     if errors:
         raise SolidWorksReplayError(
@@ -225,6 +228,131 @@ def build_solidworks_replay_plan(
         features=tuple(replay_features),
         source_build_order=document.build_order,
     )
+
+
+def _deduplicate_coplanar_face_references(
+    feature: EditableFeatureDefinition,
+    replay_feature: SolidWorksReplayFeature,
+    published_face_planes: dict[tuple, str],
+) -> tuple[SolidWorksReplayFeature, dict[str, str]]:
+    """Reuse one native name when merged features share a planar face.
+
+    SOLIDWORKS allows one entity name per face.  A coplanar additive feature
+    can merge its top or bottom into an already named plate face, so assigning
+    a second feature-local name would fail even though both semantic
+    references correctly describe the same support plane.  Plane keys are
+    derived from the stable feature frame, not rediscovered from final
+    topology.
+    """
+    unique_references: list[dict] = []
+    face_map: dict[str, str] = {}
+    for reference in replay_feature.publish_references:
+        if reference.get("entity_type") != "face":
+            unique_references.append(reference)
+            continue
+
+        semantic_name = reference["semantic_name"]
+        plane_key = _published_reference_plane_key(
+            feature,
+            replay_feature.support,
+            reference,
+        )
+        existing_name = (
+            published_face_planes.get(plane_key)
+            if plane_key is not None
+            else None
+        )
+        if existing_name is not None:
+            face_map[semantic_name] = existing_name
+            continue
+
+        entity_name = reference["entity_name"]
+        unique_references.append(reference)
+        face_map[semantic_name] = entity_name
+        if plane_key is not None:
+            published_face_planes[plane_key] = entity_name
+
+    return (
+        replace(
+            replay_feature,
+            publish_references=tuple(unique_references),
+        ),
+        face_map,
+    )
+
+
+def _published_reference_plane_key(
+    feature: EditableFeatureDefinition,
+    support: dict,
+    reference: dict,
+) -> tuple | None:
+    selector = reference.get("selector", {})
+    if selector.get("kind") != "planar_face_direction":
+        return None
+    origin = _published_face_origin(
+        feature,
+        support,
+        reference["semantic_name"],
+    )
+    if origin is None:
+        return None
+
+    direction = _normalize(
+        [float(value) for value in selector["direction"]]
+    )
+    stable_direction = tuple(
+        0.0 if abs(value) <= 1e-9 else round(value, 6)
+        for value in direction
+    )
+    return stable_direction + (round(_dot(origin, direction), 6),)
+
+
+def _published_face_origin(
+    feature: EditableFeatureDefinition,
+    support: dict,
+    semantic_name: str,
+) -> list[float] | None:
+    operation = feature.source_operation
+    if feature.operation_type not in {"extrude", "add_extrude"}:
+        return None
+
+    frame = support.get("frame") or {}
+    origin = [float(value) for value in frame.get("origin_mm", [])]
+    normal = [float(value) for value in frame.get("normal", [])]
+    x_axis = [float(value) for value in frame.get("x_axis", [])]
+    if len(origin) != 3 or len(normal) != 3 or len(x_axis) != 3:
+        return None
+    normal = _normalize(normal)
+    x_axis = _normalize(x_axis)
+    y_axis = _normalize(_cross(normal, x_axis))
+
+    if semantic_name == "top":
+        return _add(origin, _scale(normal, float(operation["distance"])))
+    if semantic_name == "bottom":
+        return origin
+    if operation.get("profile") != "rectangle":
+        return None
+
+    positions = operation.get("positions", [[0, 0]])
+    if len(positions) != 1:
+        return None
+    center = _add(
+        origin,
+        _add(
+            _scale(x_axis, float(positions[0][0])),
+            _scale(y_axis, float(positions[0][1])),
+        ),
+    )
+    offsets = {
+        "right": (x_axis, float(operation["width"]) / 2),
+        "left": (_scale(x_axis, -1), float(operation["width"]) / 2),
+        "front": (y_axis, float(operation["height"]) / 2),
+        "back": (_scale(y_axis, -1), float(operation["height"]) / 2),
+    }
+    offset = offsets.get(semantic_name)
+    if offset is None:
+        return None
+    return _add(center, _scale(offset[0], offset[1]))
 
 
 def export_solidworks_part(
@@ -977,6 +1105,15 @@ def _native_parameter_bindings(
                 owner_name=native_owner_name,
             )
         )
+    reverse_driving_dimension = native_feature.get("reverse_driving_dimension")
+    if reverse_driving_dimension is not None:
+        bindings.append(
+            _dimension_binding(
+                reverse_driving_dimension,
+                owner_kind="feature",
+                owner_name=native_owner_name,
+            )
+        )
 
     if native_feature.get("kind") == "countersink":
         property_names = {
@@ -1099,7 +1236,7 @@ def _native_feature_control(feature: EditableFeatureDefinition) -> dict:
     operation_type = feature.operation_type
     if operation_type in {"extrude", "add_extrude"}:
         distance = float(operation["distance"])
-        return {
+        control = {
             "kind": "boss_extrude",
             "end_condition": "blind",
             "depth_mm": distance,
@@ -1111,6 +1248,23 @@ def _native_feature_control(feature: EditableFeatureDefinition) -> dict:
                 value=distance,
             ),
         }
+        attachment_depth = operation.get("attachment_depth")
+        if attachment_depth is not None:
+            attachment_depth = float(attachment_depth)
+            control.update(
+                {
+                    "reverse_depth_mm": attachment_depth,
+                    "reverse_driving_dimension": _dimension(
+                        feature,
+                        parameter_id=(
+                            f"{feature.id}.feature.attachment_depth"
+                        ),
+                        fallback_name="attachment_depth",
+                        value=attachment_depth,
+                    ),
+                }
+            )
+        return control
 
     if operation_type in {"revolve", "add_revolve", "cut_revolve"}:
         angle = float(operation["angle"])
@@ -1169,6 +1323,7 @@ def _named_face_support(
         )
     parent_id, requested_reference = target.split(".", 1)
     reference = _semantic_reference_name(feature, requested_reference)
+    frame = _support_frame(feature)
     snapshot = feature.support_reference or {}
     metadata = snapshot.get("reference", {}).get("metadata", {})
     instance_name = metadata.get("instance_name")
@@ -1187,19 +1342,90 @@ def _named_face_support(
                 parent_id,
                 f"{instance_name}_{reference}",
             ),
-            "frame": _support_frame(feature),
+            "frame": frame,
         }
     entity_name = published_faces.get(parent_id, {}).get(reference)
     if entity_name is None:
-        raise SolidWorksReplayError(
-            f"target '{target}' has no published native '{reference}' face"
+        return _axis_aligned_offset_plane_support(
+            feature,
+            parent_id=parent_id,
+            reference=reference,
+            frame=frame,
         )
     return {
         "kind": "named_face",
         "parent_feature_id": parent_id,
         "reference": reference,
         "entity_name": entity_name,
-        "frame": _support_frame(feature),
+        "frame": frame,
+    }
+
+
+def _axis_aligned_offset_plane_support(
+    feature: EditableFeatureDefinition,
+    *,
+    parent_id: str,
+    reference: str,
+    frame: dict,
+) -> dict:
+    """Represent a virtual cardinal face as a stable native datum plane.
+
+    Arbitrary profiles can expose useful tangent supports such as ``right``
+    even when no planar B-rep face exists there.  The editable feature graph
+    already stores the exact support frame.  Replaying that frame as an offset
+    of the matching primary datum plane avoids rediscovering topology from the
+    final body and works uniformly for all six world directions.
+    """
+    normal = _normalize(frame["normal"])
+    best_match: tuple[float, str, dict] | None = None
+    for plane, specification in DATUM_PLANE_SUPPORTS.items():
+        datum_normal = _normalize(specification["frame"]["normal"])
+        alignment = abs(_dot(normal, datum_normal))
+        if best_match is None or alignment > best_match[0]:
+            best_match = (alignment, plane, specification)
+
+    if best_match is None or best_match[0] < 1 - 1e-6:
+        raise SolidWorksReplayError(
+            f"target '{feature.target}' has no published native face and its "
+            "virtual support is not parallel to a primary datum plane"
+        )
+
+    _, semantic_plane, specification = best_match
+    datum_frame = specification["frame"]
+    datum_normal = _normalize(datum_frame["normal"])
+    origin_delta = [
+        float(frame["origin_mm"][index])
+        - float(datum_frame["origin_mm"][index])
+        for index in range(3)
+    ]
+    signed_offset = _dot(origin_delta, datum_normal)
+    desired_direction = normal
+    if feature.operation_type in {"cut", "countersink"}:
+        desired_direction = _scale(normal, -1)
+    reverse_direction = _dot(desired_direction, datum_normal) < 0
+
+    if abs(signed_offset) <= 1e-9:
+        return {
+            "kind": "datum_plane",
+            "name": specification["name"],
+            "semantic_plane": semantic_plane,
+            "parent_feature_id": parent_id,
+            "reference": reference,
+            "reverse_direction": reverse_direction,
+            "frame": frame,
+        }
+
+    return {
+        "kind": "offset_plane",
+        "name": _entity_name(parent_id, f"{reference}_support_plane"),
+        "datum_name": specification["name"],
+        "semantic_plane": semantic_plane,
+        "parent_feature_id": parent_id,
+        "reference": reference,
+        "offset_mm": abs(signed_offset),
+        "flip_offset": signed_offset < 0,
+        "reverse_direction": reverse_direction,
+        "frame": frame,
     }
 
 
@@ -1356,6 +1582,10 @@ def _cross(left: list[float], right: list[float]) -> list[float]:
         left[2] * right[0] - left[0] * right[2],
         left[0] * right[1] - left[1] * right[0],
     ]
+
+
+def _dot(left: list[float], right: list[float]) -> float:
+    return sum(left[index] * right[index] for index in range(3))
 
 
 def _add(left: list[float], right: list[float]) -> list[float]:

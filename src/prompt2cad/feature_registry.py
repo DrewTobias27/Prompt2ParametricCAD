@@ -82,6 +82,37 @@ def bounding_box_corners(bounding_box) -> list[cq.Vector]:
     ]
 
 
+def local_bounds_for_bounding_box(
+    bounding_box,
+    plane: cq.Plane,
+) -> dict[str, float]:
+    """Return world bounding-box corners projected into a plane frame."""
+    local_points = []
+    for corner in bounding_box_corners(bounding_box):
+        relative = corner.sub(plane.origin)
+        local_points.append((
+            vector_dot(relative, plane.xDir),
+            vector_dot(relative, plane.yDir),
+            vector_dot(relative, plane.zDir),
+        ))
+    return box_metadata_from_points(local_points)
+
+
+def global_face_label(normal: tuple[float, float, float]) -> str | None:
+    """Return a stable global-direction label for a cardinal face normal."""
+    components = list(normal)
+    dominant_index = max(range(3), key=lambda index: abs(components[index]))
+    if abs(components[dominant_index]) < 0.999:
+        return None
+
+    labels = (
+        ("global_left", "global_right"),
+        ("global_back", "global_front"),
+        ("global_bottom", "global_top"),
+    )
+    return labels[dominant_index][components[dominant_index] > 0]
+
+
 @dataclass(frozen=True)
 class ReferenceFrame:
     """A local coordinate system used to place sketches and features."""
@@ -392,6 +423,12 @@ class FeatureRegistry:
         for index, (face_name, frame) in enumerate(faces, start=1):
             canonical_name = f"{reference_scope}.face.f{index:03d}"
             aliases = [f"{reference_scope}.{face_name}"]
+            global_label = global_face_label(frame.normal)
+            if global_label is not None:
+                aliases.extend([
+                    f"{reference_scope}.{global_label}",
+                    f"{reference_scope}.face.{global_label}",
+                ])
             if semantic_aliases and instance_name is None:
                 aliases.extend(
                     [
@@ -636,11 +673,18 @@ class FeatureRegistry:
             return
 
         parent_frame = ReferenceFrame.from_plane(target_plane)
+        local_bounds = local_bounds_for_bounding_box(
+            solid.BoundingBox(),
+            target_plane,
+        )
+        center_x = (local_bounds["xmin"] + local_bounds["xmax"]) / 2
+        center_y = (local_bounds["ymin"] + local_bounds["ymax"]) / 2
+        center_z = (local_bounds["zmin"] + local_bounds["zmax"]) / 2
         face_specs = [
             (
                 "top",
                 parent_frame.child_frame(
-                    (position[0], position[1], distance),
+                    (center_x, center_y, local_bounds["zmax"]),
                     target_plane.xDir,
                     target_plane.zDir,
                 ),
@@ -648,9 +692,41 @@ class FeatureRegistry:
             (
                 "bottom",
                 parent_frame.child_frame(
-                    (position[0], position[1], 0),
+                    (center_x, center_y, local_bounds["zmin"]),
                     target_plane.xDir,
                     target_plane.zDir.multiply(-1),
+                ),
+            ),
+            (
+                "front",
+                parent_frame.child_frame(
+                    (center_x, local_bounds["ymax"], center_z),
+                    target_plane.xDir,
+                    target_plane.yDir,
+                ),
+            ),
+            (
+                "back",
+                parent_frame.child_frame(
+                    (center_x, local_bounds["ymin"], center_z),
+                    target_plane.xDir,
+                    target_plane.yDir.multiply(-1),
+                ),
+            ),
+            (
+                "right",
+                parent_frame.child_frame(
+                    (local_bounds["xmax"], center_y, center_z),
+                    target_plane.yDir,
+                    target_plane.xDir,
+                ),
+            ),
+            (
+                "left",
+                parent_frame.child_frame(
+                    (local_bounds["xmin"], center_y, center_z),
+                    target_plane.yDir,
+                    target_plane.xDir.multiply(-1),
                 ),
             ),
         ]
@@ -658,6 +734,12 @@ class FeatureRegistry:
         for index, (face_name, frame) in enumerate(face_specs, start=1):
             canonical_name = f"{reference_scope}.face.f{index:03d}"
             aliases = [f"{reference_scope}.{face_name}"]
+            global_label = global_face_label(frame.normal)
+            if global_label is not None:
+                aliases.extend([
+                    f"{reference_scope}.{global_label}",
+                    f"{reference_scope}.face.{global_label}",
+                ])
             if semantic_aliases and instance_name is None:
                 aliases.extend(
                     [

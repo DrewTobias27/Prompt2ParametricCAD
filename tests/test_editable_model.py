@@ -44,6 +44,37 @@ def editable_model_data() -> dict:
     }
 
 
+def curved_side_attachment_model_data() -> dict:
+    return {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "sketch",
+                "distance": 8,
+                "start": [-50, -35],
+                "segments": [
+                    {"type": "line", "to": [15, -35]},
+                    {"type": "arc", "through": [50, 0], "to": [15, 35]},
+                    {"type": "line", "to": [-50, 35]},
+                ],
+                "close": True,
+            },
+            {
+                "type": "add_extrude",
+                "id": "right_tab",
+                "target": "base.right",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 10,
+                "width": 18,
+                "height": 8,
+            },
+        ]
+    }
+
+
 def test_editable_document_preserves_history_supports_and_sketches():
     document = model_data_to_editable_document(editable_model_data())
 
@@ -130,6 +161,41 @@ def test_parameter_update_changes_cut_geometry():
 
     assert updated_part.val().Volume() < original_part.val().Volume()
     assert updated_document.parameter("hole.sketch.diameter").value == 8
+
+
+def test_curved_side_attachment_is_independently_editable_without_changing_extent():
+    document = model_data_to_editable_document(
+        curved_side_attachment_model_data()
+    )
+    attachment = document.parameter("right_tab.feature.attachment_depth")
+
+    assert attachment is not None
+    assert attachment.name == "Attachment depth"
+    assert 0 < attachment.value <= 10
+    assert attachment.source_path == (
+        "operations",
+        1,
+        "attachment_depth",
+    )
+
+    updated_attachment_depth = attachment.value * 2
+    part, updated_document = rebuild_with_parameter_updates(
+        document,
+        {
+            "right_tab.feature.attachment_depth": (
+                updated_attachment_depth
+            )
+        },
+    )
+
+    bounding_box = part.val().BoundingBox()
+    assert len(part.solids().vals()) == 1
+    assert bounding_box.xmin == pytest.approx(-50)
+    assert bounding_box.xmax == pytest.approx(60)
+    assert bounding_box.xlen == pytest.approx(110)
+    assert updated_document.parameter(
+        "right_tab.feature.attachment_depth"
+    ).value == updated_attachment_depth
 
 
 def test_failed_parameter_update_leaves_original_document_unchanged():

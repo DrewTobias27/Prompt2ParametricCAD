@@ -107,6 +107,36 @@ def test_check_model_quality_warns_on_unknown_but_ordered_target():
     assert "unknown_target_reference" in issue_codes(report)
 
 
+def test_check_model_quality_accepts_virtual_side_targets_for_curved_profiles():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "circle",
+                "diameter": 80,
+                "distance": 8,
+            },
+            {
+                "type": "add_extrude",
+                "id": "side_tab",
+                "target": "base.right",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "width": 18,
+                "height": 8,
+                "distance": 10,
+            },
+        ]
+    }
+
+    report = check_model_quality(model_data)
+
+    assert report["passed"] is True
+    assert "unknown_target_reference" not in issue_codes(report)
+
+
 def test_check_model_quality_accepts_revolve_surface_and_edge_targets():
     model_data = {
         "operations": [

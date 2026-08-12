@@ -660,6 +660,16 @@ def register_extrude_target_references(
         {
             f"{operation_id}.top",
             f"{operation_id}.bottom",
+            f"{operation_id}.front",
+            f"{operation_id}.back",
+            f"{operation_id}.left",
+            f"{operation_id}.right",
+            f"{operation_id}.global_top",
+            f"{operation_id}.global_bottom",
+            f"{operation_id}.global_front",
+            f"{operation_id}.global_back",
+            f"{operation_id}.global_left",
+            f"{operation_id}.global_right",
         },
     )
     target_catalog.add_references(
@@ -677,18 +687,6 @@ def register_extrude_target_references(
             f"{operation_id}.all_edges",
         },
     )
-
-    if operation.get("profile") == "rectangle":
-        target_catalog.add_references(
-            FACE_REFERENCE_KIND,
-            {
-                f"{operation_id}.front",
-                f"{operation_id}.back",
-                f"{operation_id}.left",
-                f"{operation_id}.right",
-            },
-        )
-
 
 def register_revolve_target_references(
     operation_id: str,
@@ -762,7 +760,20 @@ def infer_target_reference_kind(target: str) -> str | None:
     if "surface" in reference_name:
         return SURFACE_REFERENCE_KIND
 
-    if reference_name in {"top", "bottom", "front", "back", "left", "right"}:
+    if reference_name in {
+        "top",
+        "bottom",
+        "front",
+        "back",
+        "left",
+        "right",
+        "global_top",
+        "global_bottom",
+        "global_front",
+        "global_back",
+        "global_left",
+        "global_right",
+    }:
         return FACE_REFERENCE_KIND
 
     if reference_name.startswith("face."):

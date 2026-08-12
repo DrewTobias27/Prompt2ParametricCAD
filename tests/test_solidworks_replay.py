@@ -53,6 +53,65 @@ def native_model_data() -> dict:
     }
 
 
+def curved_side_attachment_model_data() -> dict:
+    return {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "sketch",
+                "distance": 8,
+                "start": [-50, -35],
+                "segments": [
+                    {"type": "line", "to": [15, -35]},
+                    {"type": "arc", "through": [50, 0], "to": [15, 35]},
+                    {"type": "line", "to": [-50, 35]},
+                ],
+                "close": True,
+            },
+            {
+                "type": "add_extrude",
+                "id": "left_tab",
+                "target": "base.left",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 10,
+                "width": 18,
+                "height": 8,
+            },
+            {
+                "type": "add_extrude",
+                "id": "right_tab",
+                "target": "base.right",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 10,
+                "width": 18,
+                "height": 8,
+            },
+            {
+                "type": "cut",
+                "id": "left_hole",
+                "target": "left_tab.global_top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "depth": "through",
+                "diameter": 6,
+            },
+            {
+                "type": "cut",
+                "id": "right_hole",
+                "target": "right_tab.global_top",
+                "profile": "circle",
+                "positions": [[0, 0]],
+                "depth": "through",
+                "diameter": 6,
+            },
+        ]
+    }
+
+
 def replay_plan(model_data: dict | None = None):
     document = model_data_to_editable_document(model_data or native_model_data())
     return build_solidworks_replay_plan(document)
@@ -339,6 +398,81 @@ def test_blind_cut_preserves_a_named_native_depth():
         "value_mm": 4.0,
         "unit": "mm",
     }
+
+
+def test_replay_preserves_exact_curved_side_attachment_and_global_top_holes():
+    plan = replay_plan(curved_side_attachment_model_data())
+    _, left_tab, right_tab, left_hole, right_hole = plan.features
+
+    assert left_tab.support == {
+        "kind": "offset_plane",
+        "name": "P2P_base_left_support_plane",
+        "datum_name": "Right Plane",
+        "semantic_plane": "YZ",
+        "parent_feature_id": "base",
+        "reference": "left",
+        "offset_mm": 50.0,
+        "flip_offset": True,
+        "reverse_direction": True,
+        "frame": {
+            "origin_mm": [-50.0, 0.0, 4.0],
+            "x_axis": [0.0, 1.0, 0.0],
+            "normal": [-1.0, 0.0, 0.0],
+        },
+    }
+    assert right_tab.support["kind"] == "offset_plane"
+    assert right_tab.support["datum_name"] == "Right Plane"
+    assert right_tab.support["offset_mm"] == 50
+    assert right_tab.support["flip_offset"] is False
+    assert right_tab.support["reverse_direction"] is False
+    assert right_tab.feature["depth_mm"] == 10
+    reverse_depth = right_tab.feature["reverse_depth_mm"]
+    assert 0 < reverse_depth <= right_tab.feature["depth_mm"]
+    assert right_tab.feature["reverse_driving_dimension"] == {
+        "parameter_id": "right_tab.feature.attachment_depth",
+        "native_name": "P2P_right_tab_feature_attachment_depth",
+        "value_mm": reverse_depth,
+        "unit": "mm",
+    }
+    assert {
+        binding["parameter_id"]
+        for binding in right_tab.parameter_bindings
+    } >= {
+        "right_tab.feature.distance",
+        "right_tab.feature.attachment_depth",
+    }
+    assert {
+        reference["semantic_name"]
+        for reference in left_tab.publish_references
+    }.isdisjoint({"front", "back"})
+    assert {
+        reference["semantic_name"]
+        for reference in right_tab.publish_references
+    }.isdisjoint({"front", "back"})
+    assert left_hole.support["entity_name"] == "P2P_base_top"
+    assert right_hole.support["entity_name"] == "P2P_base_top"
+
+
+def test_virtual_curved_side_cut_points_inward_from_offset_plane():
+    model_data = curved_side_attachment_model_data()
+    model_data["operations"] = [
+        model_data["operations"][0],
+        {
+            "type": "cut",
+            "id": "side_hole",
+            "target": "base.right",
+            "profile": "circle",
+            "positions": [[0, 0]],
+            "depth": "through",
+            "diameter": 6,
+        },
+    ]
+
+    side_hole = replay_plan(model_data).features[1]
+
+    assert side_hole.support["kind"] == "offset_plane"
+    assert side_hole.support["offset_mm"] == 50
+    assert side_hole.support["reverse_direction"] is True
 
 
 def test_replay_supports_revolves_and_coordinate_profiles():
@@ -941,6 +1075,32 @@ def test_native_runner_accepts_the_current_replay_plan_version():
     assert "plan.Version != ReplayVersion" in runner_source
 
 
+def test_native_runner_replays_offset_planes_and_reverse_attachment_depths():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert 'DataMember(Name = "reverse_depth_mm")' in runner_source
+    assert 'DataMember(Name = "reverse_driving_dimension")' in runner_source
+    assert 'if (support.Kind == "offset_plane")' in runner_source
+    assert (
+        "SelectOrCreateOffsetPlane(application, model, support)"
+        in runner_source
+    )
+    assert "ValidateOffsetPlaneTransform(" in runner_source
+    assert "model.FeatureManager.InsertRefPlane(" in runner_source
+    assert "swRefPlaneReferenceConstraint_Distance" in runner_source
+    assert "swRefPlaneReferenceConstraint_OptionFlip" in runner_source
+    assert "bool singleEnded = !step.Feature.ReverseDepthMillimeters.HasValue" in (
+        runner_source
+    )
+    assert "depth, reverseDepth" in runner_source
+    assert 'step.FeatureName,\n                "D2"' in runner_source
+
+
 def test_powershell_runner_discovers_solidworks_without_one_fixed_install_path():
     script_source = (
         Path(__file__).parents[1]
@@ -1091,6 +1251,9 @@ def test_native_runner_dimensions_rectangles_in_their_local_feature_frame():
     assert "double[] widthDirection = ToSketchDirection(" in runner_source
     assert "double[] heightDirection = ToSketchDirection(" in runner_source
     assert "private static double[] ToSketchDirection(" in runner_source
+    assert "swDimensionDrivenState_e.swDimensionDriven" in runner_source
+    assert "swDimensionDrivenState_e.swDimensionDriving" in runner_source
+    assert "kept dimension '" in runner_source
 
 
 def test_native_runner_anchors_center_rectangles_with_explicit_geometry():

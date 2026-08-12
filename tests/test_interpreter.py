@@ -1323,6 +1323,58 @@ def test_side_extrude_overlaps_rounded_virtual_target_until_connected():
     assert len(solids) == 1
 
 
+def test_curved_tangent_side_tab_records_attachment_and_keeps_outer_distance():
+    right_tab = {
+        "type": "add_extrude",
+        "id": "right_tab",
+        "target": "base.right",
+        "profile": "rectangle",
+        "positions": [[0, 0]],
+        "distance": 10,
+        "width": 18,
+        "height": 8,
+    }
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "sketch",
+                "distance": 8,
+                "start": [-50, -35],
+                "segments": [
+                    {"type": "line", "to": [15, -35]},
+                    {"type": "arc", "through": [50, 0], "to": [15, 35]},
+                    {"type": "line", "to": [-50, 35]},
+                ],
+                "close": True,
+            },
+            {
+                "type": "add_extrude",
+                "id": "left_tab",
+                "target": "base.left",
+                "profile": "rectangle",
+                "positions": [[0, 0]],
+                "distance": 10,
+                "width": 18,
+                "height": 8,
+            },
+            right_tab,
+        ]
+    }
+
+    part = build_model(model_data)
+    bounding_box = part.val().BoundingBox()
+
+    assert len(part.solids().vals()) == 1
+    assert right_tab["attachment_depth"] > 0
+    assert right_tab["attachment_depth"] <= right_tab["distance"]
+    assert bounding_box.xmin == pytest.approx(-60)
+    assert bounding_box.xmax == pytest.approx(60)
+    assert bounding_box.xlen == pytest.approx(120)
+
+
 def test_side_extrude_does_not_project_extreme_position_to_center():
     model_data = {
         "operations": [

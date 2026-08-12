@@ -10,6 +10,11 @@ from prompt2cad import prompting
 from prompt2cad.design_intent import missing_required_intent_dimensions
 
 
+def test_intent_prompts_distinguish_global_faces_from_extrusion_end_faces():
+    assert "tab_id.global_top" in prompting.CAD_INTENT_INSTRUCTIONS
+    assert "tab's global_top face" in prompting.CAD_INTENT_REPAIR_INSTRUCTIONS
+
+
 def test_create_json_response_retries_any_http_400_without_schema():
     request = httpx.Request("POST", "https://api.openai.com/v1/responses")
     response = httpx.Response(400, request=request)

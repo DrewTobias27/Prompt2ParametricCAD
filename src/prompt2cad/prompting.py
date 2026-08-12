@@ -190,6 +190,10 @@ For add_extrude and cut operations:
 - Use target "base.top" unless the user clearly requests a different face.
 - Supported target names include "base.top", "base.bottom", "base.front",
   "base.back", "base.left", and "base.right".
+- Extruded features also expose global-direction aliases such as
+  "feature_id.global_top" and "feature_id.global_right". Use global_top for a
+  hole through the thickness of a coplanar side tab; that tab's local "top"
+  is its outward extrusion-end face, not necessarily the world-Z top face.
 - If an exact side face tag does not exist, the interpreter can use a virtual
   bounding-box target on that side. This is useful for polygon, polyline,
   sketch, rounded, or rotated-looking bases.
@@ -366,7 +370,9 @@ requested.
 Target-reference rules:
 - Face targets must use "parent_id.face_name".
 - The supported semantic face names are top, bottom, front, back, left, and
-  right. Choose the face whose normal matches the requested feature direction.
+  right. Extruded features additionally support global_top, global_bottom,
+  global_front, global_back, global_left, and global_right. Choose the face
+  whose normal matches the requested feature direction.
 - Never invent generic names such as side, outer_face, inner_face, flat, or
   curved. If the prompt is ambiguous, choose the most suitable supported face.
 - Only target a feature declared earlier in build order.
@@ -383,6 +389,9 @@ Parent-child feature rules:
 - A hole through a vertical wall must target the appropriate vertical side
   face of that wall. Do not target the wall's top face, which is its horizontal
   cap and produces a cut in the wrong direction.
+- A hole through the thickness of a coplanar side tab must target
+  "tab_id.global_top". The tab's local "top" is the outward end of its side
+  extrusion and would drill horizontally instead of through plate thickness.
 - Coordinates on a vertical side face are local face coordinates: the first
   coordinate runs horizontally along the face and the second runs vertically
   from the face center. If a wall is H tall and a hole center is h above the
@@ -543,7 +552,9 @@ For a same_as_feature child of an additive boss/tab, target that parent
 feature's material face rather than the base. For side-face features, use
 local coordinates [horizontal_from_center, vertical_from_center]. A hollow
 rim's inner cut depth must equal the rim extrusion distance. A coplanar tab
-extending the base outline must start on a side face, not the base top. When a
+extending the base outline must start on a side face, not the base top. A child
+hole through that tab's plate thickness must target the tab's global_top face,
+not its local extrusion-end top face. When a
 prompt gives a circular feature's center-to-edge distance, convert it to exact
 positions or subtract the feature radius before using near_corners.margin.
 Prefer the smallest change that satisfies the original request and all reported
