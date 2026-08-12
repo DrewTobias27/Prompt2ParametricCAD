@@ -20,6 +20,7 @@ from typing import Callable
 
 from prompt2cad.editable_model import EditableFeatureDefinition
 from prompt2cad.editable_model import EditableModelDocument
+from prompt2cad.pattern_geometry import pattern_positions
 
 
 SOLIDWORKS_REPLAY_FORMAT = "prompt2cad.solidworks-replay-plan"
@@ -938,6 +939,14 @@ def _native_pattern_control(
     if not _points_close(seed, positions[0]):
         raise SolidWorksReplayError(
             "pattern seed_position must equal the first exact operation position"
+        )
+    expected_positions = pattern_positions(pattern)
+    if len(expected_positions) != len(positions) or any(
+        not _points_close(expected, actual)
+        for expected, actual in zip(expected_positions, positions)
+    ):
+        raise SolidWorksReplayError(
+            "pattern metadata must reproduce every exact operation position"
         )
 
     common = {

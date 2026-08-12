@@ -381,3 +381,167 @@ def test_countersink_exposes_native_hole_controls_without_a_sketch_profile():
     assert document.parameter("countersink.feature.countersink_diameter").value == 10
     assert document.parameter("countersink.feature.angle").value == 90
     assert document.parameter("countersink.feature.depth").value == "through"
+
+
+def test_circular_pattern_controls_regenerate_derived_positions_transactionally():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 8,
+                "width": 100,
+                "height": 70,
+            },
+            {
+                "type": "cut",
+                "id": "holes",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[25, 0], [0, 25], [-25, 0], [0, -25]],
+                "pattern": {
+                    "type": "circular",
+                    "seed_position": [25, 0],
+                    "center": [0, 0],
+                    "count": 4,
+                    "total_angle_degrees": 360,
+                },
+                "depth": "through",
+                "diameter": 6,
+            },
+        ]
+    }
+    document = model_data_to_editable_document(model_data)
+
+    assert document.parameter("holes.pattern.count").value == 4
+    assert document.parameter("holes.pattern.total_angle").value == 360
+    assert document.parameter("holes.placement.inst001.x").source_path[-3:] == (
+        "pattern",
+        "seed_position",
+        0,
+    )
+    assert document.parameter("holes.placement.inst002.x") is None
+
+    part, updated = rebuild_with_parameter_updates(
+        document,
+        {
+            "holes.pattern.count": 5,
+            "holes.pattern.total_angle": 180,
+        },
+    )
+
+    assert len(part.solids().vals()) == 1
+    assert updated.parameter("holes.pattern.count").value == 5
+    assert updated.source_model_data["operations"][1]["positions"] == [
+        [25.0, 0.0],
+        [17.67767, 17.67767],
+        [0.0, 25.0],
+        [-17.67767, 17.67767],
+        [-25.0, 0.0],
+    ]
+    assert document.source_model_data["operations"][1]["positions"] == [
+        [25, 0],
+        [0, 25],
+        [-25, 0],
+        [0, -25],
+    ]
+
+
+def test_linear_pattern_count_and_spacing_share_one_derived_position_graph():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 8,
+                "width": 120,
+                "height": 80,
+            },
+            {
+                "type": "add_extrude",
+                "id": "posts",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[-20, -10], [0, -10], [-20, 10], [0, 10]],
+                "pattern": {
+                    "type": "linear",
+                    "seed_position": [-20, -10],
+                    "direction_1": [1, 0],
+                    "count_1": 2,
+                    "spacing_1": 20,
+                    "direction_2": [0, 1],
+                    "count_2": 2,
+                    "spacing_2": 20,
+                },
+                "distance": 7,
+                "diameter": 6,
+            },
+        ]
+    }
+    document = model_data_to_editable_document(model_data)
+
+    part, updated = rebuild_with_parameter_updates(
+        document,
+        {
+            "posts.pattern.count_1": 3,
+            "posts.pattern.spacing_1": 15,
+            "posts.pattern.count_2": 1,
+            "posts.pattern.spacing_2": 0,
+        },
+    )
+
+    assert len(part.solids().vals()) == 1
+    assert updated.source_model_data["operations"][1]["positions"] == [
+        [-20.0, -10.0],
+        [-5.0, -10.0],
+        [10.0, -10.0],
+    ]
+
+
+def test_pattern_parameter_validation_rejects_invalid_counts_and_spacing():
+    model_data = {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "rectangle",
+                "distance": 8,
+                "width": 80,
+                "height": 50,
+            },
+            {
+                "type": "cut",
+                "id": "holes",
+                "target": "base.top",
+                "profile": "circle",
+                "positions": [[-10, 0], [10, 0]],
+                "pattern": {
+                    "type": "linear",
+                    "seed_position": [-10, 0],
+                    "direction_1": [1, 0],
+                    "count_1": 2,
+                    "spacing_1": 20,
+                    "direction_2": [0, 1],
+                    "count_2": 1,
+                    "spacing_2": 0,
+                },
+                "depth": "through",
+                "diameter": 4,
+            },
+        ]
+    }
+    document = model_data_to_editable_document(model_data)
+
+    with pytest.raises(ValueError, match="positive integer"):
+        rebuild_with_parameter_updates(
+            document, {"holes.pattern.count_1": 0}
+        )
+    with pytest.raises(ValueError, match="cannot be negative"):
+        rebuild_with_parameter_updates(
+            document, {"holes.pattern.spacing_1": -1}
+        )

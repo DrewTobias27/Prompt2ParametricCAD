@@ -346,6 +346,14 @@ def test_native_pattern_controls_have_editable_feature_property_bindings(
         binding["binding_kind"] == "feature_property"
         for binding in pattern_bindings
     )
+    document = model_data_to_editable_document(model_data)
+    assert {
+        binding["parameter_id"] for binding in pattern_bindings
+    } <= {
+        parameter.id
+        for feature in document.features
+        for parameter in feature.parameters
+    }
 
 
 def test_replay_plan_maps_stable_profile_placement_controls():

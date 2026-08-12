@@ -18,6 +18,7 @@ from prompt2cad.feature_graph import FeatureGraph
 from prompt2cad.feature_graph import FeatureNode
 from prompt2cad.interpreter import build_model_with_graph
 from prompt2cad.operation_effects import evaluate_operation_effects
+from prompt2cad.pattern_geometry import synchronize_pattern_positions
 from prompt2cad.schema import validate_model_data
 
 
@@ -25,7 +26,7 @@ PathStep: TypeAlias = str | int
 ParameterValue: TypeAlias = float | int | str | bool
 
 EDITABLE_MODEL_FORMAT = "prompt2cad.editable-model"
-EDITABLE_MODEL_VERSION = 1
+EDITABLE_MODEL_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -177,6 +178,8 @@ def rebuild_with_parameter_updates(
 
         _validate_parameter_value(parameter, value)
         _set_source_value(updated_model_data, parameter.source_path, value)
+
+    synchronize_pattern_positions(updated_model_data)
 
     validate_model_data(updated_model_data)
     part, feature_graph = build_model_with_graph(updated_model_data)
@@ -348,6 +351,7 @@ def _editable_parameters(feature_node: FeatureNode) -> list[EditableParameter]:
         unit: str | None,
         relative_path: tuple[PathStep, ...],
         aliases: tuple[str, ...] = (),
+        driving: bool = True,
     ) -> None:
         source_path = base_path + relative_path
         if source_path in used_paths:
@@ -364,6 +368,7 @@ def _editable_parameters(feature_node: FeatureNode) -> list[EditableParameter]:
                 unit=unit,
                 source_path=source_path,
                 aliases=aliases,
+                driving=driving,
             )
         )
 
@@ -436,8 +441,16 @@ def _editable_parameters(feature_node: FeatureNode) -> list[EditableParameter]:
             relative_path=(field_name,),
         )
 
-    for position_index, position in enumerate(operation.get("positions", [])):
+    pattern = operation.get("pattern")
+    positions = operation.get("positions", [])
+    placement_positions = positions[:1] if pattern else positions
+    for position_index, position in enumerate(placement_positions):
         for coordinate_index, axis_name in enumerate(("x", "y")):
+            relative_path = (
+                ("pattern", "seed_position", coordinate_index)
+                if pattern
+                else ("positions", position_index, coordinate_index)
+            )
             add_parameter(
                 suffix=(
                     f"placement.inst{position_index + 1:03d}.{axis_name}"
@@ -450,8 +463,10 @@ def _editable_parameters(feature_node: FeatureNode) -> list[EditableParameter]:
                 value_type="coordinate",
                 value=position[coordinate_index],
                 unit="mm",
-                relative_path=("positions", position_index, coordinate_index),
+                relative_path=relative_path,
             )
+
+    _add_pattern_parameters(operation, add_parameter)
 
     for axis_field in ("axis_start", "axis_end"):
         if axis_field not in operation:
@@ -469,6 +484,52 @@ def _editable_parameters(feature_node: FeatureNode) -> list[EditableParameter]:
             )
 
     return parameters
+
+
+def _add_pattern_parameters(operation: dict, add_parameter) -> None:
+    pattern = operation.get("pattern")
+    if not isinstance(pattern, dict):
+        return
+    pattern_type = pattern["type"]
+    if pattern_type == "circular":
+        add_parameter(
+            suffix="pattern.count",
+            name="Circular pattern count",
+            role="pattern_control",
+            value_type="pattern_count",
+            value=pattern["count"],
+            unit=None,
+            relative_path=("pattern", "count"),
+        )
+        add_parameter(
+            suffix="pattern.total_angle",
+            name="Circular pattern total angle",
+            role="pattern_control",
+            value_type="angle",
+            value=pattern["total_angle_degrees"],
+            unit="deg",
+            relative_path=("pattern", "total_angle_degrees"),
+        )
+    elif pattern_type == "linear":
+        for axis_number in (1, 2):
+            add_parameter(
+                suffix=f"pattern.count_{axis_number}",
+                name=f"Linear pattern direction {axis_number} count",
+                role="pattern_control",
+                value_type="pattern_axis_count",
+                value=pattern[f"count_{axis_number}"],
+                unit=None,
+                relative_path=("pattern", f"count_{axis_number}"),
+            )
+            add_parameter(
+                suffix=f"pattern.spacing_{axis_number}",
+                name=f"Linear pattern direction {axis_number} spacing",
+                role="pattern_control",
+                value_type="pattern_spacing",
+                value=pattern[f"spacing_{axis_number}"],
+                unit="mm",
+                relative_path=("pattern", f"spacing_{axis_number}"),
+            )
 
 
 def _add_coordinate_geometry_parameters(operation: dict, add_parameter) -> None:
@@ -570,6 +631,29 @@ def _validate_parameter_value(
             raise ValueError(
                 f"Parameter '{parameter.id}' must be an integer of at least 3"
             )
+        return
+
+    if value_type == "pattern_count":
+        if isinstance(value, bool) or not isinstance(value, int) or value < 2:
+            raise ValueError(
+                f"Parameter '{parameter.id}' must be an integer of at least 2"
+            )
+        return
+
+    if value_type == "pattern_axis_count":
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(
+                f"Parameter '{parameter.id}' must be a positive integer"
+            )
+        return
+
+    if value_type == "pattern_spacing":
+        _require_finite_number(parameter, value)
+        if value < 0:
+            raise ValueError(
+                f"Parameter '{parameter.id}' cannot be negative"
+            )
+        return
 
 
 def _require_positive_number(

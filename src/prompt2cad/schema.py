@@ -3,6 +3,8 @@
 from jsonschema import ValidationError
 from jsonschema import validate
 
+from prompt2cad.pattern_geometry import validate_pattern_positions
+
 
 POSITIVE_NUMBER_SCHEMA = {
     "type": "number",
@@ -1074,3 +1076,4 @@ def validate_model_data(model_data: dict) -> None:
         raise ValueError(
             f"Model data does not match schema: {error.message}"
         ) from error
+    validate_pattern_positions(model_data)
