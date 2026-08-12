@@ -204,6 +204,10 @@ editable mutations, and SolidWorks replay planning:
 prompt2cad-release-matrix
 ```
 
+Add `--execute-native --verify-native-editability` on a configured SolidWorks
+workstation to carry the same golden cases through SLDPRT creation, geometry
+comparison, parameter mutation, rebuild, save/reopen, and reference checks.
+
 The native replay planner covers every operation in the STEP builder:
 rectangle, circle, polygon, polyline, and line/arc sketches; blind/through
 extrusions and cuts; full or partial revolves; circular, linear, and mirrored

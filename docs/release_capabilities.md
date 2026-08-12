@@ -162,6 +162,15 @@ prompt2cad-release-matrix `
   --output-root generated\release-matrix
 ```
 
+On a configured SolidWorks workstation, continue those same seven golden cases
+through native creation and their declared save/reopen edits:
+
+```powershell
+prompt2cad-release-matrix --execute-native `
+  --verify-native-editability `
+  --output-root generated\release-matrix-native
+```
+
 Run the full installed-SolidWorks mutation matrix:
 
 ```powershell

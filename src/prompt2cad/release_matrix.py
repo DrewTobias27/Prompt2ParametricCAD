@@ -1,10 +1,11 @@
 """Run the deterministic prompt-to-native-CAD release parity matrix.
 
 The live API remains probabilistic, so release gating uses checked-in golden
-prompt-to-intent examples.  Each example then traverses the exact production
+prompt-to-intent examples. Each example then traverses the exact production
 lowering, CadQuery, STEP, editable-model, and SOLIDWORKS replay-plan layers.
-This separates model-quality evaluation from backend parity regressions while
-keeping both tied to the same human-readable prompts.
+An opt-in native mode continues through SLDPRT creation and save/reopen
+mutation. This separates model-quality evaluation from backend parity
+regressions while keeping both tied to the same human-readable prompts.
 """
 
 from __future__ import annotations
@@ -23,9 +24,12 @@ from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.exporter import export_step
 from prompt2cad.interpreter import build_model
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
+from prompt2cad.solidworks_replay import export_solidworks_part
+from prompt2cad.solidworks_replay import verify_solidworks_editability
 from prompt2cad.solidworks_smoke import compare_geometry_metrics
 from prompt2cad.solidworks_smoke import geometry_metrics
 from prompt2cad.solidworks_smoke import native_parameter_coverage
+from prompt2cad.solidworks_smoke import validate_published_references
 from prompt2cad.training_data import DEFAULT_INTENT_EXAMPLES_DIR
 from prompt2cad.training_data import load_intent_examples
 
@@ -81,8 +85,16 @@ def run_release_matrix(
     *,
     case_names: tuple[str, ...] | None = None,
     examples_dir: Path = DEFAULT_INTENT_EXAMPLES_DIR,
+    execute_native: bool = False,
+    verify_native_editability: bool = False,
+    visible: bool = False,
+    template_path: Path | None = None,
+    native_exporter=export_solidworks_part,
+    editability_verifier=verify_solidworks_editability,
 ) -> dict:
     """Run selected golden examples through every deterministic CAD stage."""
+    if verify_native_editability:
+        execute_native = True
     available_cases = {case.name: case for case in RELEASE_MATRIX_CASES}
     selected_names = case_names or tuple(available_cases)
     unknown = sorted(set(selected_names) - set(available_cases))
@@ -101,27 +113,38 @@ def run_release_matrix(
         )
 
     output_root.mkdir(parents=True, exist_ok=True)
+    native_directory = output_root / "native" if execute_native else None
     results = [
         run_release_case(
             available_cases[name],
             examples[name],
             output_root,
+            native_directory=native_directory,
+            verify_native_editability=verify_native_editability,
+            visible=visible,
+            template_path=template_path,
+            native_exporter=native_exporter,
+            editability_verifier=editability_verifier,
         )
         for name in selected_names
     ]
     passed = sum(result["status"] == "pass" for result in results)
+    pipeline = [
+        "golden_prompt",
+        "design_intent",
+        "operation_json",
+        "cadquery_geometry",
+        "step_round_trip",
+        "editable_parameter_rebuild",
+        "solidworks_replay_plan",
+    ]
+    if execute_native:
+        pipeline.append("solidworks_native")
     return {
         "format": "prompt2cad.release-parity-matrix",
-        "version": 1,
-        "pipeline": [
-            "golden_prompt",
-            "design_intent",
-            "operation_json",
-            "cadquery_geometry",
-            "step_round_trip",
-            "editable_parameter_rebuild",
-            "solidworks_replay_plan",
-        ],
+        "version": 2,
+        "mode": "native" if execute_native else "plan_only",
+        "pipeline": pipeline,
         "case_count": len(results),
         "passed": passed,
         "failed": len(results) - passed,
@@ -133,6 +156,13 @@ def run_release_case(
     case: ReleaseMatrixCase,
     example: dict,
     output_root: Path,
+    *,
+    native_directory: Path | None = None,
+    verify_native_editability: bool = False,
+    visible: bool = False,
+    template_path: Path | None = None,
+    native_exporter=export_solidworks_part,
+    editability_verifier=verify_solidworks_editability,
 ) -> dict:
     """Run one case and keep a stage-specific failure instead of stopping."""
     started = time.perf_counter()
@@ -247,6 +277,81 @@ def run_release_case(
             ),
             "artifact": str(plan_path),
         }
+
+        if native_directory is not None:
+            stage = "solidworks_native"
+            native_directory.mkdir(parents=True, exist_ok=True)
+            native_path = native_directory / f"{case.name}.SLDPRT"
+            native_result_path = (
+                native_directory / f"{case.name}.result.json"
+            )
+            native_exporter(
+                plan,
+                native_path,
+                visible=visible,
+                template_path=template_path,
+                result_output_path=native_result_path,
+            )
+            native_result = json.loads(
+                native_result_path.read_text(encoding="utf-8")
+            )
+            native_check = {
+                "passed": True,
+                "artifact": str(native_path),
+                "geometry_comparison": compare_geometry_metrics(
+                    source_metrics,
+                    native_result.get("geometry", {}),
+                ),
+                "published_references": validate_published_references(
+                    plan,
+                    native_result,
+                    context=f"{case.name} native replay",
+                ),
+                "editability": None,
+            }
+
+            if verify_native_editability:
+                edited_plan = build_solidworks_replay_plan(edited_document)
+                edited_path = (
+                    native_directory / f"{case.name}.mutated.SLDPRT"
+                )
+                edit_result_path = (
+                    native_directory / f"{case.name}.edit-result.json"
+                )
+                editability_verifier(
+                    plan,
+                    native_path,
+                    edited_path,
+                    case.mutations,
+                    visible=visible,
+                    result_output_path=edit_result_path,
+                )
+                edit_result = json.loads(
+                    edit_result_path.read_text(encoding="utf-8")
+                )
+                if edit_result.get("reopened") is not True:
+                    raise RuntimeError(
+                        "Native edit verification did not reopen the saved part"
+                    )
+                if edit_result.get("mutation_count") != len(case.mutations):
+                    raise RuntimeError(
+                        "Native edit verification did not apply every mutation"
+                    )
+                native_check["editability"] = {
+                    "passed": True,
+                    "artifact": str(edited_path),
+                    "reopened": True,
+                    "geometry_comparison": compare_geometry_metrics(
+                        edited_metrics,
+                        edit_result.get("after_geometry", {}),
+                    ),
+                    "published_references": validate_published_references(
+                        edited_plan,
+                        edit_result,
+                        context=f"{case.name} native edit",
+                    ),
+                }
+            result["checks"][stage] = native_check
         result["status"] = "pass"
     except Exception as error:  # Preserve every case in one release report.
         result["failed_stage"] = stage
@@ -273,6 +378,25 @@ def parse_args() -> argparse.Namespace:
         choices=[case.name for case in RELEASE_MATRIX_CASES],
         help="Run one case; repeat to select several. Defaults to all.",
     )
+    parser.add_argument(
+        "--execute-native",
+        action="store_true",
+        help="Create and verify native SLDPRT files in installed SolidWorks.",
+    )
+    parser.add_argument(
+        "--verify-native-editability",
+        action="store_true",
+        help=(
+            "Reopen each SLDPRT, apply its declared mutation, rebuild, save, "
+            "and compare again. Implies --execute-native."
+        ),
+    )
+    parser.add_argument(
+        "--visible",
+        action="store_true",
+        help="Show SolidWorks while native cases run.",
+    )
+    parser.add_argument("--template", type=Path)
     return parser.parse_args()
 
 
@@ -282,6 +406,10 @@ def main() -> None:
     report = run_release_matrix(
         args.output_root,
         case_names=tuple(args.case) if args.case else None,
+        execute_native=args.execute_native,
+        verify_native_editability=args.verify_native_editability,
+        visible=args.visible,
+        template_path=args.template,
     )
     report_path = args.output_root / "report.json"
     report_path.write_text(
