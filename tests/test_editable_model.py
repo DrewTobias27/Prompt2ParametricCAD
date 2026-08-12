@@ -2,8 +2,10 @@ from copy import deepcopy
 
 import pytest
 
+from prompt2cad import editable_model
 from prompt2cad.editable_model import EDITABLE_MODEL_FORMAT
 from prompt2cad.editable_model import EDITABLE_MODEL_VERSION
+from prompt2cad.editable_model import build_editable_model_document
 from prompt2cad.editable_model import model_data_to_editable_document
 from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.interpreter import build_model
@@ -73,6 +75,30 @@ def curved_side_attachment_model_data() -> dict:
             },
         ]
     }
+
+
+def test_joint_geometry_and_document_build_uses_one_feature_graph_pass(
+    monkeypatch,
+):
+    original_builder = editable_model.build_model_with_graph
+    call_count = 0
+
+    def counted_builder(model_data):
+        nonlocal call_count
+        call_count += 1
+        return original_builder(model_data)
+
+    monkeypatch.setattr(
+        editable_model,
+        "build_model_with_graph",
+        counted_builder,
+    )
+
+    part, document = build_editable_model_document(editable_model_data())
+
+    assert call_count == 1
+    assert len(part.solids().vals()) == 1
+    assert document.build_order == ("base", "boss", "hole")
 
 
 def test_editable_document_preserves_history_supports_and_sketches():

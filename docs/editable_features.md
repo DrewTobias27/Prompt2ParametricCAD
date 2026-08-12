@@ -127,8 +127,10 @@ dependencies. A separate generated release matrix expands this to 292
 profile/operation/face/pattern combinations and multi-feature repair chains.
 A focused installed-SolidWorks follow-up completed native creation and
 save/reopen mutation verification for the six angled-planar cases added after
-the original 286-case run, bringing the current generated matrix to 292
-native-verified cases.
+the original 286-case run, establishing a 292-case native baseline. The latest
+polygon-diameter and Hole Wizard placement-control additions compile against
+the installed API and pass focused deterministic gates; their native rerun is
+required before the next public release claim.
 A seven-case golden release matrix additionally starts from reviewed natural-
 language/design-intent pairs and traverses lowering, STEP round-trip, editable
 mutation, and SolidWorks replay planning.
@@ -177,9 +179,15 @@ schema, rebuild, operation-effect checks, and quality checks succeed.
 Polyline vertices plus explicit-sketch start, end, and arc-through coordinates
 now use stable named native dimensions when their values are nonzero. Zero
 coordinates use native horizontal/vertical relations, and three-point arc
-centers and radii remain derived to avoid over-constraining the sketch. Polygon
-diameter and side-count bindings remain incomplete. The audit reports native
-construction and parameter-binding coverage separately.
+centers and radii remain derived to avoid over-constraining the sketch. The
+audit distinguishes named edit bindings, relation-controlled zero coordinates,
+and unsupported parameters. Polygon side count remains fixed topology rather
+than an automated mutation binding.
+
+Native Hole Wizard position sketches now expose the same stable X/Y placement
+controls as profile sketches. Only actual source hole points are selected for
+the countersink feature, so the fixed internal dimension datum cannot create an
+extra hole.
 
 The next native increment should broaden operation coverage and mutation cases
 without weakening the current contract: CadQuery remains the geometry oracle,

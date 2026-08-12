@@ -53,7 +53,39 @@ async function postDownload(path, payload, fallbackFilename) {
   return {
     blob: await response.blob(),
     filename: filenameMatch?.[1] || fallbackFilename,
+    editability: {
+      numericParameterCount: numericHeader(
+        response,
+        "X-Prompt2CAD-Numeric-Parameters",
+      ),
+      namedBindingCount: numericHeader(
+        response,
+        "X-Prompt2CAD-Named-Bindings",
+      ),
+      relationControlledCount: numericHeader(
+        response,
+        "X-Prompt2CAD-Relation-Controls",
+      ),
+      unsupportedCount: numericHeader(
+        response,
+        "X-Prompt2CAD-Unsupported-Parameters",
+      ),
+      controlCoverageRatio: numericHeader(
+        response,
+        "X-Prompt2CAD-Control-Coverage",
+      ),
+    },
   };
+}
+
+function numericHeader(response, name) {
+  const rawValue = response.headers.get(name);
+  if (rawValue === null || rawValue.trim() === "") {
+    return null;
+  }
+
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value : null;
 }
 
 export function generateFromPrompt(prompt) {

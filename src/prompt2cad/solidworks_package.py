@@ -12,11 +12,12 @@ from textwrap import dedent
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
-SOLIDWORKS_PACKAGE_VERSION = 3
+SOLIDWORKS_PACKAGE_VERSION = 4
 _FIXED_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 
@@ -42,6 +43,11 @@ def create_solidworks_package(
     """
     document = model_data_to_editable_document(model_data)
     replay_plan = build_solidworks_replay_plan(document)
+    editability_coverage = native_parameter_coverage(
+        model_data,
+        replay_plan,
+        document=document,
+    )
     stem = _safe_package_stem(filename_hint, model_data)
     native_filename = f"{stem}.SLDPRT"
 
@@ -59,7 +65,10 @@ def create_solidworks_package(
         )
 
     files = {
-        "README.txt": _readme_text(native_filename).encode("utf-8"),
+        "README.txt": _readme_text(
+            native_filename,
+            editability_coverage,
+        ).encode("utf-8"),
         "Build-SolidWorks-Part.ps1": _launcher_script(native_filename).encode(
             "utf-8"
         ),
@@ -69,6 +78,7 @@ def create_solidworks_package(
         ),
         "source-model.json": _json_bytes(model_data),
         "editable-model.json": _json_bytes(document.to_dict()),
+        "editability-coverage.json": _json_bytes(editability_coverage),
         "solidworks-replay-plan.json": _json_bytes(replay_plan.to_dict()),
         "solidworks_replay.ps1": replay_script_path.read_bytes(),
         "solidworks_replay_runner.cs": replay_runner_path.read_bytes(),
@@ -88,6 +98,27 @@ def create_solidworks_package(
             "version": replay_plan.format_version,
             "feature_count": len(replay_plan.features),
             "build_order": list(replay_plan.source_build_order),
+        },
+        "editability": {
+            "numeric_parameter_count": editability_coverage[
+                "numeric_source_count"
+            ],
+            "named_binding_count": editability_coverage["bound_count"],
+            "relation_controlled_count": editability_coverage[
+                "relation_controlled_count"
+            ],
+            "unsupported_count": len(
+                editability_coverage["unsupported_parameter_ids"]
+            ),
+            "control_coverage_ratio": editability_coverage[
+                "control_coverage_ratio"
+            ],
+            "unsupported_parameter_ids": editability_coverage[
+                "unsupported_parameter_ids"
+            ],
+            "unsupported_parameters": editability_coverage[
+                "unsupported_parameters"
+            ],
         },
         "files": [
             {
@@ -175,6 +206,10 @@ def _launcher_script(native_filename: str) -> str:
 
         $manifest = Get-Content -LiteralPath $manifestPath -Raw |
             ConvertFrom-Json
+        if ($manifest.format -ne "{SOLIDWORKS_PACKAGE_FORMAT}" -or
+            [int]$manifest.version -ne {SOLIDWORKS_PACKAGE_VERSION}) {{
+            throw "This launcher requires Prompt2ParametricCAD SolidWorks package version {SOLIDWORKS_PACKAGE_VERSION}. Download a fresh package and try again."
+        }}
         if (-not $SkipIntegrityCheck.IsPresent) {{
             foreach ($file in $manifest.files) {{
                 $path = Join-Path $PSScriptRoot $file.path
@@ -302,7 +337,13 @@ def _check_cmd_launcher_script() -> str:
     ).lstrip()
 
 
-def _readme_text(native_filename: str) -> str:
+def _readme_text(native_filename: str, editability_coverage: dict) -> str:
+    parameter_count = editability_coverage["numeric_source_count"]
+    named_count = editability_coverage["bound_count"]
+    relation_count = editability_coverage["relation_controlled_count"]
+    unsupported_count = len(
+        editability_coverage["unsupported_parameter_ids"]
+    )
     return dedent(
         f"""
         Prompt2ParametricCAD SolidWorks Package
@@ -317,6 +358,18 @@ def _readme_text(native_filename: str) -> str:
         - Windows
         - An installed and licensed copy of SolidWorks
         - Windows PowerShell 5.1 or newer
+
+        Editability summary
+        -------------------
+        - Source numeric parameters: {parameter_count}
+        - Named automated edit bindings: {named_count}
+        - Zero coordinates held by sketch relations: {relation_count}
+        - Parameters without automated mutation bindings: {unsupported_count}
+
+        Every operation is replayed as native SolidWorks history. The counts
+        above describe what the included verification runner can change by
+        stable parameter ID; they do not prevent normal manual feature-tree
+        editing. See editability-coverage.json for the exact parameter IDs.
 
         Build the editable part
         -----------------------

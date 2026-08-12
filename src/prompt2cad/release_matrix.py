@@ -19,16 +19,15 @@ import time
 import cadquery as cq
 
 from prompt2cad.candidate_evaluation import evaluate_design_intent_candidate
-from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.editable_model import build_editable_model_document
 from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.exporter import export_step
-from prompt2cad.interpreter import build_model
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
 from prompt2cad.solidworks_replay import verify_solidworks_editability
+from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_smoke import compare_geometry_metrics
 from prompt2cad.solidworks_smoke import geometry_metrics
-from prompt2cad.solidworks_smoke import native_parameter_coverage
 from prompt2cad.solidworks_smoke import validate_published_references
 from prompt2cad.training_data import DEFAULT_INTENT_EXAMPLES_DIR
 from prompt2cad.training_data import load_intent_examples
@@ -206,7 +205,7 @@ def run_release_case(
         }
 
         stage = "cadquery_geometry"
-        part = build_model(model_data)
+        part, document = build_editable_model_document(model_data)
         source_metrics = geometry_metrics(part)
         result["checks"][stage] = {
             "passed": True,
@@ -226,7 +225,6 @@ def run_release_case(
         }
 
         stage = "editable_parameter_rebuild"
-        document = model_data_to_editable_document(model_data)
         edited_part, edited_document = rebuild_with_parameter_updates(
             document,
             case.mutations,

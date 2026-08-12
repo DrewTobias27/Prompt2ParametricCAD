@@ -1,0 +1,50 @@
+"""Contract checks for the one-command deterministic release gate."""
+
+from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RELEASE_SCRIPT = PROJECT_ROOT / "scripts" / "check_release.ps1"
+
+
+def powershell_path() -> str:
+    executable = shutil.which("powershell.exe") or shutil.which("powershell")
+    if executable is None:
+        pytest.skip("Windows PowerShell is not available")
+    return executable
+
+
+def test_release_script_is_valid_powershell():
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-Command",
+            (
+                "$tokens=$null; $errors=$null; "
+                "[System.Management.Automation.Language.Parser]::ParseFile("
+                f"'{RELEASE_SCRIPT}', [ref]$tokens, [ref]$errors) | Out-Null; "
+                "if ($errors.Count) { $errors | Out-String; exit 1 }"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_release_script_keeps_native_execution_explicit():
+    source = RELEASE_SCRIPT.read_text(encoding="utf-8")
+
+    assert "-m pytest -q" in source
+    assert "prompt2cad.release_matrix" in source
+    assert "prompt2cad.capability_audit" in source
+    assert "P2P_RUN_SOLIDWORKS_COMPILE" in source
+    assert "--execute-native" not in source
+    assert "OPENAI_API_KEY" not in source

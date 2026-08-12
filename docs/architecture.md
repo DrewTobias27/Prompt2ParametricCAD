@@ -43,9 +43,10 @@ it.
 | `sketch_model.py` | Normalized sketch entities and geometric metadata |
 | `editable_model.py` | Versioned features, named parameters, source paths, and transactional rebuilds |
 | `solidworks_replay.py` | Validates and lowers the supported editable subset into a deterministic native replay plan |
+| `solidworks_editability.py` | Classifies named, relation-controlled, and unsupported native parameter controls |
 | `solidworks_replay_runner.cs` | Replays native sketches, dimensions, dependencies, boss/cut features, and `SLDPRT` output through the installed SolidWorks API |
 | `capability_audit.py` | Generates profile/operation composition cases and verifies schema, STEP, repair, and optional native SolidWorks parity |
-| `release_matrix.py` | Runs reviewed prompt/intent pairs through lowering, STEP round-trip, editable mutation, and SolidWorks replay planning |
+| `release_matrix.py` | Runs reviewed prompt/intent pairs through lowering, STEP round-trip, editable mutation, replay planning, and optional native SLDPRT create/edit/reopen verification |
 | `quality.py` | Schema, structure, build, export, and geometry quality gates |
 | `operation_effects.py` | Verifies each feature materially changed geometry |
 | `web_app.py` | FastAPI endpoints and production frontend hosting |

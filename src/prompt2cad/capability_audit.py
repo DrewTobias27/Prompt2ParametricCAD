@@ -19,17 +19,16 @@ import time
 
 import cadquery as cq
 
-from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.editable_model import build_editable_model_document
 from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.exporter import export_step
-from prompt2cad.interpreter import build_model
 from prompt2cad.schema import validate_model_data
 from prompt2cad.solidworks_replay import export_solidworks_part
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import verify_solidworks_editability
+from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_smoke import compare_geometry_metrics
 from prompt2cad.solidworks_smoke import geometry_metrics
-from prompt2cad.solidworks_smoke import native_parameter_coverage
 from prompt2cad.solidworks_smoke import validate_published_references
 
 
@@ -443,7 +442,13 @@ def generated_capability_cases() -> tuple[CapabilityCase, ...]:
                         countersink,
                     ]
                 },
-                mutations={"patterned_countersink.feature.diameter": 5},
+                mutations={
+                    "patterned_countersink.feature.diameter": 5,
+                    "patterned_countersink.placement.inst001.x": (
+                        float(pattern["seed_position"][0])
+                        - math.copysign(2.0, pattern["seed_position"][0])
+                    ),
+                },
             )
         )
 
@@ -927,11 +932,10 @@ def audit_capability_case(
     try:
         validate_model_data(case.model_data)
         stage = "cadquery_build"
-        part = build_model(case.model_data)
+        part, document = build_editable_model_document(case.model_data)
         original_metrics = shape_metrics(part)
 
         stage = "solidworks_plan"
-        document = model_data_to_editable_document(case.model_data)
         plan = build_solidworks_replay_plan(document)
         if len(plan.features) != len(case.model_data["operations"]):
             raise ValueError("Native plan dropped one or more operations")
@@ -1141,6 +1145,11 @@ def run_capability_audit(
     bound_count = sum(
         coverage["bound_count"] for coverage in successful_coverages
     )
+    relation_controlled_count = sum(
+        coverage["relation_controlled_count"]
+        for coverage in successful_coverages
+    )
+    controlled_count = bound_count + relation_controlled_count
     return {
         "case_count": len(cases),
         "passed": sum(result["status"] == "pass" for result in results),
@@ -1151,6 +1160,13 @@ def run_capability_audit(
             "bound_count": bound_count,
             "coverage_ratio": (
                 bound_count / numeric_source_count
+                if numeric_source_count
+                else 1.0
+            ),
+            "relation_controlled_count": relation_controlled_count,
+            "controlled_count": controlled_count,
+            "control_coverage_ratio": (
+                controlled_count / numeric_source_count
                 if numeric_source_count
                 else 1.0
             ),

@@ -7,11 +7,11 @@ from prompt2cad.editable_model import model_data_to_editable_document
 from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.interpreter import build_model
 from prompt2cad.loader import load_model
+from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_smoke import SMOKE_FIXTURE_NAMES
 from prompt2cad.solidworks_smoke import EDITABILITY_SCENARIOS
 from prompt2cad.solidworks_smoke import compare_geometry_metrics
 from prompt2cad.solidworks_smoke import geometry_metrics
-from prompt2cad.solidworks_smoke import native_parameter_coverage
 from prompt2cad.solidworks_smoke import run_smoke_suite
 from prompt2cad.solidworks_smoke import smoke_fixture_paths
 from prompt2cad.solidworks_smoke import validate_published_references
@@ -88,7 +88,26 @@ def test_parameter_coverage_binds_nonzero_freeform_coordinates():
     )
     # Zero-valued coordinates are held by native horizontal/vertical
     # relations, while polygon topology remains the next parameter gap.
+    assert "hex_boss.sketch.diameter" not in coverage["unbound_parameter_ids"]
     assert "hex_boss.sketch.sides" in coverage["unbound_parameter_ids"]
+    assert "hex_boss.sketch.sides" in coverage["unsupported_parameter_ids"]
+    assert coverage["unsupported_parameters"] == [
+        {
+            "parameter_id": "hex_boss.sketch.sides",
+            "reason": (
+                "SolidWorks fixes regular-polygon topology when the sketch "
+                "is created. Change the side count by editing or recreating "
+                "that native polygon sketch."
+            ),
+        }
+    ]
+    assert "hex_boss.placement.inst001.y" in (
+        coverage["relation_controlled_parameter_ids"]
+    )
+    assert "hex_boss.placement.inst001.y" not in (
+        coverage["unsupported_parameter_ids"]
+    )
+    assert coverage["control_coverage_ratio"] > coverage["coverage_ratio"]
 
 
 def test_native_smoke_execution_uses_the_validated_plan(tmp_path: Path):

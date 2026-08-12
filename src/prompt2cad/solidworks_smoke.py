@@ -9,13 +9,13 @@ from pathlib import Path
 import time
 
 from prompt2cad.exporter import export_step
-from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.editable_model import build_editable_model_document
 from prompt2cad.editable_model import rebuild_with_parameter_updates
-from prompt2cad.interpreter import build_model
 from prompt2cad.loader import load_model
-from prompt2cad.schema import validate_model_data
-from prompt2cad.solidworks_export import model_path_to_replay_plan
+from prompt2cad.solidworks_export import materialize_stable_feature_ids
+from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_export import save_plan
+from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import SolidWorksReplayPlan
 from prompt2cad.solidworks_replay import export_solidworks_part
 from prompt2cad.solidworks_replay import verify_solidworks_editability
@@ -74,6 +74,7 @@ EDITABILITY_SCENARIOS = {
     },
     "solidworks_smoke_coordinate_profiles": {
         "base.feature.distance": 10,
+        "hex_boss.sketch.diameter": 28,
         "hex_boss.feature.distance": 12,
     },
     "solidworks_smoke_arc_revolve": {
@@ -149,14 +150,15 @@ def run_smoke_suite(
             "native_executed": execute_native,
         }
         try:
-            model_data = load_model(fixture_path)
-            validate_model_data(model_data)
-            part = build_model(model_data)
+            model_data = materialize_stable_feature_ids(
+                load_model(fixture_path)
+            )
+            part, source_document = build_editable_model_document(model_data)
             export_step(part, step_path)
             cadquery_metrics = geometry_metrics(part)
             result["cadquery_geometry"] = cadquery_metrics
 
-            plan = model_path_to_replay_plan(fixture_path)
+            plan = build_solidworks_replay_plan(source_document)
             save_plan(plan, plan_path)
             result["operation_count"] = len(model_data["operations"])
             result["native_feature_count"] = len(plan.features)
@@ -166,6 +168,7 @@ def run_smoke_suite(
             result["native_parameter_coverage"] = native_parameter_coverage(
                 model_data,
                 plan,
+                document=source_document,
             )
 
             if execute_native:
@@ -201,7 +204,6 @@ def run_smoke_suite(
                 )
                 mutations = EDITABILITY_SCENARIOS.get(name)
                 if verify_editability and mutations is not None:
-                    source_document = model_data_to_editable_document(model_data)
                     expected_part, _ = rebuild_with_parameter_updates(
                         source_document,
                         mutations,
@@ -256,47 +258,6 @@ def run_smoke_suite(
         "passed": passed,
         "failed": len(results) - passed,
         "results": results,
-    }
-
-
-def native_parameter_coverage(
-    model_data: dict,
-    plan: SolidWorksReplayPlan,
-    *,
-    document=None,
-) -> dict:
-    """Report which numeric source parameters have native edit bindings.
-
-    This is diagnostic rather than a pass/fail gate because coordinate-driven
-    sketch parameters are deliberately preserved in the editable document even
-    when the native adapter cannot edit them yet.  Keeping the gap explicit
-    prevents new profile families from silently reducing editability coverage.
-    """
-    if document is None:
-        document = model_data_to_editable_document(model_data)
-    source_parameter_ids = {
-        parameter.id
-        for feature in document.features
-        for parameter in feature.parameters
-        if parameter.driving and isinstance(parameter.value, (int, float))
-        and not isinstance(parameter.value, bool)
-    }
-    binding_ids = {
-        binding["parameter_id"]
-        for feature in plan.features
-        for binding in feature.parameter_bindings
-    }
-    bound_source_ids = source_parameter_ids & binding_ids
-    return {
-        "numeric_source_count": len(source_parameter_ids),
-        "bound_count": len(bound_source_ids),
-        "coverage_ratio": (
-            len(bound_source_ids) / len(source_parameter_ids)
-            if source_parameter_ids
-            else 1.0
-        ),
-        "unbound_parameter_ids": sorted(source_parameter_ids - binding_ids),
-        "native_only_parameter_ids": sorted(binding_ids - source_parameter_ids),
     }
 
 

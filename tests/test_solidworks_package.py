@@ -111,6 +111,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
         "Check-SolidWorks-Setup.cmd",
         "README.txt",
         "editable-model.json",
+        "editability-coverage.json",
         "manifest.json",
         "solidworks-replay-plan.json",
         "solidworks_replay.ps1",
@@ -121,12 +122,22 @@ def test_package_contains_validated_native_replay_and_local_runner():
     manifest = json.loads(files["manifest.json"])
     replay_plan = json.loads(files["solidworks-replay-plan.json"])
     editable_model = json.loads(files["editable-model.json"])
+    editability_coverage = json.loads(files["editability-coverage.json"])
 
     assert manifest == package.manifest
     assert manifest["format"] == SOLIDWORKS_PACKAGE_FORMAT
     assert manifest["version"] == SOLIDWORKS_PACKAGE_VERSION
     assert manifest["native_result"].endswith(".SLDPRT.result.json")
     assert manifest["replay_plan"]["build_order"] == ["base", "boss"]
+    assert manifest["editability"]["numeric_parameter_count"] > 0
+    assert manifest["editability"]["named_binding_count"] > 0
+    assert manifest["editability"]["control_coverage_ratio"] <= 1
+    assert manifest["editability"]["unsupported_parameter_ids"] == (
+        editability_coverage["unsupported_parameter_ids"]
+    )
+    assert manifest["editability"]["unsupported_parameters"] == (
+        editability_coverage["unsupported_parameters"]
+    )
     assert replay_plan["source_build_order"] == ["base", "boss"]
     assert editable_model["native_replay"]["exporter_implemented"] is True
     readme = files["README.txt"]
@@ -134,7 +145,10 @@ def test_package_contains_validated_native_replay_and_local_runner():
     command_launcher = files["Build-SolidWorks-Part.cmd"]
     check_launcher = files["Check-SolidWorks-Setup.cmd"]
     assert b"Build-SolidWorks-Part.cmd" in readme
+    assert b"Editability summary" in readme
+    assert b"editability-coverage.json" in readme
     assert b"solidworks-replay-plan.json" in launcher
+    assert b"SolidWorks package version 4" in launcher
     assert b"Get-FileHash" in launcher
     assert b"Is64BitProcess" in launcher
     assert b"GetTypeFromProgID" in launcher
@@ -242,6 +256,60 @@ def test_launcher_rejects_tampered_package_before_solidworks(tmp_path: Path):
     assert "Integrity check failed for source-model.json" in (
         result.stdout + result.stderr
     )
+
+
+def test_launcher_rejects_an_incompatible_package_version(tmp_path: Path):
+    package = create_solidworks_package(fixture_model_data(), "Version check")
+    extract_package(package.content, tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["version"] = SOLIDWORKS_PACKAGE_VERSION - 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "Build-SolidWorks-Part.ps1"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "SolidWorks package version 4" in result.stdout + result.stderr
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
+)
+def test_extracted_package_setup_check_compiles_runner(tmp_path: Path):
+    package = create_solidworks_package(fixture_model_data(), "Setup check")
+    extract_package(package.content, tmp_path)
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "Build-SolidWorks-Part.ps1"),
+            "-CheckOnly",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "SolidWorks setup is ready" in result.stdout
 
 
 @pytest.mark.skipif(

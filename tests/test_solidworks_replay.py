@@ -304,10 +304,72 @@ def test_countersink_controls_are_bound_to_hole_wizard_feature_data():
     ] == ["CounterSinkDiameter"]
     assert bindings["mounting_holes.feature.angle"]["unit"] == "deg"
     assert bindings["mounting_holes.feature.depth"]["value"] == 7
+    assert bindings["mounting_holes.placement.inst001.x"]["value"] == 25
+    assert bindings["mounting_holes.placement.inst001.y"]["value"] == 15
+    assert bindings["mounting_holes.placement.inst002.x"]["value"] == 25
+    assert bindings["mounting_holes.placement.inst002.y"]["value"] == 15
     assert all(
-        binding["binding_kind"] == "feature_property"
-        for binding in bindings.values()
+        bindings[parameter_id]["binding_kind"] == "feature_property"
+        for parameter_id in (
+            "mounting_holes.feature.diameter",
+            "mounting_holes.feature.countersink_diameter",
+            "mounting_holes.feature.angle",
+            "mounting_holes.feature.depth",
+        )
     )
+
+
+def test_patterned_countersink_seed_has_native_placement_bindings():
+    model_data = native_model_data()
+    model_data["operations"] = [
+        model_data["operations"][0],
+        {
+            "type": "countersink",
+            "id": "mounting_holes",
+            "target": "base.top",
+            "positions": [[20, 0], [0, 20], [-20, 0], [0, -20]],
+            "pattern": {
+                "type": "circular",
+                "seed_position": [20, 0],
+                "center": [0, 0],
+                "count": 4,
+                "total_angle_degrees": 360,
+            },
+            "diameter": 6,
+            "countersink_diameter": 12,
+            "angle": 82,
+            "depth": "through",
+        },
+    ]
+
+    countersink = replay_plan(model_data).features[1]
+    binding_ids = {
+        binding["parameter_id"] for binding in countersink.parameter_bindings
+    }
+
+    assert countersink.sketch["positions_mm"] == [[20.0, 0.0]]
+    assert len(countersink.sketch["placement_controls"]) == 1
+    assert "mounting_holes.placement.inst001.x" in binding_ids
+    assert "mounting_holes.placement.inst001.y" not in binding_ids
+    assert "mounting_holes.pattern.count" in binding_ids
+    assert "mounting_holes.pattern.total_angle" in binding_ids
+
+
+def test_native_hole_wizard_selects_only_source_position_points():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "FeaturePoints = featurePoints" in runner_source
+    assert "nativeSketch.FeaturePoints ?? new SketchPoint[0]" in runner_source
+    countersink_section = runner_source[
+        runner_source.index("private static Feature CreateNativeCountersink") :
+        runner_source.index("private static void ConfigureFeatureDrivingDimension")
+    ]
+    assert "GetSketchPoints2" not in countersink_section
 
 
 @pytest.mark.parametrize(
@@ -1119,10 +1181,43 @@ def test_native_polygon_uses_the_same_positive_x_phase_as_cadquery():
         runner_source.index('if (sketch.Profile == "polyline")')
     ]
 
-    assert "double angle = 2.0 * Math.PI * index / sketch.Sides;" in (
-        polygon_section
-    )
+    assert "sketchManager.CreatePolygon(" in polygon_section
+    assert "seedCenter[0] + radius, seedCenter[1]" in polygon_section
+    assert "matching CadQuery's polygon diameter" in polygon_section
+    assert "false\n                );" in polygon_section
+    assert "FindPolygonConstructionCircle(polygonSketch)" in polygon_section
     assert "(Math.PI / 2.0)" not in polygon_section
+
+
+def test_polygon_diameter_has_a_native_edit_binding():
+    model_data = native_model_data()
+    model_data["operations"][1] = {
+        "type": "add_extrude",
+        "id": "hex_boss",
+        "target": "base.top",
+        "profile": "polygon",
+        "positions": [[0, 0]],
+        "distance": 12,
+        "diameter": 18,
+        "sides": 6,
+    }
+    model_data["operations"] = model_data["operations"][:2]
+
+    polygon = replay_plan(model_data).features[1]
+    binding_ids = {
+        binding["parameter_id"] for binding in polygon.parameter_bindings
+    }
+
+    assert polygon.sketch["driving_dimensions"] == [
+        {
+            "parameter_id": "hex_boss.sketch.diameter",
+            "native_name": "P2P_hex_boss_sketch_diameter",
+            "value_mm": 18.0,
+            "unit": "mm",
+        }
+    ]
+    assert "hex_boss.sketch.diameter" in binding_ids
+    assert "hex_boss.sketch.sides" not in binding_ids
 
 
 def test_native_edge_matching_has_a_cardinality_guarded_semantic_fallback():

@@ -28,6 +28,7 @@ import {
   OutputPanel,
   RepairHistoryPanel,
 } from "./SidePanels.jsx";
+import { formatSolidWorksDownloadStatus } from "./solidWorksDownload.js";
 
 export default function App() {
   const [mode, setMode] = useState("manual");
@@ -309,7 +310,7 @@ export default function App() {
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
       setSolidWorksStatus(
-        "Package downloaded. Extract it on a Windows computer with SolidWorks.",
+        formatSolidWorksDownloadStatus(download.editability),
       );
     } catch (error) {
       setSolidWorksStatus(`SolidWorks package unavailable: ${error.message}`);

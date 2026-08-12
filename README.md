@@ -24,6 +24,7 @@ and represented as a dependency graph for validated editing and native replay.
 - Verified native SolidWorks replay with fully defined sketches, editable
   dimensions, patterns, persistent semantic references, and ordered features
 - Generated 292-case STEP/SolidWorks composition and mutation audit
+- Native-plan parity across all 49 checked-in models and intent examples
 - Seven-case golden prompt-to-intent-to-STEP-to-SolidWorks release matrix
 - Automatic repair fallback with structured diagnostics
 - Focused result refinement that preserves prior design intent and validates each revision
@@ -231,6 +232,18 @@ Run the automated tests:
 ```powershell
 python -m pytest
 ```
+
+Run the deterministic release candidate gate in one command (no API calls and
+no SolidWorks launch):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\check_release.ps1 -CompileSolidWorksPackage
+```
+
+Add `-FullMatrix` before a tagged release to include all 292 generated
+capability cases. Native create/edit/reopen verification remains the separate,
+explicit workstation gate in [docs/hosting.md](docs/hosting.md).
 
 Run deterministic and generated-model evaluations:
 

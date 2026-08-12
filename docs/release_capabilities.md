@@ -41,7 +41,19 @@ semantic fallback. The six subsequently added angled-planar pattern cases were
 then verified in focused installed-SolidWorks runs. All six passed native
 creation, CadQuery/SolidWorks geometry comparison, persistent-reference
 resolution, parameter mutation, rebuild, save/reopen, and a second geometry
-comparison. Together, those runs cover all 292 current generated cases.
+comparison. Together, those runs established a 292-case native baseline. The
+subsequent polygon-diameter and Hole Wizard placement-control changes pass the
+same deterministic plans and compile against the installed SolidWorks APIs;
+their focused installed-application rerun remains part of the final public
+release gate.
+
+## Checked-in corpus parity
+
+A separate 49-case regression traverses every operation model in
+`examples/models`, every validated library model, every evaluation fixture,
+and every reviewed design-intent training example through editable-document
+construction and native replay planning. This protects the examples people
+actually see and use, rather than relying only on generated combinations.
 
 ## Golden end-to-end release gate
 
@@ -121,9 +133,15 @@ relation rather than a zero-valued driving dimension.
 Polyline vertices plus explicit-sketch start, end, and arc-through coordinates
 are exposed through stable native dimensions when nonzero. Zero coordinates use
 native horizontal/vertical relations. Three-point arc centers and radii are
-derived from those source points so the sketch is not over-constrained. Polygon
-diameter and side count are not yet exposed as automated mutation bindings; the
-audit reports this remaining gap separately.
+derived from those source points so the sketch is not over-constrained. The
+audit reports named mutation bindings, relation-controlled zero coordinates,
+and genuinely unsupported parameters separately instead of treating every
+missing zero dimension as a feature gap. Polygon side count remains fixed at
+native sketch creation and is reported as unsupported topology.
+
+Hole Wizard countersink position points use the same named X/Y placement
+controls as other profiles. Patterned countersinks retain one editable seed;
+the native mirror, circular, or linear pattern controls the remaining copies.
 
 ## Intentional limits
 
@@ -146,6 +164,12 @@ Run the quick representative regression tests:
 
 ```powershell
 python -m pytest tests\test_capability_audit.py
+```
+
+Check every committed model and intent example against native replay planning:
+
+```powershell
+python -m pytest tests\test_native_corpus_parity.py
 ```
 
 Run every generated case through STEP export/re-import:

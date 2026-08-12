@@ -94,7 +94,7 @@ def test_release_matrix_native_mode_checks_create_edit_and_reopen(
         mutations,
         **kwargs,
     ):
-        model_data = __import__("json").loads(
+        model_data = json.loads(
             (tmp_path / f"{case_name}.model.json").read_text(encoding="utf-8")
         )
         document = model_data_to_editable_document(model_data)

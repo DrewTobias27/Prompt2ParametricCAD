@@ -65,9 +65,12 @@ Before linking the application from a LinkedIn post:
 2. Run its launcher on Windows with the supported SolidWorks version.
 3. Confirm the resulting `SLDPRT` opens, rebuilds, and exposes editable named
    sketches, dimensions, patterns, and ordered features.
-4. Run `prompt2cad-solidworks-smoke --execute` and require every native parity
-   fixture to pass.
-5. Confirm both download buttons and the package instructions work for a new
+4. Run `prompt2cad-solidworks-smoke --execute --verify-editability` and require
+   every native parity fixture to pass.
+5. Run focused native mutation cases for any SolidWorks runner code changed
+   since the last full matrix. For the current candidate, include polygon
+   diameter and patterned-countersink seed placement.
+6. Confirm both download buttons and the package instructions work for a new
    user without access to the repository.
 
 The messaging requirements for that later post are recorded in
@@ -79,7 +82,7 @@ not a prepared post draft.
 The public-release gate was exercised on August 10, 2026. The deployed site
 generated and refined a valid multi-feature model, both public download paths
 returned non-empty artifacts, and a package downloaded from the public URL
-created a native SolidWorks part with editable features and dimensions. The
-native parity suite passed all eight supported cases. Repeat the short human
-check immediately before publishing because the hosted service and external
-API remain live dependencies.
+created a native SolidWorks part with editable features and dimensions. That
+result predates the latest native-runner polish, so repeat the focused package
+and mutation checks above before publishing. The hosted service, external API,
+and installed SolidWorks version remain live dependencies.

@@ -482,6 +482,29 @@ def download_solidworks_package(request: CADSolidWorksPackageRequest):
             "Content-Disposition": f'attachment; filename="{package.filename}"',
             "Cache-Control": "no-store",
             "X-Prompt2CAD-Package-Version": str(package.manifest["version"]),
+            "X-Prompt2CAD-Numeric-Parameters": str(
+                package.manifest["editability"]["numeric_parameter_count"]
+            ),
+            "X-Prompt2CAD-Named-Bindings": str(
+                package.manifest["editability"]["named_binding_count"]
+            ),
+            "X-Prompt2CAD-Relation-Controls": str(
+                package.manifest["editability"]["relation_controlled_count"]
+            ),
+            "X-Prompt2CAD-Unsupported-Parameters": str(
+                package.manifest["editability"]["unsupported_count"]
+            ),
+            "X-Prompt2CAD-Control-Coverage": str(
+                package.manifest["editability"]["control_coverage_ratio"]
+            ),
+            "Access-Control-Expose-Headers": (
+                "Content-Disposition, X-Prompt2CAD-Package-Version, "
+                "X-Prompt2CAD-Numeric-Parameters, "
+                "X-Prompt2CAD-Named-Bindings, "
+                "X-Prompt2CAD-Relation-Controls, "
+                "X-Prompt2CAD-Unsupported-Parameters, "
+                "X-Prompt2CAD-Control-Coverage"
+            ),
         },
     )
 

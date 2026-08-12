@@ -82,6 +82,16 @@ def test_generated_matrix_covers_every_declared_pair():
                 "circle",
             ) in facets
 
+        countersink_case = next(
+            case
+            for case in cases
+            if case.name == f"pattern_{pattern_type}__countersink"
+        )
+        assert (
+            "patterned_countersink.placement.inst001.x"
+            in countersink_case.mutations
+        )
+
     for boss_profile in PROFILE_TYPES:
         for child_profile in PROFILE_TYPES:
             assert (

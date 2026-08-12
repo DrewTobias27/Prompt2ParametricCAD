@@ -449,6 +449,7 @@ namespace Prompt2Cad.SolidWorks
         public Feature SketchFeature { get; set; }
         public Sketch Sketch { get; set; }
         public SketchSegment RevolveAxis { get; set; }
+        public SketchPoint[] FeaturePoints { get; set; }
     }
 
     [DataContract]
@@ -1353,6 +1354,7 @@ namespace Prompt2Cad.SolidWorks
             MathUtility mathUtility = application.IGetMathUtility();
             MathTransform modelToSketch = sketchDefinition.ModelToSketchTransform;
 
+            SketchPoint[] featurePoints;
             bool previousAddToDatabase = sketchManager.AddToDB;
             try
             {
@@ -1361,7 +1363,7 @@ namespace Prompt2Cad.SolidWorks
                 // snapping that can otherwise move an offset profile to the
                 // sketch origin on a side face.
                 sketchManager.AddToDB = true;
-                CreateProfileInstances(
+                featurePoints = CreateProfileInstances(
                     model,
                     sketchManager,
                     step,
@@ -1436,6 +1438,7 @@ namespace Prompt2Cad.SolidWorks
                 SketchFeature = sketchFeature,
                 Sketch = sketchDefinition,
                 RevolveAxis = revolveAxis,
+                FeaturePoints = featurePoints,
             };
         }
 
@@ -1882,7 +1885,7 @@ namespace Prompt2Cad.SolidWorks
             return bestFace;
         }
 
-        private static void CreateProfileInstances(
+        private static SketchPoint[] CreateProfileInstances(
             ModelDoc2 model,
             SketchManager sketchManager,
             ReplayStep step,
@@ -1897,24 +1900,50 @@ namespace Prompt2Cad.SolidWorks
 
             if (step.Sketch.Profile == "points")
             {
-                foreach (double[] point in positions)
+                var createdPoints = new List<SketchPoint>();
+                SketchPoint pointPlacementAnchor = null;
+                PlacementControl[] pointPlacementControls =
+                    step.Sketch.PlacementControls ?? new PlacementControl[0];
+                for (int pointIndex = 0; pointIndex < positions.Length; pointIndex++)
                 {
-                    double[] sketchPoint = ToSketchPoint(
+                    double[] sourcePoint = positions[pointIndex];
+                    PlacementControl pointControl =
+                        pointIndex < pointPlacementControls.Length
+                        ? pointPlacementControls[pointIndex]
+                        : null;
+                    double[] seededPoint = pointControl == null
+                        ? sourcePoint
+                        : NativeProfileSeedCenter(sourcePoint);
+                    double[] nativePointCoordinates = ToSketchPoint(
                         step.Support.Frame,
-                        point,
+                        seededPoint,
                         mathUtility,
                         modelToSketch
                     );
-                    if (sketchManager.CreatePoint(
-                        sketchPoint[0], sketchPoint[1], sketchPoint[2]
-                    ) == null)
+                    SketchPoint createdPoint = sketchManager.CreatePoint(
+                        nativePointCoordinates[0],
+                        nativePointCoordinates[1],
+                        nativePointCoordinates[2]
+                    );
+                    if (createdPoint == null)
                     {
                         throw new InvalidOperationException(
                             "SOLIDWORKS did not create a Hole Wizard position point."
                         );
                     }
+                    ApplyPlacementControl(
+                        model,
+                        sketchManager,
+                        step.Support.Frame,
+                        createdPoint,
+                        pointControl,
+                        ref pointPlacementAnchor,
+                        mathUtility,
+                        modelToSketch
+                    );
+                    createdPoints.Add(createdPoint);
                 }
-                return;
+                return createdPoints.ToArray();
             }
 
             SketchPoint placementAnchor = null;
@@ -1943,6 +1972,7 @@ namespace Prompt2Cad.SolidWorks
                     modelToSketch: modelToSketch
                 );
             }
+            return new SketchPoint[0];
         }
 
         private static SketchSegment FindCoincidentAxisSegment(
@@ -2159,34 +2189,58 @@ namespace Prompt2Cad.SolidWorks
                         "A polygon requires at least three sides."
                     );
                 }
-                SketchPoint centerPoint = CreateFreeformProfileCenter(
-                    sketchManager, frame, center, mathUtility, modelToSketch
+                double radius = sketch.DiameterMillimeters / 2.0;
+                double[] seedCenter = addDrivingDimensions
+                    ? NativeProfileSeedCenter(center)
+                    : center;
+                double[] centerWorld = ToSketchPoint(
+                    frame, seedCenter, mathUtility, modelToSketch
                 );
+                double[] vertexWorld = ToSketchPoint(
+                    frame,
+                    new[] { seedCenter[0] + radius, seedCenter[1] },
+                    mathUtility,
+                    modelToSketch
+                );
+                object polygonObject = sketchManager.CreatePolygon(
+                    centerWorld[0], centerWorld[1], centerWorld[2],
+                    vertexWorld[0], vertexWorld[1], vertexWorld[2],
+                    sketch.Sides,
+                    // A circumscribed construction circle passes through the
+                    // vertices, matching CadQuery's polygon diameter.
+                    false
+                );
+                SketchSegment[] polygonSegments = ObjectItems(polygonObject)
+                    .Cast<SketchSegment>()
+                    .ToArray();
+                if (polygonSegments.Length != sketch.Sides)
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS did not create every polygon side."
+                    );
+                }
+                Sketch polygonSketch = polygonSegments[0].GetSketch();
+                SketchPoint centerPoint = FindSketchPointAt(
+                    polygonSketch, centerWorld
+                );
+                if (addDrivingDimensions)
+                {
+                    SketchSegment constructionCircle =
+                        FindPolygonConstructionCircle(polygonSketch);
+                    AddCircleDimension(
+                        model,
+                        constructionCircle,
+                        sketch,
+                        frame,
+                        center,
+                        mathUtility,
+                        modelToSketch
+                    );
+                }
                 ApplyPlacementControl(
                     model, sketchManager, frame, centerPoint,
                     placementControl, ref placementAnchor,
                     mathUtility, modelToSketch
-                );
-                double radius = sketch.DiameterMillimeters / 2.0;
-                var points = new List<double[]>();
-                for (int index = 0; index < sketch.Sides; index++)
-                {
-                    // CadQuery starts a regular polygon on the positive local
-                    // X axis. Match that phase so downstream placements and
-                    // bounding boxes are identical in both CAD kernels.
-                    double angle = 2.0 * Math.PI * index / sketch.Sides;
-                    points.Add(new[]
-                    {
-                        center[0] + radius * Math.Cos(angle),
-                        center[1] + radius * Math.Sin(angle),
-                    });
-                }
-                CreateClosedPolyline(
-                    sketchManager,
-                    frame,
-                    points,
-                    mathUtility,
-                    modelToSketch
                 );
                 return;
             }
@@ -2603,6 +2657,38 @@ namespace Prompt2Cad.SolidWorks
                 );
             }
             return bestPoint;
+        }
+
+        private static SketchSegment FindPolygonConstructionCircle(
+            Sketch sketch)
+        {
+            SketchSegment match = null;
+            foreach (object segmentObject in ObjectItems(
+                sketch.GetSketchSegments()
+            ))
+            {
+                SketchSegment segment = segmentObject as SketchSegment;
+                Curve curve = segment == null ? null : segment.GetCurve() as Curve;
+                if (segment == null || !segment.ConstructionGeometry ||
+                    curve == null || !curve.IsCircle())
+                {
+                    continue;
+                }
+                if (match != null)
+                {
+                    throw new InvalidOperationException(
+                        "The polygon sketch contains multiple construction circles."
+                    );
+                }
+                match = segment;
+            }
+            if (match == null)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS did not expose the polygon construction circle."
+                );
+            }
+            return match;
         }
 
         private static SketchPoint CreateRectangleCenterPoint(
@@ -3304,18 +3390,16 @@ namespace Prompt2Cad.SolidWorks
             NativeSketchResult nativeSketch)
         {
             model.ClearSelection2(true);
-            object[] pointObjects = ObjectItems(
-                nativeSketch.Sketch.GetSketchPoints2()
-            ).ToArray();
-            if (pointObjects.Length == 0)
+            SketchPoint[] featurePoints =
+                nativeSketch.FeaturePoints ?? new SketchPoint[0];
+            if (featurePoints.Length == 0)
             {
                 throw new InvalidOperationException(
                     "The countersink position sketch contains no points."
                 );
             }
-            foreach (object pointObject in pointObjects)
+            foreach (SketchPoint point in featurePoints)
             {
-                SketchPoint point = pointObject as SketchPoint;
                 if (point == null || !point.Select4(true, null))
                 {
                     throw new InvalidOperationException(

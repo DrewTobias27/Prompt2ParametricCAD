@@ -158,9 +158,17 @@ class EditableModelDocument:
 
 def model_data_to_editable_document(model_data: dict) -> EditableModelDocument:
     """Validate and build model data, then return its editable document."""
+    _, document = build_editable_model_document(model_data)
+    return document
+
+
+def build_editable_model_document(
+    model_data: dict,
+) -> tuple[Any, EditableModelDocument]:
+    """Build geometry and its editable document in one feature-graph pass."""
     validate_model_data(model_data)
-    _, feature_graph = build_model_with_graph(model_data)
-    return _document_from_graph(model_data, feature_graph)
+    part, feature_graph = build_model_with_graph(model_data)
+    return part, _document_from_graph(model_data, feature_graph)
 
 
 def rebuild_with_parameter_updates(

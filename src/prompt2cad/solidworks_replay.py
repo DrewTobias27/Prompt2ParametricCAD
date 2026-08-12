@@ -736,6 +736,14 @@ def _native_sketch(feature: EditableFeatureDefinition, profile: str) -> dict:
     elif profile == "polygon":
         geometry["diameter_mm"] = float(operation["diameter"])
         geometry["sides"] = int(operation["sides"])
+        dimensions.append(
+            _dimension(
+                feature,
+                parameter_id=f"{feature.id}.sketch.diameter",
+                fallback_name="diameter",
+                value=float(operation["diameter"]),
+            )
+        )
     elif profile == "polyline":
         geometry["points_mm"] = [
             [float(point[0]), float(point[1])]
@@ -838,14 +846,15 @@ def _native_coordinate_controls(
 def _countersink_position_sketch(feature: EditableFeatureDefinition) -> dict:
     """Return the point layout consumed by a native Hole Wizard feature."""
     operation = feature.source_operation
+    positions = [
+        [float(position[0]), float(position[1])]
+        for position in operation["positions"]
+    ]
     return {
         "profile": "points",
-        "positions_mm": [
-            [float(position[0]), float(position[1])]
-            for position in operation["positions"]
-        ],
+        "positions_mm": positions,
         "driving_dimensions": [],
-        "placement_controls": [],
+        "placement_controls": _native_placement_controls(feature, positions),
         "constraint_plan": _native_constraint_plan(feature, "points"),
     }
 

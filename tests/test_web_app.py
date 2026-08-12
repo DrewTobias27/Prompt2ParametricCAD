@@ -45,7 +45,16 @@ def test_solidworks_package_route_returns_downloadable_zip(monkeypatch):
     class FakePackage:
         filename = "demo-solidworks.zip"
         content = b"zip-bytes"
-        manifest = {"version": 1}
+        manifest = {
+            "version": 4,
+            "editability": {
+                "numeric_parameter_count": 12,
+                "named_binding_count": 9,
+                "relation_controlled_count": 2,
+                "unsupported_count": 1,
+                "control_coverage_ratio": 11 / 12,
+            },
+        }
 
     monkeypatch.setattr(
         web_app,
@@ -65,7 +74,17 @@ def test_solidworks_package_route_returns_downloadable_zip(monkeypatch):
         'attachment; filename="demo-solidworks.zip"'
     )
     assert response.headers["cache-control"] == "no-store"
-    assert response.headers["x-prompt2cad-package-version"] == "1"
+    assert response.headers["x-prompt2cad-package-version"] == "4"
+    assert response.headers["x-prompt2cad-numeric-parameters"] == "12"
+    assert response.headers["x-prompt2cad-named-bindings"] == "9"
+    assert response.headers["x-prompt2cad-relation-controls"] == "2"
+    assert response.headers["x-prompt2cad-unsupported-parameters"] == "1"
+    assert float(response.headers["x-prompt2cad-control-coverage"]) == pytest.approx(
+        11 / 12
+    )
+    assert "X-Prompt2CAD-Control-Coverage" in response.headers[
+        "access-control-expose-headers"
+    ]
 
 
 def test_solidworks_package_route_reports_unsupported_models(monkeypatch):

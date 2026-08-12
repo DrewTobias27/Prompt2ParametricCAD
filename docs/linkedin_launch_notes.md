@@ -30,10 +30,18 @@ Verified against the public deployment on August 10, 2026:
 - The public STEP endpoint returned a non-empty model file.
 - A SolidWorks replay package downloaded from the public site created a native
   `SLDPRT` with one solid, two native features, and twelve editable dimensions.
-- The Python regression suite passed with 439 tests and zero skipped tests,
-  including an installed-SolidWorks package build.
-- The native SolidWorks verification suite passed all eight supported cases,
-  including freeform edge selection and partial revolves.
+- The generated 292-case matrix passed schema, CadQuery build, editable repair,
+  and native replay planning; an earlier installed-SolidWorks run established
+  native create/edit/reopen parity across the same coverage surface.
+- All 49 checked-in operation models, evaluation fixtures, library examples,
+  and reviewed design-intent examples lower to complete native replay plans.
+- The August 12 release-candidate gate passed 560 Python tests, all six frontend
+  behavior suites, a production frontend build, all seven golden end-to-end
+  cases, and all 292 generated capability cases. Five Python tests remained
+  intentionally environment-gated.
+- The latest polygon-diameter and patterned-countersink placement changes still
+  require the focused installed-SolidWorks rerun in `docs/hosting.md` before the
+  native claim is published.
 
 ## Recommended visuals
 
