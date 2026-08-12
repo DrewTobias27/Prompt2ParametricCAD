@@ -163,6 +163,36 @@ def test_arbitrary_extrusion_registers_actual_planar_side_faces():
     assert side_references[1].metadata["area"] == pytest.approx(1236.9317)
 
 
+def test_partial_revolve_registers_its_real_flat_side_face():
+    registry = FeatureRegistry()
+    workplane = cq.Plane.XY()
+    solid = (
+        cq.Workplane("XY")
+        .pushPoints([(15, 0)])
+        .rect(30, 100)
+        .revolve(180, (0, -1), (0, 1))
+        .val()
+    )
+
+    registry.register_revolved_solid_references(
+        feature_id="base",
+        reference_scope="base",
+        workplane=workplane,
+        solid=solid,
+        axis_start=(0, -1, 0),
+        axis_end=(0, 1, 0),
+        angle=180,
+    )
+
+    flat_face = registry.get_reference("base.top")
+    assert flat_face is not None
+    assert flat_face.name == "base.face.p001"
+    assert flat_face.frame.normal == pytest.approx((0, 0, 1))
+    assert flat_face.metadata["reference_type"] == (
+        "actual_planar_revolve_face"
+    )
+
+
 def test_pattern_planes_keep_shared_parent_origin():
     registry = FeatureRegistry()
     target_plane = cq.Plane.XY(origin=(10, 20, 8))

@@ -1645,11 +1645,11 @@ def _published_reference_specs(
                 "selector": selector,
             }
         )
-    references.extend(_actual_planar_side_reference_specs(feature))
+    references.extend(_actual_planar_face_reference_specs(feature))
     return tuple(references)
 
 
-def _actual_planar_side_reference_specs(
+def _actual_planar_face_reference_specs(
     feature: EditableFeatureDefinition,
 ) -> list[dict]:
     """Publish topology-derived planar sides with geometric selectors.
@@ -1662,7 +1662,10 @@ def _actual_planar_side_reference_specs(
     references = []
     for snapshot in feature.created_reference_snapshots:
         metadata = snapshot.get("metadata", {})
-        if metadata.get("reference_type") != "actual_planar_side_face":
+        if metadata.get("reference_type") not in {
+            "actual_planar_side_face",
+            "actual_planar_revolve_face",
+        }:
             continue
 
         semantic_name = metadata["semantic_label"]

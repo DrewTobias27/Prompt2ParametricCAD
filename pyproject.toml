@@ -36,6 +36,7 @@ prompt2cad-showcase = "prompt2cad.showcase:main"
 prompt2cad-solidworks = "prompt2cad.solidworks_export:main"
 prompt2cad-solidworks-smoke = "prompt2cad.solidworks_smoke:main"
 prompt2cad-capability-audit = "prompt2cad.capability_audit:main"
+prompt2cad-release-matrix = "prompt2cad.release_matrix:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

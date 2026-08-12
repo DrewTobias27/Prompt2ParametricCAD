@@ -684,6 +684,112 @@ class FeatureRegistry:
                 aliases=aliases,
             )
 
+    def register_actual_planar_side_faces(
+        self,
+        feature_id: str,
+        reference_scope: str,
+        solid,
+        excluded_direction: cq.Vector,
+        contained_direction: cq.Vector,
+        sorting_plane: cq.Plane,
+        reference_type: str,
+        instance_name: str | None = None,
+        semantic_aliases: bool = True,
+        common_metadata: dict | None = None,
+    ) -> None:
+        """Register every real planar side without assuming a profile family."""
+        actual_side_faces = []
+        for face in solid.Faces():
+            if face.geomType() != "PLANE":
+                continue
+
+            normal = normalized_vector(face.normalAt())
+            if abs(vector_dot(normal, excluded_direction)) >= 1 - 1e-6:
+                continue
+
+            center = face.Center()
+            angle = atan2(
+                vector_dot(normal, sorting_plane.yDir),
+                vector_dot(normal, sorting_plane.xDir),
+            )
+            actual_side_faces.append((angle, center, face, normal))
+
+        actual_side_faces.sort(
+            key=lambda item: (
+                round(item[0], 9),
+                round(item[1].x, 9),
+                round(item[1].y, 9),
+                round(item[1].z, 9),
+            )
+        )
+        for index, (_, center, face, normal) in enumerate(
+            actual_side_faces,
+            start=1,
+        ):
+            semantic_label = f"side_face.s{index:03d}"
+            canonical_name = f"{reference_scope}.face.p{index:03d}"
+            aliases = [
+                f"{reference_scope}.{semantic_label}",
+                f"{reference_scope}.face.{semantic_label}",
+            ]
+            if semantic_aliases and instance_name is None:
+                aliases.extend(
+                    [
+                        f"{feature_id}.{semantic_label}",
+                        f"{feature_id}.face.{semantic_label}",
+                    ]
+                )
+
+            global_label = global_face_label(vector_to_tuple(normal))
+            if global_label is not None:
+                aliases.extend(
+                    [
+                        f"{reference_scope}.{global_label}",
+                        f"{reference_scope}.face.{global_label}",
+                    ]
+                )
+                cardinal_label = global_label.removeprefix("global_")
+                cardinal_aliases = [
+                    f"{reference_scope}.{cardinal_label}",
+                    f"{reference_scope}.face.{cardinal_label}",
+                ]
+                aliases.extend(
+                    alias
+                    for alias in cardinal_aliases
+                    if not self.has_reference(alias)
+                )
+
+            metadata = dict(common_metadata or {})
+            metadata.update(
+                {
+                    "semantic_label": semantic_label,
+                    "reference_type": reference_type,
+                    "center": vector_to_tuple(center),
+                    "area": face.Area(),
+                    "bounding_box": box_metadata_from_bounding_box(
+                        face.BoundingBox()
+                    ),
+                    "instance_name": instance_name,
+                }
+            )
+            self.register_plane(
+                canonical_name,
+                ReferenceFrame(
+                    origin=vector_to_tuple(center),
+                    x_axis=vector_to_tuple(
+                        canonical_face_x_axis(
+                            normal,
+                            contained_direction,
+                            sorting_plane,
+                        )
+                    ),
+                    normal=vector_to_tuple(normal),
+                ),
+                source_feature_id=feature_id,
+                aliases=aliases,
+                metadata=metadata,
+            )
+
     def register_extruded_solid_references(
         self,
         feature_id: str | None,
@@ -789,77 +895,22 @@ class FeatureRegistry:
                 },
             )
 
-        actual_side_faces = []
-        for face in solid.Faces():
-            if face.geomType() != "PLANE":
-                continue
-
-            normal = normalized_vector(face.normalAt())
-            if abs(vector_dot(normal, target_plane.zDir)) >= 1 - 1e-6:
-                # Top and bottom already have stable semantic references.
-                continue
-
-            center = face.Center()
-            angle = atan2(
-                vector_dot(normal, target_plane.yDir),
-                vector_dot(normal, target_plane.xDir),
-            )
-            actual_side_faces.append((angle, center, face, normal))
-
-        actual_side_faces.sort(
-            key=lambda item: (
-                round(item[0], 9),
-                round(item[1].x, 9),
-                round(item[1].y, 9),
-                round(item[1].z, 9),
-            )
+        self.register_actual_planar_side_faces(
+            feature_id=feature_id,
+            reference_scope=reference_scope,
+            solid=solid,
+            excluded_direction=target_plane.zDir,
+            contained_direction=target_plane.zDir,
+            sorting_plane=target_plane,
+            reference_type="actual_planar_side_face",
+            instance_name=instance_name,
+            semantic_aliases=semantic_aliases,
+            common_metadata={
+                "distance": distance,
+                "position": position,
+                "extraction": "extruded_solid",
+            },
         )
-        for index, (_, center, face, normal) in enumerate(
-            actual_side_faces,
-            start=1,
-        ):
-            semantic_label = f"side_face.s{index:03d}"
-            canonical_name = f"{reference_scope}.face.p{index:03d}"
-            aliases = [
-                f"{reference_scope}.{semantic_label}",
-                f"{reference_scope}.face.{semantic_label}",
-            ]
-            if semantic_aliases and instance_name is None:
-                aliases.extend(
-                    [
-                        f"{feature_id}.{semantic_label}",
-                        f"{feature_id}.face.{semantic_label}",
-                    ]
-                )
-            self.register_plane(
-                canonical_name,
-                ReferenceFrame(
-                    origin=vector_to_tuple(center),
-                    x_axis=vector_to_tuple(
-                        canonical_face_x_axis(
-                            normal,
-                            target_plane.zDir,
-                            target_plane,
-                        )
-                    ),
-                    normal=vector_to_tuple(normal),
-                ),
-                source_feature_id=feature_id,
-                aliases=aliases,
-                metadata={
-                    "semantic_label": semantic_label,
-                    "reference_type": "actual_planar_side_face",
-                    "center": vector_to_tuple(center),
-                    "area": face.Area(),
-                    "bounding_box": box_metadata_from_bounding_box(
-                        face.BoundingBox()
-                    ),
-                    "distance": distance,
-                    "position": position,
-                    "instance_name": instance_name,
-                    "extraction": "extruded_solid",
-                },
-            )
 
         self.register_surface(
             f"{reference_scope}.surface.s001",
@@ -1073,6 +1124,25 @@ class FeatureRegistry:
                     "angle": angle,
                 },
             )
+
+        radial_sorting_plane = cq.Plane(
+            origin=vector_to_tuple(axis_midpoint),
+            xDir=vector_to_tuple(x_axis),
+            normal=vector_to_tuple(axis_direction),
+        )
+        self.register_actual_planar_side_faces(
+            feature_id=feature_id,
+            reference_scope=reference_scope,
+            solid=solid,
+            excluded_direction=axis_direction,
+            contained_direction=axis_direction,
+            sorting_plane=radial_sorting_plane,
+            reference_type="actual_planar_revolve_face",
+            common_metadata={
+                "angle": angle,
+                "extraction": "revolved_solid",
+            },
+        )
 
         center_offset = center.sub(axis_midpoint)
         radial_hint = center_offset.sub(
