@@ -31,6 +31,7 @@ REPRESENTATIVE_CASE_NAMES = (
     "child_edge_chamfer__sketch",
     "pattern_child__linear__polyline",
     "side_pattern__circular__cut",
+    "angled_pattern__linear__add_extrude",
     "revolve_end_face__add_extrude__sketch",
     "revolve_end_edge__fillet",
 )
@@ -74,6 +75,12 @@ def test_generated_matrix_covers_every_declared_pair():
             assert (pattern_type, profile, "instance_child", "cut") in facets
         for operation_type in ("add_extrude", "cut"):
             assert ("front", pattern_type, operation_type, "circle") in facets
+            assert (
+                "angled_planar",
+                pattern_type,
+                operation_type,
+                "circle",
+            ) in facets
 
     for boss_profile in PROFILE_TYPES:
         for child_profile in PROFILE_TYPES:

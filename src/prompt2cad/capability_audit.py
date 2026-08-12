@@ -769,6 +769,49 @@ def generated_capability_cases() -> tuple[CapabilityCase, ...]:
                 )
             )
 
+            angled_feature = profile_feature(
+                operation_type,
+                "angled_pattern",
+                "base.side_face.s002",
+                "circle",
+                half_size=2,
+            )
+            angled_feature["positions"] = side_positions
+            angled_feature["pattern"] = side_pattern
+            cases.append(
+                CapabilityCase(
+                    name=(
+                        f"angled_pattern__{pattern_type}__{operation_type}"
+                    ),
+                    category="composition_chains",
+                    facets=(
+                        "angled_planar",
+                        pattern_type,
+                        operation_type,
+                        "circle",
+                    ),
+                    model_data={
+                        "operations": [
+                            {
+                                "type": "extrude",
+                                "id": "base",
+                                "plane": "XY",
+                                "profile": "polyline",
+                                "distance": 20,
+                                "points": [
+                                    [-40, -30],
+                                    [40, -30],
+                                    [25, 30],
+                                    [-25, 30],
+                                ],
+                            },
+                            angled_feature,
+                        ]
+                    },
+                    mutations={"angled_pattern.sketch.diameter": 3.5},
+                )
+            )
+
     for operation_type in ("add_extrude", "cut"):
         for profile in PROFILE_TYPES:
             cases.append(

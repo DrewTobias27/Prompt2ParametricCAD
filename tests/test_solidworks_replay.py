@@ -112,6 +112,42 @@ def curved_side_attachment_model_data() -> dict:
     }
 
 
+def angled_face_pattern_model_data() -> dict:
+    return {
+        "operations": [
+            {
+                "type": "extrude",
+                "id": "base",
+                "plane": "XY",
+                "profile": "polyline",
+                "distance": 20,
+                "points": [
+                    [-40, -30],
+                    [40, -30],
+                    [25, 30],
+                    [-25, 30],
+                ],
+            },
+            {
+                "type": "add_extrude",
+                "id": "angled_bosses",
+                "target": "base.side_face.s002",
+                "profile": "circle",
+                "positions": [[4, 0], [0, 4], [-4, 0], [0, -4]],
+                "distance": 4,
+                "diameter": 3,
+                "pattern": {
+                    "type": "circular",
+                    "seed_position": [4, 0],
+                    "center": [0, 0],
+                    "count": 4,
+                    "total_angle_degrees": 360,
+                },
+            },
+        ]
+    }
+
+
 def replay_plan(model_data: dict | None = None):
     document = model_data_to_editable_document(model_data or native_model_data())
     return build_solidworks_replay_plan(document)
@@ -958,6 +994,33 @@ def test_replay_supports_named_side_face_frames():
     }
 
 
+def test_replay_patterns_features_on_an_arbitrarily_angled_planar_face():
+    document = model_data_to_editable_document(angled_face_pattern_model_data())
+    plan = build_solidworks_replay_plan(document)
+
+    base, bosses = plan.features
+    actual_side = next(
+        reference
+        for reference in base.publish_references
+        if reference["semantic_name"] == "side_face.s002"
+    )
+    assert actual_side["selector"]["kind"] == "planar_face_geometry"
+    assert actual_side["selector"]["direction"] == pytest.approx(
+        [0.970143, 0.242536, 0],
+        abs=1e-6,
+    )
+    assert actual_side["selector"]["center_mm"] == pytest.approx(
+        [32.5, 0, 10]
+    )
+    assert bosses.support["kind"] == "named_face"
+    assert bosses.support["entity_name"] == "P2P_base_side_face_s002"
+    assert bosses.pattern["kind"] == "circular_pattern"
+    assert bosses.support["frame"]["normal"] == pytest.approx(
+        [0.970143, 0.242536, 0],
+        abs=1e-6,
+    )
+
+
 def test_replay_maps_countersink_to_native_hole_wizard_controls():
     model_data = native_model_data()
     model_data["operations"] = [
@@ -1256,6 +1319,22 @@ def test_native_runner_persists_and_reopens_semantic_entity_references():
     assert "GetPersistReference3(" in runner_source
     assert "GetObjectByPersistReference3(" in runner_source
     assert "Persistent reference '" in runner_source
+
+
+def test_native_runner_resolves_arbitrary_planar_faces_by_geometry():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert 'DataMember(Name = "center_mm")' in runner_source
+    assert 'DataMember(Name = "area_mm2")' in runner_source
+    assert '"planar_face_geometry"' in runner_source
+    assert "FindPlanarFaceByGeometry(" in runner_source
+    assert "planeDistanceMillimeters > 0.5" in runner_source
+    assert "areaError" in runner_source
 
 
 def test_native_runner_resolves_edge_groups_by_canonical_member_geometry():

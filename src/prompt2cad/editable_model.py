@@ -26,7 +26,7 @@ PathStep: TypeAlias = str | int
 ParameterValue: TypeAlias = float | int | str | bool
 
 EDITABLE_MODEL_FORMAT = "prompt2cad.editable-model"
-EDITABLE_MODEL_VERSION = 2
+EDITABLE_MODEL_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -73,6 +73,7 @@ class EditableFeatureDefinition:
     sketch: dict | None
     parameters: tuple[EditableParameter, ...]
     created_references: tuple[str, ...]
+    created_reference_snapshots: tuple[dict, ...]
     representation_notes: tuple[str, ...]
     source_operation: dict
 
@@ -95,6 +96,9 @@ class EditableFeatureDefinition:
             "sketch": deepcopy(self.sketch),
             "parameters": [parameter.to_dict() for parameter in self.parameters],
             "created_references": list(self.created_references),
+            "created_reference_snapshots": deepcopy(
+                list(self.created_reference_snapshots)
+            ),
             "parameterization_complete": self.parameterization_complete,
             "representation_notes": list(self.representation_notes),
             "source_operation": deepcopy(self.source_operation),
@@ -239,6 +243,10 @@ def _document_from_graph(
                 sketch=sketch,
                 parameters=tuple(_editable_parameters(feature_node)),
                 created_references=tuple(feature_node.created_references),
+                created_reference_snapshots=tuple(
+                    feature_graph.registry.get_reference(reference_name).to_debug_dict()
+                    for reference_name in feature_node.created_references
+                ),
                 representation_notes=tuple(notes),
                 source_operation=deepcopy(feature_node.operation),
             )

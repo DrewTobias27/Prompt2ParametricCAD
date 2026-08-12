@@ -9,6 +9,7 @@ final fused shape.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import atan2
 
 import cadquery as cq
 
@@ -41,6 +42,32 @@ def normalized_vector(vector: cq.Vector) -> cq.Vector:
         raise ValueError("Cannot normalize a zero-length vector")
 
     return vector.multiply(1 / length)
+
+
+def canonical_face_x_axis(
+    normal: cq.Vector,
+    extrusion_direction: cq.Vector,
+    target_plane: cq.Plane,
+) -> cq.Vector:
+    """Return a deterministic in-face axis for an extruded side face.
+
+    A side face contains both the original sketch-edge direction and the
+    extrusion direction.  The cross product recovers the sketch direction;
+    choosing a stable sign against the parent plane prevents the local frame
+    from flipping when the CAD kernel changes face traversal order.
+    """
+    x_axis = normalized_vector(normal.cross(extrusion_direction))
+    projections = (
+        vector_dot(x_axis, target_plane.xDir),
+        vector_dot(x_axis, target_plane.yDir),
+    )
+    first_significant = next(
+        (projection for projection in projections if abs(projection) > 1e-9),
+        1.0,
+    )
+    if first_significant < 0:
+        x_axis = x_axis.multiply(-1)
+    return x_axis
 
 
 def box_metadata_from_points(
@@ -755,6 +782,78 @@ class FeatureRegistry:
                 aliases=aliases,
                 metadata={
                     "semantic_label": face_name,
+                    "distance": distance,
+                    "position": position,
+                    "instance_name": instance_name,
+                    "extraction": "extruded_solid",
+                },
+            )
+
+        actual_side_faces = []
+        for face in solid.Faces():
+            if face.geomType() != "PLANE":
+                continue
+
+            normal = normalized_vector(face.normalAt())
+            if abs(vector_dot(normal, target_plane.zDir)) >= 1 - 1e-6:
+                # Top and bottom already have stable semantic references.
+                continue
+
+            center = face.Center()
+            angle = atan2(
+                vector_dot(normal, target_plane.yDir),
+                vector_dot(normal, target_plane.xDir),
+            )
+            actual_side_faces.append((angle, center, face, normal))
+
+        actual_side_faces.sort(
+            key=lambda item: (
+                round(item[0], 9),
+                round(item[1].x, 9),
+                round(item[1].y, 9),
+                round(item[1].z, 9),
+            )
+        )
+        for index, (_, center, face, normal) in enumerate(
+            actual_side_faces,
+            start=1,
+        ):
+            semantic_label = f"side_face.s{index:03d}"
+            canonical_name = f"{reference_scope}.face.p{index:03d}"
+            aliases = [
+                f"{reference_scope}.{semantic_label}",
+                f"{reference_scope}.face.{semantic_label}",
+            ]
+            if semantic_aliases and instance_name is None:
+                aliases.extend(
+                    [
+                        f"{feature_id}.{semantic_label}",
+                        f"{feature_id}.face.{semantic_label}",
+                    ]
+                )
+            self.register_plane(
+                canonical_name,
+                ReferenceFrame(
+                    origin=vector_to_tuple(center),
+                    x_axis=vector_to_tuple(
+                        canonical_face_x_axis(
+                            normal,
+                            target_plane.zDir,
+                            target_plane,
+                        )
+                    ),
+                    normal=vector_to_tuple(normal),
+                ),
+                source_feature_id=feature_id,
+                aliases=aliases,
+                metadata={
+                    "semantic_label": semantic_label,
+                    "reference_type": "actual_planar_side_face",
+                    "center": vector_to_tuple(center),
+                    "area": face.Area(),
+                    "bounding_box": box_metadata_from_bounding_box(
+                        face.BoundingBox()
+                    ),
                     "distance": distance,
                     "position": position,
                     "instance_name": instance_name,

@@ -122,6 +122,47 @@ def test_arbitrary_extrusion_registers_stable_directional_planes():
     assert global_top.origin.toTuple() == pytest.approx((0, 0, 8))
 
 
+def test_arbitrary_extrusion_registers_actual_planar_side_faces():
+    registry = FeatureRegistry()
+    target_plane = cq.Plane.XY()
+    solid = (
+        cq.Workplane("XY")
+        .polyline([(-40, -30), (40, -30), (25, 30), (-25, 30)])
+        .close()
+        .extrude(20)
+        .val()
+    )
+
+    registry.register_extruded_solid_references(
+        feature_id="base",
+        reference_scope="base",
+        target_plane=target_plane,
+        solid=solid,
+        distance=20,
+        position=[0, 0],
+    )
+
+    side_references = [
+        registry.get_reference(f"base.side_face.s{index:03d}")
+        for index in range(1, 5)
+    ]
+    assert all(reference is not None for reference in side_references)
+    assert [reference.name for reference in side_references] == [
+        "base.face.p001",
+        "base.face.p002",
+        "base.face.p003",
+        "base.face.p004",
+    ]
+    assert side_references[1].frame.normal == pytest.approx(
+        (0.970143, 0.242536, 0),
+        abs=1e-6,
+    )
+    assert side_references[1].metadata["reference_type"] == (
+        "actual_planar_side_face"
+    )
+    assert side_references[1].metadata["area"] == pytest.approx(1236.9317)
+
+
 def test_pattern_planes_keep_shared_parent_origin():
     registry = FeatureRegistry()
     target_plane = cq.Plane.XY(origin=(10, 20, 8))

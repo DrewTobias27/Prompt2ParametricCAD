@@ -1645,7 +1645,54 @@ def _published_reference_specs(
                 "selector": selector,
             }
         )
+    references.extend(_actual_planar_side_reference_specs(feature))
     return tuple(references)
+
+
+def _actual_planar_side_reference_specs(
+    feature: EditableFeatureDefinition,
+) -> list[dict]:
+    """Publish topology-derived planar sides with geometric selectors.
+
+    Cardinal names remain convenient aliases, but arbitrary profiles can own
+    any number of sloped faces.  Their stable graph snapshots carry enough
+    geometry to identify the corresponding native SOLIDWORKS face without
+    assuming a particular profile or world-axis orientation.
+    """
+    references = []
+    for snapshot in feature.created_reference_snapshots:
+        metadata = snapshot.get("metadata", {})
+        if metadata.get("reference_type") != "actual_planar_side_face":
+            continue
+
+        semantic_name = metadata["semantic_label"]
+        instance_name = metadata.get("instance_name")
+        published_semantic = semantic_name
+        entity_semantic = semantic_name
+        if instance_name:
+            published_semantic = f"{instance_name}.{semantic_name}"
+            entity_semantic = f"{instance_name}_{semantic_name}"
+
+        frame = snapshot["frame"]
+        references.append(
+            {
+                "reference_id": snapshot["name"],
+                "semantic_name": published_semantic,
+                "entity_name": _entity_name(feature.id, entity_semantic),
+                "entity_type": "face",
+                "selector": {
+                    "kind": "planar_face_geometry",
+                    "direction": [
+                        float(value) for value in frame["normal"]
+                    ],
+                    "center_mm": [
+                        float(value) for value in metadata["center"]
+                    ],
+                    "area_mm2": float(metadata["area"]),
+                },
+            }
+        )
+    return references
 
 
 def _published_face_directions(

@@ -436,6 +436,12 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "direction")]
         public double[] Direction { get; set; }
+
+        [DataMember(Name = "center_mm")]
+        public double[] CenterMillimeters { get; set; }
+
+        [DataMember(Name = "area_mm2")]
+        public double? AreaSquareMillimeters { get; set; }
     }
 
     internal sealed class NativeSketchResult
@@ -4357,6 +4363,18 @@ namespace Prompt2Cad.SolidWorks
                 }
                 else if (String.Equals(
                     selector.Kind,
+                    "planar_face_geometry",
+                    StringComparison.Ordinal))
+                {
+                    face = FindPlanarFaceByGeometry(
+                        feature,
+                        selector.Direction,
+                        selector.CenterMillimeters,
+                        selector.AreaSquareMillimeters
+                    );
+                }
+                else if (String.Equals(
+                    selector.Kind,
                     "largest_non_planar_face",
                     StringComparison.Ordinal))
                 {
@@ -4421,6 +4439,88 @@ namespace Prompt2Cad.SolidWorks
                     bestFace = face;
                     bestAlignment = alignment;
                     bestProjection = projection;
+                }
+            }
+            return bestFace;
+        }
+
+        private static Face2 FindPlanarFaceByGeometry(
+            Feature feature,
+            double[] direction,
+            double[] centerMillimeters,
+            double? areaSquareMillimeters)
+        {
+            if (direction == null || direction.Length < 3 ||
+                centerMillimeters == null || centerMillimeters.Length < 3)
+            {
+                throw new InvalidOperationException(
+                    "A planar-face geometry selector requires a normal and center."
+                );
+            }
+
+            double[] expectedCenter = new[]
+            {
+                ToMeters(centerMillimeters[0]),
+                ToMeters(centerMillimeters[1]),
+                ToMeters(centerMillimeters[2]),
+            };
+            double expectedArea = areaSquareMillimeters.HasValue
+                ? areaSquareMillimeters.Value * 1e-6
+                : 0.0;
+            Face2 bestFace = null;
+            double bestScore = Double.PositiveInfinity;
+            foreach (object faceObject in ObjectItems(feature.GetFaces()))
+            {
+                Face2 face = (Face2)faceObject;
+                Surface surface = face.IGetSurface();
+                double[] normal = face.Normal as double[];
+                double[] box = face.GetBox() as double[];
+                if (surface == null || !surface.IsPlane() ||
+                    normal == null || normal.Length < 3 ||
+                    box == null || box.Length < 6)
+                {
+                    continue;
+                }
+
+                double alignment = Dot(normal, direction);
+                if (alignment < 0.98)
+                {
+                    continue;
+                }
+                double[] center = new[]
+                {
+                    (box[0] + box[3]) / 2.0,
+                    (box[1] + box[4]) / 2.0,
+                    (box[2] + box[5]) / 2.0,
+                };
+                double[] delta = new[]
+                {
+                    center[0] - expectedCenter[0],
+                    center[1] - expectedCenter[1],
+                    center[2] - expectedCenter[2],
+                };
+                double planeDistanceMillimeters =
+                    Math.Abs(Dot(delta, direction)) * 1000.0;
+                if (planeDistanceMillimeters > 0.5)
+                {
+                    continue;
+                }
+                double centerDistanceMillimeters = Math.Sqrt(
+                    Dot(delta, delta)
+                ) * 1000.0;
+                double areaError = 0.0;
+                if (expectedArea > 0.0)
+                {
+                    areaError = Math.Abs(face.GetArea() - expectedArea) /
+                        expectedArea;
+                }
+                double score = planeDistanceMillimeters * 100.0 +
+                    centerDistanceMillimeters + areaError * 10.0 +
+                    (1.0 - alignment) * 100.0;
+                if (score < bestScore)
+                {
+                    bestFace = face;
+                    bestScore = score;
                 }
             }
             return bestFace;
