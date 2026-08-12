@@ -518,6 +518,63 @@ def test_replay_supports_revolves_and_coordinate_profiles():
         [40.0, 0.0],
         [0.0, 30.0],
     ]
+    assert polyline.sketch["placement_controls"][0]["position_mm"] == [0.0, 0.0]
+    assert [
+        control["position_mm"]
+        for control in polyline.sketch["coordinate_controls"]
+    ] == [[0.0, 0.0], [40.0, 0.0], [0.0, 30.0]]
+    binding_ids = {
+        binding["parameter_id"] for binding in polyline.parameter_bindings
+    }
+    assert "base.sketch.point002.x" in binding_ids
+    assert "base.sketch.point003.y" in binding_ids
+
+
+def test_general_sketch_arc_control_points_use_shared_parameter_ids():
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "curved_base",
+                "plane": "XY",
+                "profile": "sketch",
+                "positions": [[30, -3]],
+                "start": [0, -10],
+                "segments": [
+                    {"type": "line", "to": [20, -10]},
+                    {
+                        "type": "arc",
+                        "through": [28, 0],
+                        "to": [20, 10],
+                    },
+                    {"type": "line", "to": [0, 10]},
+                ],
+                "close": True,
+                "axis_start": [0, -20],
+                "axis_end": [0, 20],
+                "angle": 180,
+            }
+        ]
+    }
+
+    feature = replay_plan(model_data).features[0]
+    controls = feature.sketch["coordinate_controls"]
+    arc_control = next(
+        control for control in controls if control["kind"] == "arc_through"
+    )
+    assert arc_control["segment_index"] == 2
+    assert arc_control["position_mm"] == [28.0, 0.0]
+    assert arc_control["x_dimension"]["parameter_id"] == (
+        "curved_base.sketch.segment002.through.x"
+    )
+    binding_ids = {
+        binding["parameter_id"] for binding in feature.parameter_bindings
+    }
+    assert "curved_base.placement.inst001.x" in binding_ids
+    assert "curved_base.placement.inst001.y" in binding_ids
+    assert "curved_base.sketch.start.y" in binding_ids
+    assert "curved_base.sketch.segment002.through.x" in binding_ids
+    assert "curved_base.sketch.segment002.to.y" in binding_ids
 
 
 @pytest.mark.parametrize(
@@ -1146,6 +1203,22 @@ def test_native_runner_completes_remaining_sketch_degrees_of_freedom():
     assert "horizontalDatumMark | verticalDatumMark" in runner_source
     assert "plan.RequireFullyDefined" in runner_source
     assert '" after generalized constraint completion."' in runner_source
+
+
+def test_native_runner_drives_freeform_vertices_and_arc_control_points():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert 'DataMember(Name = "coordinate_controls")' in runner_source
+    assert "ApplyCoordinateControls(" in runner_source
+    assert '"arc_through"' in runner_source
+    assert "AddPointSegmentRelation(" in runner_source
+    assert "control.PositionMillimeters[0], control.XDimension" in runner_source
+    assert "control.PositionMillimeters[1], control.YDimension" in runner_source
 
 
 def test_native_runner_disables_sketch_snapping_during_profile_creation():

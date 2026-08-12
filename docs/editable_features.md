@@ -163,10 +163,12 @@ The backend now exposes this layer through `/editable-model` and
 known-good revision and exports a new STEP file only after the parameter update,
 schema, rebuild, operation-effect checks, and quality checks succeed.
 
-Arbitrary coordinate sketches and polygons remain native editable sketches,
-but not every vertex coordinate or polygon topology value has a named automated
-mutation binding. The audit reports native construction and parameter-binding
-coverage separately.
+Polyline vertices plus explicit-sketch start, end, and arc-through coordinates
+now use stable named native dimensions when their values are nonzero. Zero
+coordinates use native horizontal/vertical relations, and three-point arc
+centers and radii remain derived to avoid over-constraining the sketch. Polygon
+diameter and side-count bindings remain incomplete. The audit reports native
+construction and parameter-binding coverage separately.
 
 The next native increment should broaden operation coverage and mutation cases
 without weakening the current contract: CadQuery remains the geometry oracle,

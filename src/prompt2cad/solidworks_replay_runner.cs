@@ -187,6 +187,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "placement_controls")]
         public PlacementControl[] PlacementControls { get; set; }
 
+        [DataMember(Name = "coordinate_controls")]
+        public CoordinateControl[] CoordinateControls { get; set; }
+
         [DataMember(Name = "constraint_plan")]
         public SketchConstraintPlan ConstraintPlan { get; set; }
     }
@@ -221,6 +224,25 @@ namespace Prompt2Cad.SolidWorks
     {
         [DataMember(Name = "instance_index")]
         public int InstanceIndex { get; set; }
+
+        [DataMember(Name = "position_mm")]
+        public double[] PositionMillimeters { get; set; }
+
+        [DataMember(Name = "x_dimension")]
+        public DimensionSpec XDimension { get; set; }
+
+        [DataMember(Name = "y_dimension")]
+        public DimensionSpec YDimension { get; set; }
+    }
+
+    [DataContract]
+    public sealed class CoordinateControl
+    {
+        [DataMember(Name = "kind")]
+        public string Kind { get; set; }
+
+        [DataMember(Name = "segment_index")]
+        public int? SegmentIndex { get; set; }
 
         [DataMember(Name = "position_mm")]
         public double[] PositionMillimeters { get; set; }
@@ -596,7 +618,7 @@ namespace Prompt2Cad.SolidWorks
     {
         private const double MillimetersPerMeter = 1000.0;
         private const string ReplayFormat = "prompt2cad.solidworks-replay-plan";
-        private const int ReplayVersion = 7;
+        private const int ReplayVersion = 8;
         private static string tracePath;
 
         public static string Execute(
@@ -2131,6 +2153,14 @@ namespace Prompt2Cad.SolidWorks
                         "A polygon requires at least three sides."
                     );
                 }
+                SketchPoint centerPoint = CreateFreeformProfileCenter(
+                    sketchManager, frame, center, mathUtility, modelToSketch
+                );
+                ApplyPlacementControl(
+                    model, sketchManager, frame, centerPoint,
+                    placementControl, ref placementAnchor,
+                    mathUtility, modelToSketch
+                );
                 double radius = sketch.DiameterMillimeters / 2.0;
                 var points = new List<double[]>();
                 for (int index = 0; index < sketch.Sides; index++)
@@ -2157,6 +2187,14 @@ namespace Prompt2Cad.SolidWorks
 
             if (sketch.Profile == "polyline")
             {
+                SketchPoint centerPoint = CreateFreeformProfileCenter(
+                    sketchManager, frame, center, mathUtility, modelToSketch
+                );
+                ApplyPlacementControl(
+                    model, sketchManager, frame, centerPoint,
+                    placementControl, ref placementAnchor,
+                    mathUtility, modelToSketch
+                );
                 var points = (sketch.PointsMillimeters ?? new double[0][])
                     .Select(point => new[]
                     {
@@ -2171,12 +2209,28 @@ namespace Prompt2Cad.SolidWorks
                     mathUtility,
                     modelToSketch
                 );
+                if (addDrivingDimensions)
+                {
+                    ApplyCoordinateControls(
+                        model, sketchManager, frame, sketch, center,
+                        centerPoint, new Dictionary<int, SketchSegment>(),
+                        mathUtility, modelToSketch
+                    );
+                }
                 return;
             }
 
             if (sketch.Profile == "sketch")
             {
-                CreateSegmentPath(
+                SketchPoint centerPoint = CreateFreeformProfileCenter(
+                    sketchManager, frame, center, mathUtility, modelToSketch
+                );
+                ApplyPlacementControl(
+                    model, sketchManager, frame, centerPoint,
+                    placementControl, ref placementAnchor,
+                    mathUtility, modelToSketch
+                );
+                Dictionary<int, SketchSegment> pathSegments = CreateSegmentPath(
                     sketchManager,
                     frame,
                     sketch,
@@ -2184,6 +2238,13 @@ namespace Prompt2Cad.SolidWorks
                     mathUtility,
                     modelToSketch
                 );
+                if (addDrivingDimensions)
+                {
+                    ApplyCoordinateControls(
+                        model, sketchManager, frame, sketch, center,
+                        centerPoint, pathSegments, mathUtility, modelToSketch
+                    );
+                }
                 return;
             }
 
@@ -2216,6 +2277,148 @@ namespace Prompt2Cad.SolidWorks
             return value + Math.Sign(value) * offset;
         }
 
+        private static SketchPoint CreateFreeformProfileCenter(
+            SketchManager sketchManager,
+            FrameSpec frame,
+            double[] center,
+            MathUtility mathUtility,
+            MathTransform modelToSketch)
+        {
+            double[] centerWorld = ToSketchPoint(
+                frame, center, mathUtility, modelToSketch
+            );
+            SketchPoint centerPoint = sketchManager.CreatePoint(
+                centerWorld[0], centerWorld[1], centerWorld[2]
+            );
+            if (centerPoint == null)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS did not create the freeform profile datum."
+                );
+            }
+            return centerPoint;
+        }
+
+        private static void ApplyCoordinateControls(
+            ModelDoc2 model,
+            SketchManager sketchManager,
+            FrameSpec frame,
+            SketchSpec sketchSpec,
+            double[] center,
+            SketchPoint centerPoint,
+            IDictionary<int, SketchSegment> pathSegments,
+            MathUtility mathUtility,
+            MathTransform modelToSketch)
+        {
+            CoordinateControl[] controls =
+                sketchSpec.CoordinateControls ?? new CoordinateControl[0];
+            if (controls.Length == 0)
+            {
+                return;
+            }
+            Sketch activeSketch = model.IGetActiveSketch2();
+            if (activeSketch == null)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS did not expose the freeform sketch."
+                );
+            }
+
+            bool previousAddToDatabase = sketchManager.AddToDB;
+            try
+            {
+                foreach (CoordinateControl control in controls)
+                {
+                    if (control.PositionMillimeters == null ||
+                        control.PositionMillimeters.Length < 2)
+                    {
+                        throw new InvalidOperationException(
+                            "A native coordinate control is missing X or Y."
+                        );
+                    }
+                    double[] localPoint = Add2D(
+                        center, control.PositionMillimeters
+                    );
+                    double[] worldPoint = ToSketchPoint(
+                        frame, localPoint, mathUtility, modelToSketch
+                    );
+                    SketchPoint targetPoint;
+                    if (String.Equals(
+                        control.Kind,
+                        "arc_through",
+                        StringComparison.Ordinal))
+                    {
+                        sketchManager.AddToDB = true;
+                        targetPoint = sketchManager.CreatePoint(
+                            worldPoint[0], worldPoint[1], worldPoint[2]
+                        );
+                        if (targetPoint == null)
+                        {
+                            throw new InvalidOperationException(
+                                "SOLIDWORKS did not create an arc control point."
+                            );
+                        }
+                        SketchSegment arc;
+                        if (!control.SegmentIndex.HasValue ||
+                            !pathSegments.TryGetValue(
+                                control.SegmentIndex.Value, out arc
+                            ))
+                        {
+                            throw new InvalidOperationException(
+                                "An arc coordinate control has no matching arc."
+                            );
+                        }
+                        sketchManager.AddToDB = false;
+                        AddPointSegmentRelation(
+                            model, targetPoint, arc, "sgCOINCIDENT"
+                        );
+                    }
+                    else
+                    {
+                        targetPoint = FindSketchPointAt(
+                            activeSketch, worldPoint
+                        );
+                    }
+
+                    sketchManager.AddToDB = false;
+                    AddPlacementAxisControl(
+                        model, frame, centerPoint, targetPoint,
+                        new[] { 1.0, 0.0 },
+                        control.PositionMillimeters[0], control.XDimension,
+                        mathUtility, modelToSketch
+                    );
+                    AddPlacementAxisControl(
+                        model, frame, centerPoint, targetPoint,
+                        new[] { 0.0, 1.0 },
+                        control.PositionMillimeters[1], control.YDimension,
+                        mathUtility, modelToSketch
+                    );
+                }
+            }
+            finally
+            {
+                sketchManager.AddToDB = previousAddToDatabase;
+                model.ClearSelection2(true);
+            }
+        }
+
+        private static void AddPointSegmentRelation(
+            ModelDoc2 model,
+            SketchPoint point,
+            SketchSegment segment,
+            string relation)
+        {
+            model.ClearSelection2(true);
+            if (!point.Select4(false, null) || !segment.Select4(true, null))
+            {
+                throw new InvalidOperationException(
+                    "Could not select an arc coordinate control."
+                );
+            }
+            model.SketchAddConstraints(relation);
+            model.ClearSelection2(true);
+        }
+
         private static void CreateClosedPolyline(
             SketchManager sketchManager,
             FrameSpec frame,
@@ -2242,7 +2445,7 @@ namespace Prompt2Cad.SolidWorks
             }
         }
 
-        private static void CreateSegmentPath(
+        private static Dictionary<int, SketchSegment> CreateSegmentPath(
             SketchManager sketchManager,
             FrameSpec frame,
             SketchSpec sketch,
@@ -2250,15 +2453,19 @@ namespace Prompt2Cad.SolidWorks
             MathUtility mathUtility,
             MathTransform modelToSketch)
         {
+            var createdSegments = new Dictionary<int, SketchSegment>();
             if (sketch.StartMillimeters == null || sketch.StartMillimeters.Length < 2)
             {
                 throw new InvalidOperationException("A sketch path requires a start point.");
             }
             double[] start = Add2D(center, sketch.StartMillimeters);
             double[] current = start;
-            foreach (SketchPathSegment segment in
-                sketch.Segments ?? new SketchPathSegment[0])
+            SketchPathSegment[] sourceSegments =
+                sketch.Segments ?? new SketchPathSegment[0];
+            for (int segmentIndex = 0; segmentIndex < sourceSegments.Length;
+                segmentIndex++)
             {
+                SketchPathSegment segment = sourceSegments[segmentIndex];
                 if (segment.ToMillimeters == null || segment.ToMillimeters.Length < 2)
                 {
                     throw new InvalidOperationException(
@@ -2307,6 +2514,7 @@ namespace Prompt2Cad.SolidWorks
                             "SOLIDWORKS did not create a sketch arc."
                         );
                     }
+                    createdSegments[segmentIndex + 1] = arc;
                 }
                 else
                 {
@@ -2327,6 +2535,7 @@ namespace Prompt2Cad.SolidWorks
                     modelToSketch
                 );
             }
+            return createdSegments;
         }
 
         private static void CreateLine(

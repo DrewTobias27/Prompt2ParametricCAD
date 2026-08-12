@@ -96,11 +96,12 @@ angles, pattern controls, and non-centered rectangle/circle placements have
 named automated mutation bindings. Centered placement is held by a coincident
 relation rather than a zero-valued driving dimension.
 
-Polygon and freeform sketches are still native and can be edited manually in
-SolidWorks, but every vertex coordinate and polygon topology value is not yet
-exposed as a named automated mutation binding. The audit reports this coverage
-separately so native construction is not confused with complete parameter API
-coverage.
+Polyline vertices plus explicit-sketch start, end, and arc-through coordinates
+are exposed through stable native dimensions when nonzero. Zero coordinates use
+native horizontal/vertical relations. Three-point arc centers and radii are
+derived from those source points so the sketch is not over-constrained. Polygon
+diameter and side count are not yet exposed as automated mutation bindings; the
+audit reports this remaining gap separately.
 
 ## Intentional limits
 

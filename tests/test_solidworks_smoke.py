@@ -69,7 +69,7 @@ def test_every_native_fixture_has_a_valid_bound_editability_scenario():
         assert set(mutations) <= binding_ids
 
 
-def test_parameter_coverage_exposes_unbound_coordinate_profiles():
+def test_parameter_coverage_binds_nonzero_freeform_coordinates():
     from prompt2cad.solidworks_export import model_path_to_replay_plan
 
     fixture = smoke_fixture_paths(["solidworks_smoke_coordinate_profiles"])[0]
@@ -81,7 +81,14 @@ def test_parameter_coverage_exposes_unbound_coordinate_profiles():
 
     assert coverage["bound_count"] > 0
     assert coverage["coverage_ratio"] < 1
-    assert "base.sketch.point003.x" in coverage["unbound_parameter_ids"]
+    assert "base.sketch.point003.x" not in coverage["unbound_parameter_ids"]
+    assert (
+        "rounded_slot.sketch.segment002.through.x"
+        not in coverage["unbound_parameter_ids"]
+    )
+    # Zero-valued coordinates are held by native horizontal/vertical
+    # relations, while polygon topology remains the next parameter gap.
+    assert "hex_boss.sketch.sides" in coverage["unbound_parameter_ids"]
 
 
 def test_native_smoke_execution_uses_the_validated_plan(tmp_path: Path):

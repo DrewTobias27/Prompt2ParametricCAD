@@ -23,7 +23,7 @@ from prompt2cad.editable_model import EditableModelDocument
 
 
 SOLIDWORKS_REPLAY_FORMAT = "prompt2cad.solidworks-replay-plan"
-SOLIDWORKS_REPLAY_VERSION = 7
+SOLIDWORKS_REPLAY_VERSION = 8
 SUPPORTED_OPERATION_TYPES = {
     "extrude",
     "add_extrude",
@@ -161,6 +161,7 @@ class SolidWorksReplayPlan:
                 "native_edge_treatments": ["chamfer", "fillet"],
                 "step_operation_parity": SOLIDWORKS_PARITY_MATRIX,
                 "arbitrary_sketch_placement": True,
+                "native_freeform_coordinate_bindings": True,
                 "generated_stable_feature_ids": True,
                 "persistent_entity_reference_contract": True,
             },
@@ -698,11 +699,8 @@ def _native_sketch(feature: EditableFeatureDefinition, profile: str) -> dict:
         "profile": profile,
         "positions_mm": positions,
         "constraint_plan": _native_constraint_plan(feature, profile),
-        "placement_controls": (
-            _native_placement_controls(feature, positions)
-            if profile in {"rectangle", "circle"}
-            else []
-        ),
+        "placement_controls": _native_placement_controls(feature, positions),
+        "coordinate_controls": _native_coordinate_controls(feature, profile),
     }
 
     if profile == "rectangle":
@@ -753,6 +751,87 @@ def _native_sketch(feature: EditableFeatureDefinition, profile: str) -> dict:
 
     geometry["driving_dimensions"] = dimensions
     return geometry
+
+
+def _native_coordinate_controls(
+    feature: EditableFeatureDefinition,
+    profile: str,
+) -> list[dict]:
+    """Bind source-defined freeform points to stable native dimensions.
+
+    Arc centers and radii are intentionally derived from their start, through,
+    and end points. Driving both representations would over-constrain the
+    sketch and make later edits less predictable.
+    """
+    operation = feature.source_operation
+    controls: list[dict] = []
+
+    def add_control(
+        *,
+        parameter_stem: str,
+        fallback_stem: str,
+        position: list[float],
+        kind: str = "vertex",
+        segment_index: int | None = None,
+    ) -> None:
+        dimensions: dict[str, dict | None] = {}
+        for coordinate_index, axis_name in enumerate(("x", "y")):
+            value = float(position[coordinate_index])
+            dimensions[axis_name] = (
+                None
+                if abs(value) <= 1e-12
+                else _dimension(
+                    feature,
+                    parameter_id=(
+                        f"{feature.id}.{parameter_stem}.{axis_name}"
+                    ),
+                    fallback_name=f"{fallback_stem}_{axis_name}",
+                    value=abs(value),
+                )
+            )
+        controls.append(
+            {
+                "kind": kind,
+                "segment_index": segment_index,
+                "position_mm": [float(position[0]), float(position[1])],
+                "x_dimension": dimensions["x"],
+                "y_dimension": dimensions["y"],
+            }
+        )
+
+    if profile == "polyline":
+        for point_index, point in enumerate(operation["points"], start=1):
+            add_control(
+                parameter_stem=f"sketch.point{point_index:03d}",
+                fallback_stem=f"point{point_index:03d}",
+                position=point,
+            )
+    elif profile == "sketch":
+        add_control(
+            parameter_stem="sketch.start",
+            fallback_stem="start",
+            position=operation["start"],
+        )
+        for segment_index, segment in enumerate(
+            operation["segments"], start=1
+        ):
+            if segment["type"] == "arc":
+                add_control(
+                    parameter_stem=(
+                        f"sketch.segment{segment_index:03d}.through"
+                    ),
+                    fallback_stem=f"segment{segment_index:03d}_through",
+                    position=segment["through"],
+                    kind="arc_through",
+                    segment_index=segment_index,
+                )
+            add_control(
+                parameter_stem=f"sketch.segment{segment_index:03d}.to",
+                fallback_stem=f"segment{segment_index:03d}_to",
+                position=segment["to"],
+                segment_index=segment_index,
+            )
+    return controls
 
 
 def _countersink_position_sketch(feature: EditableFeatureDefinition) -> dict:
@@ -1080,6 +1159,19 @@ def _native_parameter_bindings(
                 )
             )
         for control in sketch.get("placement_controls", []):
+            for dimension in (
+                control.get("x_dimension"),
+                control.get("y_dimension"),
+            ):
+                if dimension is not None:
+                    bindings.append(
+                        _dimension_binding(
+                            dimension,
+                            owner_kind="sketch",
+                            owner_name=sketch_name,
+                        )
+                    )
+        for control in sketch.get("coordinate_controls", []):
             for dimension in (
                 control.get("x_dimension"),
                 control.get("y_dimension"),
