@@ -51,9 +51,11 @@ The hosted application exports STEP, editable model data, and a validated
 SolidWorks replay package. The package is generated in memory and contains no
 API credentials. Native `SLDPRT` creation remains a local Windows step because
 it requires an installed and licensed SolidWorks application: extract the ZIP
-and double-click `Build-SolidWorks-Part.cmd`. The package checks its payload,
-discovers the installed SolidWorks API, and writes both the native part and a
-JSON verification report.
+and optionally double-click `Check-SolidWorks-Setup.cmd` first. That preflight
+checks the package, 64-bit PowerShell, SolidWorks registration and API files,
+and compiles the replay engine without creating a part. Then run
+`Build-SolidWorks-Part.cmd`; it writes both the native part and a JSON
+verification report.
 
 ## Public-release gate
 

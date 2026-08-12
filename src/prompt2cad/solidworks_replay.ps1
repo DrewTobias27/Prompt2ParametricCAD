@@ -11,6 +11,8 @@ param(
 
     [string]$MutationPath,
 
+    [switch]$CompileOnly,
+
     [switch]$Visible
 )
 
@@ -93,6 +95,14 @@ try {
             "System.Runtime.Serialization.dll",
             "System.Xml.dll"
         )
+
+    if ($CompileOnly.IsPresent) {
+        [PSCustomObject]@{
+            status = "success"
+            compile_only = $true
+        } | ConvertTo-Json -Compress
+        exit 0
+    }
 
     if ($MutationPath) {
         if (-not $ExistingPartPath) {

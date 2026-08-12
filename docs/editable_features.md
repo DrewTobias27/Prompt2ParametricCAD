@@ -93,7 +93,11 @@ constraints or selection rules:
 - an `XY` base extrusion or revolve on the SolidWorks Front Plane;
 - boss/cut extrusions on named planar top, bottom, front, back, left, or right
   feature faces;
+- geometry-selected planar sides of arbitrary profiles, including sloped faces,
+  with patterns expressed in each face's local coordinate frame;
 - base, additive, and subtractive revolves with full or partial angles;
+- real flat sweep-boundary faces from partial revolves, available to later
+  sketches without a bounding-box-only approximation;
 - native Hole Wizard countersinks with blind or through end conditions;
 - native chamfers and fillets selected from feature ownership, semantic edge
   recipes, and saved local frames rather than transient edge numbers;
@@ -119,8 +123,11 @@ template when available and falls back to the newest installed standard part
 template. Ten real-application smoke models cover every supported profile as
 well as boss/cut features, through and blind end conditions, patterns, full and
 partial revolves, asymmetric freeform edge treatments, and multi-level feature
-dependencies. A separate generated release matrix expands this to 286
+dependencies. A separate generated release matrix expands this to 292
 profile/operation/face/pattern combinations and multi-feature repair chains.
+A seven-case golden release matrix additionally starts from reviewed natural-
+language/design-intent pairs and traverses lowering, STEP round-trip, editable
+mutation, and SolidWorks replay planning.
 
 Legacy repeated source positions remain exact contours so existing JSON keeps
 working. Operations with canonical pattern metadata instead create one seed
@@ -175,6 +182,8 @@ without weakening the current contract: CadQuery remains the geometry oracle,
 every declared native parameter must bind and verify, required sketches must be
 fully defined, and every published persistent reference must resolve.
 
-Run `prompt2cad-solidworks-smoke` for the CadQuery build and native-plan phase.
+Run `prompt2cad-release-matrix` for the compact deterministic whole-pipeline
+gate and `prompt2cad-solidworks-smoke` for the broader CadQuery build and
+native-plan phase.
 On a configured Windows workstation, add `--execute` to replay the same ten
 fixtures into `SLDPRT` files and record per-fixture failures in one report.

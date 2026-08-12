@@ -16,7 +16,7 @@ from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
-SOLIDWORKS_PACKAGE_VERSION = 2
+SOLIDWORKS_PACKAGE_VERSION = 3
 _FIXED_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 
@@ -64,6 +64,9 @@ def create_solidworks_package(
             "utf-8"
         ),
         "Build-SolidWorks-Part.cmd": _cmd_launcher_script().encode("utf-8"),
+        "Check-SolidWorks-Setup.cmd": _check_cmd_launcher_script().encode(
+            "utf-8"
+        ),
         "source-model.json": _json_bytes(model_data),
         "editable-model.json": _json_bytes(document.to_dict()),
         "solidworks-replay-plan.json": _json_bytes(replay_plan.to_dict()),
@@ -145,6 +148,7 @@ def _launcher_script(native_filename: str) -> str:
             [string]$OutputPath = (Join-Path $PSScriptRoot "{native_filename}"),
             [string]$TemplatePath,
             [switch]$Visible,
+            [switch]$CheckOnly,
             [switch]$SkipIntegrityCheck
         )
 
@@ -211,6 +215,26 @@ def _launcher_script(native_filename: str) -> str:
             $arguments.Visible = $true
         }}
 
+        if ($CheckOnly.IsPresent) {{
+            $arguments.CompileOnly = $true
+            Write-Stage "Compiling the SolidWorks replay engine"
+            $checkText = (& (Join-Path $PSScriptRoot "solidworks_replay.ps1") @arguments |
+                Out-String).Trim()
+            try {{
+                $check = $checkText | ConvertFrom-Json
+            }}
+            catch {{
+                throw "SolidWorks setup check returned an unreadable result: $checkText"
+            }}
+            if ($check.status -ne "success" -or -not $check.compile_only) {{
+                throw "SolidWorks setup check did not report success."
+            }}
+            Write-Host ""
+            Write-Host "SolidWorks setup is ready" -ForegroundColor Green
+            Write-Host "Run Build-SolidWorks-Part.cmd to create the editable part."
+            return
+        }}
+
         Write-Stage "Building editable SolidWorks part"
         $resultText = (& (Join-Path $PSScriptRoot "solidworks_replay.ps1") @arguments |
             Out-String).Trim()
@@ -258,6 +282,26 @@ def _cmd_launcher_script() -> str:
     ).lstrip()
 
 
+def _check_cmd_launcher_script() -> str:
+    return dedent(
+        r"""
+        @echo off
+        setlocal
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Build-SolidWorks-Part.ps1" -CheckOnly
+        set "P2P_EXIT_CODE=%ERRORLEVEL%"
+        echo.
+        if not "%P2P_EXIT_CODE%"=="0" (
+          echo SolidWorks setup is not ready.
+          echo Read the error above, then press any key to close this window.
+        ) else (
+          echo Setup check complete. Press any key to close this window.
+        )
+        pause >nul
+        exit /b %P2P_EXIT_CODE%
+        """
+    ).lstrip()
+
+
 def _readme_text(native_filename: str) -> str:
     return dedent(
         f"""
@@ -277,8 +321,10 @@ def _readme_text(native_filename: str) -> str:
         Build the editable part
         -----------------------
         1. Extract every file in this ZIP into one folder.
-        2. Double-click Build-SolidWorks-Part.cmd.
-        3. Keep the window open while SolidWorks creates and verifies the part.
+        2. Optional: double-click Check-SolidWorks-Setup.cmd. It checks the
+           package and compiles the replay engine without creating a part.
+        3. Double-click Build-SolidWorks-Part.cmd.
+        4. Keep the window open while SolidWorks creates and verifies the part.
 
         PowerShell alternative
         ----------------------

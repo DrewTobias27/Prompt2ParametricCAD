@@ -108,6 +108,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert set(files) == {
         "Build-SolidWorks-Part.cmd",
         "Build-SolidWorks-Part.ps1",
+        "Check-SolidWorks-Setup.cmd",
         "README.txt",
         "editable-model.json",
         "manifest.json",
@@ -131,6 +132,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     readme = files["README.txt"]
     launcher = files["Build-SolidWorks-Part.ps1"]
     command_launcher = files["Build-SolidWorks-Part.cmd"]
+    check_launcher = files["Check-SolidWorks-Setup.cmd"]
     assert b"Build-SolidWorks-Part.cmd" in readme
     assert b"solidworks-replay-plan.json" in launcher
     assert b"Get-FileHash" in launcher
@@ -141,7 +143,16 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"published_references" in launcher
     assert b"Build-SolidWorks-Part.ps1" in command_launcher
     assert b"-Visible" in command_launcher
+    assert b"Build-SolidWorks-Part.ps1" in check_launcher
+    assert b"-CheckOnly" in check_launcher
+    assert b"CompileOnly" in launcher
+    assert b"SolidWorks setup is ready" in launcher
     assert b"$LASTEXITCODE" not in files["Build-SolidWorks-Part.ps1"]
+
+    replay_script = files["solidworks_replay.ps1"]
+    assert b"[switch]$CompileOnly" in replay_script
+    assert b"if ($CompileOnly.IsPresent)" in replay_script
+    assert b'compile_only = $true' in replay_script
 
 
 def test_package_is_deterministic_and_contains_no_prompt_or_credentials():

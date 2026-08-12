@@ -8,7 +8,7 @@ multi-feature chains most likely to lose references after an edit.
 
 ## Verified release matrix
 
-The generated audit currently contains 286 deterministic cases.
+The generated audit currently contains 292 deterministic cases.
 
 | Category | Cases | What it proves |
 | --- | ---: | --- |
@@ -19,7 +19,7 @@ The generated audit currently contains 286 deterministic cases.
 | Native patterns | 33 | Mirror, circular, and two-direction linear patterns for additions, cuts, and countersinks |
 | Revolved features | 10 | Five profiles for additive and subtractive revolves |
 | Edge treatments | 10 | Chamfer and fillet on every base profile family |
-| Composition and repair chains | 83 | Nested additions, stacked through-cuts, features after cuts/fillets, child edge treatments, pattern-instance children, side-face patterns, and revolved end-face features |
+| Composition and repair chains | 89 | Nested additions, stacked through-cuts, features after cuts/fillets, child edge treatments, pattern-instance children, cardinal and angled-face patterns, and revolved end-face features |
 
 Every case must pass these deterministic gates:
 
@@ -32,12 +32,32 @@ Every case must pass these deterministic gates:
    persistent-reference verification, save/reopen, parameter mutation, rebuild,
    second save/reopen, and a second geometry comparison.
 
-The August 2026 release audit passed all 286 STEP round trips and all 286 native
-SolidWorks cases after four generalized fixes found by the matrix: local
+The August 2026 native audit passed the original 286 STEP round trips and all
+286 native SolidWorks cases after four generalized fixes found by the matrix: local
 feature frames replaced ambiguous global face tags, native polygons were
 aligned to the CadQuery phase, merged freeform bosses stopped publishing a
 consumed interface face, and curved edge groups gained a cardinality-guarded
-semantic fallback.
+semantic fallback. Six newer angled-planar pattern cases pass schema, CadQuery,
+editable rebuild, STEP, and replay-plan gates; they remain part of the next
+installed-SolidWorks rerun rather than being reported as native passes early.
+
+## Golden end-to-end release gate
+
+A second, deliberately compact matrix starts from seven reviewed
+prompt-to-design-intent examples instead of operation JSON. It covers corner
+patterns, counterbores, wall-mounted holes, revolved collars and grooves,
+partial-revolve flat faces, a multi-level cross-arm hub, and an open tray. Each
+case must pass:
+
+1. design-intent vocabulary, required-dimension, and alignment checks;
+2. deterministic lowering to operation JSON and operation-effect evaluation;
+3. CadQuery construction and STEP export/re-import geometry comparison;
+4. a declared transactional parameter edit with unchanged build order; and
+5. complete SolidWorks replay planning with a native binding for every edited
+   parameter.
+
+This matrix is deterministic and does not spend API calls. Live model
+interpretation remains covered by the separate semantic API suite.
 
 ## Supported construction vocabulary
 
@@ -131,6 +151,13 @@ Run every generated case through STEP export/re-import:
 ```powershell
 prompt2cad-capability-audit --export-steps `
   --output-root generated\capability-release
+```
+
+Run the compact golden prompt-to-native-plan matrix:
+
+```powershell
+prompt2cad-release-matrix `
+  --output-root generated\release-matrix
 ```
 
 Run the full installed-SolidWorks mutation matrix:
