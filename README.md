@@ -285,11 +285,11 @@ edits and future adapter expansion.
 
 Remaining release priorities are:
 
-1. Repeat the installed-SolidWorks mutation gate for the newest angled-face
-   and partial-revolve reference cases.
-2. Increase automated native parameter-binding coverage for polygon controls,
+1. Increase automated native parameter-binding coverage for polygon controls,
    datum-axis edits, and relation-held zero coordinates.
-3. Repeat the public semantic suite immediately before a portfolio release.
+2. Repeat the public semantic suite immediately before a portfolio release.
+3. Re-run the compact native smoke suite on the exact SolidWorks version used
+   for a public demonstration or package release.
 
 For the exact tested operation boundary, construction/repair workflow, and
 release commands, see [release capabilities](docs/release_capabilities.md).

@@ -125,6 +125,10 @@ well as boss/cut features, through and blind end conditions, patterns, full and
 partial revolves, asymmetric freeform edge treatments, and multi-level feature
 dependencies. A separate generated release matrix expands this to 292
 profile/operation/face/pattern combinations and multi-feature repair chains.
+A focused installed-SolidWorks follow-up completed native creation and
+save/reopen mutation verification for the six angled-planar cases added after
+the original 286-case run, bringing the current generated matrix to 292
+native-verified cases.
 A seven-case golden release matrix additionally starts from reviewed natural-
 language/design-intent pairs and traverses lowering, STEP round-trip, editable
 mutation, and SolidWorks replay planning.

@@ -33,13 +33,15 @@ Every case must pass these deterministic gates:
    second save/reopen, and a second geometry comparison.
 
 The August 2026 native audit passed the original 286 STEP round trips and all
-286 native SolidWorks cases after four generalized fixes found by the matrix: local
-feature frames replaced ambiguous global face tags, native polygons were
+286 native SolidWorks cases after four generalized fixes found by the matrix:
+local feature frames replaced ambiguous global face tags, native polygons were
 aligned to the CadQuery phase, merged freeform bosses stopped publishing a
 consumed interface face, and curved edge groups gained a cardinality-guarded
-semantic fallback. Six newer angled-planar pattern cases pass schema, CadQuery,
-editable rebuild, STEP, and replay-plan gates; they remain part of the next
-installed-SolidWorks rerun rather than being reported as native passes early.
+semantic fallback. The six subsequently added angled-planar pattern cases were
+then verified in focused installed-SolidWorks runs. All six passed native
+creation, CadQuery/SolidWorks geometry comparison, persistent-reference
+resolution, parameter mutation, rebuild, save/reopen, and a second geometry
+comparison. Together, those runs cover all 292 current generated cases.
 
 ## Golden end-to-end release gate
 
