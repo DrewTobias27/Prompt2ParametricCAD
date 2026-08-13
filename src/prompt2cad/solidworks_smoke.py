@@ -239,7 +239,7 @@ def run_smoke_suite(
                     editability_contract = validate_native_editability_result(
                         plan,
                         editability_result,
-                        expected_mutation_count=len(mutations),
+                        expected_mutation_ids=mutations,
                         context="editability reopen",
                     )
                     editability_reference_summary = validate_published_references(

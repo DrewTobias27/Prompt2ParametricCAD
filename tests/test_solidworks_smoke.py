@@ -261,7 +261,7 @@ def test_native_smoke_editability_rebuilds_and_compares_mutated_geometry(
                 native_result_factory(
                     plan,
                     editability=True,
-                    mutation_count=3,
+                    mutated_parameter_ids=mutations,
                     after_geometry=geometry_metrics(build_model(model_data)),
                     published_references=persistent_reference_records(plan),
                 )
@@ -332,17 +332,31 @@ def test_native_contract_rejects_missing_helpers_and_unhealthy_sketches(
     with pytest.raises(RuntimeError, match="did not reopen"):
         validate_native_build_result(plan, not_reopened, context="test")
 
+    mutation_id = plan.features[0].parameter_bindings[0]["parameter_id"]
     unhealthy = native_result_factory(
         plan,
         editability=True,
-        mutation_count=1,
+        mutated_parameter_ids=[mutation_id],
     )
     unhealthy["health"]["sketches"][0]["is_valid"] = False
     with pytest.raises(RuntimeError, match="invalid native sketches"):
         validate_native_editability_result(
             plan,
             unhealthy,
-            expected_mutation_count=1,
+            expected_mutation_ids=[mutation_id],
+            context="test edit",
+        )
+
+    wrong_mutation_identity = native_result_factory(
+        plan,
+        editability=True,
+        mutated_parameter_ids=["wrong.parameter"],
+    )
+    with pytest.raises(RuntimeError, match="mutated parameter identities"):
+        validate_native_editability_result(
+            plan,
+            wrong_mutation_identity,
+            expected_mutation_ids=[mutation_id],
             context="test edit",
         )
 

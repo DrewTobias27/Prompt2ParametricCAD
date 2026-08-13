@@ -1,6 +1,7 @@
 """Shared geometry and persistent-reference checks for native CAD replay."""
 
 import math
+from collections.abc import Collection
 
 from prompt2cad.solidworks_replay import SolidWorksReplayPlan
 
@@ -40,15 +41,20 @@ def validate_native_editability_result(
     plan: SolidWorksReplayPlan,
     native_result: dict,
     *,
-    expected_mutation_count: int,
+    expected_mutation_ids: Collection[str],
     context: str,
 ) -> dict:
     """Require a complete save/reopen report after native parameter edits."""
     _require_success_result(native_result, context=context)
     if native_result.get("reopened") is not True:
         raise RuntimeError(f"{context} did not reopen the saved native part")
-    if native_result.get("mutation_count") != expected_mutation_count:
+    expected_ids = sorted(expected_mutation_ids)
+    if native_result.get("mutation_count") != len(expected_ids):
         raise RuntimeError(f"{context} did not apply every requested mutation")
+    if native_result.get("mutated_parameter_ids") != expected_ids:
+        raise RuntimeError(
+            f"{context} mutated parameter identities do not match the request"
+        )
 
     summary = _validate_native_contract_counts(
         plan,
@@ -58,7 +64,8 @@ def validate_native_editability_result(
     summary.update(
         {
             "reopened": True,
-            "mutation_count": expected_mutation_count,
+            "mutation_count": len(expected_ids),
+            "mutated_parameter_ids": expected_ids,
         }
     )
     return summary

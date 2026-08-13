@@ -599,6 +599,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "mutation_count")]
         public int MutationCount { get; set; }
 
+        [DataMember(Name = "mutated_parameter_ids")]
+        public string[] MutatedParameterIds { get; set; }
+
         [DataMember(Name = "reopened")]
         public bool Reopened { get; set; }
 
@@ -1180,6 +1183,10 @@ namespace Prompt2Cad.SolidWorks
                         SourcePath = resolvedSource,
                         OutputPath = resolvedOutput,
                         MutationCount = mutations.Length,
+                        MutatedParameterIds = mutations
+                            .Select(item => item.ParameterId)
+                            .OrderBy(item => item, StringComparer.Ordinal)
+                            .ToArray(),
                         Reopened = true,
                         DeclaredParameterCount =
                             verification.DeclaredParameterCount,

@@ -195,7 +195,7 @@ def test_native_audit_mode_verifies_replay_and_edited_reopen(
                 native_result_factory(
                     plan,
                     editability=True,
-                    mutation_count=len(mutations),
+                    mutated_parameter_ids=mutations,
                     after_geometry=edited_geometry,
                     published_references=reference_records(plan),
                 )

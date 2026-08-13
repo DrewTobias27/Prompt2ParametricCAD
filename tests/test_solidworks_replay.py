@@ -1388,6 +1388,7 @@ def test_native_runner_accepts_the_current_replay_plan_version():
     assert 'DataMember(Name = "verified_helper_count")' in runner_source
     assert 'DataMember(Name = "verified_parameter_ids")' in runner_source
     assert 'DataMember(Name = "verified_helper_names")' in runner_source
+    assert 'DataMember(Name = "mutated_parameter_ids")' in runner_source
     assert "Saved history is missing helper" in runner_source
     assert 'DataMember(Name = "surface_area_mm2")' in runner_source
     assert 'DataMember(Name = "center_of_mass_mm")' in runner_source

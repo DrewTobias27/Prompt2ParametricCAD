@@ -118,8 +118,8 @@ constraints or selection rules:
   helper, parameter, and published reference exists before success is reported;
 - close/reopen verification of the initial native build before its staged file
   is published;
-- a machine-readable report listing the exact parameter IDs and helper names
-  verified in the reopened native history;
+- a machine-readable report listing the exact parameter IDs, helper names, and
+  edited parameter IDs verified in the reopened native history;
 - save/reopen mutation verification that confirms parameters remain editable
   and persistent references still resolve after a rebuild.
 

@@ -336,7 +336,7 @@ def run_release_case(
                     "native_contract": validate_native_editability_result(
                         plan,
                         edit_result,
-                        expected_mutation_count=len(case.mutations),
+                        expected_mutation_ids=case.mutations,
                         context=f"{case.name} native edit",
                     ),
                     "geometry_comparison": compare_geometry_metrics(

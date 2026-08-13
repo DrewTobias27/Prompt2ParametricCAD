@@ -183,6 +183,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"verified_helper_count" in launcher
     assert b"verified_parameter_ids" in runner
     assert b"verified_helper_names" in runner
+    assert b"mutated_parameter_ids" in runner
     assert b"published_references" in launcher
     assert b"Build-SolidWorks-Part.ps1" in command_launcher
     assert b"-Visible" in command_launcher

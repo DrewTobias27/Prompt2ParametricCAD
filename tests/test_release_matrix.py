@@ -124,7 +124,7 @@ def test_release_matrix_native_mode_checks_create_edit_and_reopen(
                 native_result_factory(
                     plan,
                     editability=True,
-                    mutation_count=len(mutations),
+                    mutated_parameter_ids=mutations,
                     after_geometry=geometry_metrics(edited_part),
                     published_references=reference_records(edited_plan),
                 )

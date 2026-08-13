@@ -1035,7 +1035,7 @@ def audit_capability_case(
                 edit_contract = validate_native_editability_result(
                     plan,
                     edit_result,
-                    expected_mutation_count=len(case.mutations),
+                    expected_mutation_ids=case.mutations,
                     context=f"{case.name} native edit",
                 )
                 edited_references = validate_published_references(

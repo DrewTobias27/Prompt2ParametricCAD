@@ -10,6 +10,7 @@ def native_result_factory() -> Callable[..., dict]:
     """Build a complete synthetic result matching one replay plan."""
 
     def factory(plan, *, editability: bool = False, **values) -> dict:
+        mutated_parameter_ids = sorted(values.pop("mutated_parameter_ids", ()))
         parameter_bindings = [
             binding
             for feature in plan.features
@@ -63,7 +64,13 @@ def native_result_factory() -> Callable[..., dict]:
             },
         }
         if editability:
-            report.update({"reopened": True})
+            report.update(
+                {
+                    "reopened": True,
+                    "mutation_count": len(mutated_parameter_ids),
+                    "mutated_parameter_ids": mutated_parameter_ids,
+                }
+            )
         else:
             report.update(
                 {
