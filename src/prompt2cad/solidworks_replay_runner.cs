@@ -1183,6 +1183,7 @@ namespace Prompt2Cad.SolidWorks
                     application.Visible = true;
                 }
 
+                RequireSourcePartClosed(application, resolvedSource);
                 model = OpenNativePart(application, resolvedSource);
                 modelTitle = model.GetTitle();
                 PartDoc part = (PartDoc)model;
@@ -1423,6 +1424,29 @@ namespace Prompt2Cad.SolidWorks
                 );
             }
             return model;
+        }
+
+        private static void RequireSourcePartClosed(
+            SldWorks application,
+            string path)
+        {
+            object openDocument = null;
+            try
+            {
+                openDocument = application.GetOpenDocumentByName(path);
+                if (openDocument != null)
+                {
+                    throw new InvalidOperationException(
+                        "The source SOLIDWORKS part is already open. Close " +
+                        "it before running edit verification so the exporter " +
+                        "cannot modify or close your working document."
+                    );
+                }
+            }
+            finally
+            {
+                ReleaseComObject(openDocument);
+            }
         }
 
         private static ReplayPlan ReadPlan(string path)

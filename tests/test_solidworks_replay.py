@@ -1326,6 +1326,26 @@ def test_solidworks_pattern_parity_covers_every_step_pattern_type():
     assert SUPPORTED_PATTERN_TYPES == schema_pattern_types
 
 
+def test_native_edit_runner_refuses_to_touch_an_open_source_part():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+    edit_section = runner_source[
+        runner_source.index("public static string VerifyEditablePart") :
+        runner_source.index("private static string PrepareNewOutputPath")
+    ]
+
+    guard = "RequireSourcePartClosed(application, resolvedSource);"
+    open_call = "model = OpenNativePart(application, resolvedSource);"
+    assert guard in edit_section
+    assert edit_section.index(guard) < edit_section.index(open_call)
+    assert "application.GetOpenDocumentByName(path)" in runner_source
+    assert "cannot modify or close your working document" in runner_source
+
+
 def test_native_polygon_uses_the_same_positive_x_phase_as_cadquery():
     runner_source = (
         Path(__file__).parents[1]
