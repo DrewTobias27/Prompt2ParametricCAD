@@ -8,11 +8,13 @@ globalThis.fetch = async (url, options) => {
   requests.push({ url, options });
   const responseHeaders = {
     "content-disposition": 'attachment; filename="demo-solidworks.zip"',
+    "x-prompt2cad-package-version": "8",
     "x-prompt2cad-numeric-parameters": "15",
     "x-prompt2cad-named-bindings": "9",
     "x-prompt2cad-relation-controls": "2",
     "x-prompt2cad-derived-geometry": "3",
     "x-prompt2cad-unsupported-parameters": "1",
+    "x-prompt2cad-restricted-parameters": "2",
     "x-prompt2cad-control-coverage": "0.7333333333",
   };
   return {
@@ -43,11 +45,13 @@ const download = await createSolidWorksPackage(modelData, "demo model");
 assert.equal(download.filename, "demo-solidworks.zip");
 assert.equal(download.blob.type, "application/zip");
 assert.deepEqual(download.editability, {
+  packageVersion: 8,
   numericParameterCount: 15,
   namedBindingCount: 9,
   relationControlledCount: 2,
   derivedGeometryCount: 3,
   unsupportedCount: 1,
+  restrictedCount: 2,
   controlCoverageRatio: 0.7333333333,
 });
 assert.equal(requests.length, 1);
@@ -58,7 +62,7 @@ assert.deepEqual(JSON.parse(requests[0].options.body), {
 });
 assert.equal(
   formatSolidWorksDownloadStatus(download.editability),
-  "Package downloaded. 11 of 15 source values have automated native controls; 3 are retained as derived native reference geometry; 1 requires manual SolidWorks editing. Extract it on a Windows computer with SolidWorks.",
+  "Package v8 downloaded. Of 15 source values: 9 have automated edit bindings; 2 zero coordinates are held by sketch relations; 3 are retained as reference geometry; 1 requires manual SolidWorks editing. 2 coordinate bindings cannot cross the sketch origin without regenerating. Extract it on Windows with SolidWorks.",
 );
 assert.equal(
   formatSolidWorksDownloadStatus({
@@ -67,8 +71,9 @@ assert.equal(
     relationControlledCount: 2,
     derivedGeometryCount: 0,
     unsupportedCount: 0,
+    restrictedCount: 0,
   }),
-  "Package downloaded. 11 of 11 source values have automated native controls. Extract it on a Windows computer with SolidWorks.",
+  "Package downloaded. Of 11 source values: 9 have automated edit bindings; 2 zero coordinates are held by sketch relations. Extract it on Windows with SolidWorks.",
 );
 assert.equal(
   formatSolidWorksDownloadStatus(null),

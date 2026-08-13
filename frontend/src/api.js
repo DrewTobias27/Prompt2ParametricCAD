@@ -54,6 +54,10 @@ async function postDownload(path, payload, fallbackFilename) {
     blob: await response.blob(),
     filename: filenameMatch?.[1] || fallbackFilename,
     editability: {
+      packageVersion: numericHeader(
+        response,
+        "X-Prompt2CAD-Package-Version",
+      ),
       numericParameterCount: numericHeader(
         response,
         "X-Prompt2CAD-Numeric-Parameters",
@@ -73,6 +77,10 @@ async function postDownload(path, payload, fallbackFilename) {
       unsupportedCount: numericHeader(
         response,
         "X-Prompt2CAD-Unsupported-Parameters",
+      ),
+      restrictedCount: numericHeader(
+        response,
+        "X-Prompt2CAD-Restricted-Parameters",
       ),
       controlCoverageRatio: numericHeader(
         response,

@@ -71,7 +71,7 @@ export function OutputPanel({
             </button>
           </div>
           <p className="download-note">
-            Builds an editable SLDPRT on your computer. Requires Windows and an installed copy of SolidWorks.
+            Creates a native feature-tree SLDPRT locally. Requires Windows and SolidWorks; edit coverage is reported after download.
           </p>
           {solidWorksStatus && (
             <p

@@ -53,6 +53,7 @@ def test_solidworks_package_route_returns_downloadable_zip(monkeypatch):
                 "relation_controlled_count": 2,
                 "derived_geometry_count": 1,
                 "unsupported_count": 1,
+                "restricted_count": 2,
                 "control_coverage_ratio": 11 / 12,
             },
         }
@@ -81,10 +82,14 @@ def test_solidworks_package_route_returns_downloadable_zip(monkeypatch):
     assert response.headers["x-prompt2cad-relation-controls"] == "2"
     assert response.headers["x-prompt2cad-derived-geometry"] == "1"
     assert response.headers["x-prompt2cad-unsupported-parameters"] == "1"
+    assert response.headers["x-prompt2cad-restricted-parameters"] == "2"
     assert float(response.headers["x-prompt2cad-control-coverage"]) == pytest.approx(
         11 / 12
     )
     assert "X-Prompt2CAD-Control-Coverage" in response.headers[
+        "access-control-expose-headers"
+    ]
+    assert "X-Prompt2CAD-Restricted-Parameters" in response.headers[
         "access-control-expose-headers"
     ]
 

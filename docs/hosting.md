@@ -118,9 +118,10 @@ The public-release gate was exercised on August 10, 2026. The deployed site
 generated and refined a valid multi-feature model, both public download paths
 returned non-empty artifacts, and a package downloaded from the public URL
 created a native SolidWorks part with editable features and dimensions. That
-result predates package v8. The August 13 local v8 gate passed 591 tests, the
-7/7 golden release matrix, and all 292 STEP/native-plan capability cases. A
-fresh package downloaded from the deployed site must still pass the focused
-installed-SolidWorks build and mutation checks above before publishing. The
-hosted service, external API, and installed SolidWorks version remain live
-dependencies.
+result predates package v8. The August 13 v8 regression now passes 601 offline
+tests, all six frontend behavior suites, a production frontend build, the 7/7
+golden release matrix, and all 292 STEP/native-plan capability cases. Four
+installed-API compile/tamper checks also passed separately. A fresh package
+downloaded from the deployed site must still pass the installed-SolidWorks
+build and mutation gate above before publishing. The hosted service, external
+API, and installed SolidWorks version remain live dependencies.

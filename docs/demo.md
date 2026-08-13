@@ -28,8 +28,9 @@ from the second device.
 1. Describe a mechanical part and generate it.
 2. Show the generated operation JSON and quality result.
 3. Download and open the STEP file.
-4. Show the separate SolidWorks-package download and explain that it creates an
-   editable `SLDPRT` locally for users who have Windows and SolidWorks.
+4. Show the separate SolidWorks-package download and its edit-coverage summary;
+   explain that it creates a native feature-tree `SLDPRT` locally for users who
+   have Windows and SolidWorks.
 5. Switch to the manual builder.
 6. Add a base, a feature, a pattern, and a cut while showing the drawing preview.
 7. Explain that both workflows produce the same operation representation.

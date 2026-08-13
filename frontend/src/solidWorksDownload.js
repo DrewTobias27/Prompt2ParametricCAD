@@ -1,10 +1,12 @@
 export function formatSolidWorksDownloadStatus(editability) {
   const {
+    packageVersion,
     numericParameterCount,
     namedBindingCount,
     relationControlledCount,
     derivedGeometryCount,
     unsupportedCount,
+    restrictedCount,
   } = editability || {};
   const hasCoverage = [
     numericParameterCount,
@@ -17,13 +19,23 @@ export function formatSolidWorksDownloadStatus(editability) {
     return "Package downloaded. Extract it on a Windows computer with SolidWorks.";
   }
 
-  const controlledCount = namedBindingCount + relationControlledCount;
-  const coverageDetails = [
-    `${controlledCount} of ${numericParameterCount} source values have automated native controls`,
-  ];
+  const packageLabel = Number.isFinite(packageVersion)
+    ? `Package v${packageVersion}`
+    : "Package";
+  const coverageDetails = [];
+  if (namedBindingCount > 0) {
+    coverageDetails.push(
+      `${namedBindingCount} ${namedBindingCount === 1 ? "has an" : "have"} automated edit ${namedBindingCount === 1 ? "binding" : "bindings"}`,
+    );
+  }
+  if (relationControlledCount > 0) {
+    coverageDetails.push(
+      `${relationControlledCount} zero ${relationControlledCount === 1 ? "coordinate is" : "coordinates are"} held by sketch relations`,
+    );
+  }
   if (Number.isFinite(derivedGeometryCount) && derivedGeometryCount > 0) {
     coverageDetails.push(
-      `${derivedGeometryCount} ${derivedGeometryCount === 1 ? "is" : "are"} retained as derived native reference geometry`,
+      `${derivedGeometryCount} ${derivedGeometryCount === 1 ? "is" : "are"} retained as reference geometry`,
     );
   }
   if (unsupportedCount > 0) {
@@ -31,7 +43,13 @@ export function formatSolidWorksDownloadStatus(editability) {
       `${unsupportedCount} ${unsupportedCount === 1 ? "requires" : "require"} manual SolidWorks editing`,
     );
   }
-  const coverageSummary = `${coverageDetails.join("; ")}.`;
+  let restrictionSummary = "";
+  if (Number.isFinite(restrictedCount) && restrictedCount > 0) {
+    restrictionSummary = ` ${restrictedCount} coordinate ${restrictedCount === 1 ? "binding cannot" : "bindings cannot"} cross the sketch origin without regenerating.`;
+  }
+  const coverageSummary = coverageDetails.length > 0
+    ? ` Of ${numericParameterCount} source values: ${coverageDetails.join("; ")}.`
+    : "";
 
-  return `Package downloaded. ${coverageSummary} Extract it on a Windows computer with SolidWorks.`;
+  return `${packageLabel} downloaded.${coverageSummary}${restrictionSummary} Extract it on Windows with SolidWorks.`;
 }

@@ -35,17 +35,18 @@ Verified against the public deployment on August 10, 2026:
   native create/edit/reopen parity across the same coverage surface.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 13 package-v8 gate passed 591 Python/compile-contract tests, all
+- The August 13 package-v8 gate passes 601 offline Python tests, all
   six frontend behavior suites, a production frontend build, all seven golden
   end-to-end cases, and all 292 generated STEP/native-plan capability cases.
-  Four environment-gated C# compile/plan-tamper checks ran inside that suite.
-  Two exhaustive tests were run through their dedicated release commands;
-  only the two tests requiring a live SolidWorks application remain pending.
+  Four C# compile/plan-tamper checks passed separately. Two exhaustive tests
+  were run through their dedicated release commands; only the fresh public ZIP
+  and installed-SolidWorks create/edit/reopen gate remains pending.
 - Package v8 assigns explicit collision-safe names to pattern/support helpers,
   reports the exact parameter/helper/mutation identities it verifies, resolves
   localized datum planes and part templates, and closes/reopens the staged
-  `SLDPRT` before publishing it. The two installed-SolidWorks package tests
-  remain the final workstation gate before the native claim is published.
+  `SLDPRT` before publishing it. The release checker now verifies the exact
+  downloaded ZIP, selects and proves a geometry-changing edit, then requires a
+  second native save/reopen with matching geometry and persistent references.
 
 ## Recommended visuals
 
