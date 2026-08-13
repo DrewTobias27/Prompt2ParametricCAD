@@ -92,6 +92,61 @@ def test_native_release_script_is_valid_powershell():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_native_release_script_restores_shell_state_after_failure(
+    tmp_path: Path,
+):
+    fake_python = tmp_path / "fake-python.cmd"
+    fake_python.write_text(
+        "\n".join(
+            [
+                "@echo off",
+                'if "%1"=="-c" (',
+                "  echo 10",
+                "  exit /b 0",
+                ")",
+                "exit /b 17",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "P2P_NATIVE_RELEASE_SCRIPT": str(NATIVE_RELEASE_SCRIPT),
+            "P2P_FAKE_PYTHON": str(fake_python),
+            "P2P_NATIVE_OUTPUT": str(tmp_path / "evidence"),
+        }
+    )
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-Command",
+            (
+                "$before=(Get-Location).Path; "
+                "$env:P2P_RUN_SOLIDWORKS_NATIVE='native-sentinel'; "
+                "$env:PYTHONPATH='python-sentinel'; "
+                "$env:PROMPT2CAD_PYTHON=$env:P2P_FAKE_PYTHON; "
+                "try { & $env:P2P_NATIVE_RELEASE_SCRIPT "
+                "-OutputRoot $env:P2P_NATIVE_OUTPUT; exit 91 } catch {}; "
+                "if ((Get-Location).Path -ne $before) { exit 92 }; "
+                "if ($env:P2P_RUN_SOLIDWORKS_NATIVE -ne "
+                "'native-sentinel') { exit 93 }; "
+                "if ($env:PYTHONPATH -ne 'python-sentinel') { exit 94 }; "
+                "exit 0"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_release_script_keeps_native_execution_explicit():
     source = RELEASE_SCRIPT.read_text(encoding="utf-8")
 

@@ -348,10 +348,25 @@ try {
     Write-Host "Summary:  $releaseSummaryPath"
 }
 finally {
-    $env:P2P_RUN_SOLIDWORKS_NATIVE = $previousNativeSetting
-    $env:PYTHONPATH = $previousPythonPath
-    if ($transcriptStarted) {
-        Stop-Transcript | Out-Null
+    try {
+        if ($transcriptStarted) {
+            Stop-Transcript | Out-Null
+        }
     }
-    Set-Location $previousLocation
+    finally {
+        if ($null -eq $previousNativeSetting) {
+            Remove-Item Env:P2P_RUN_SOLIDWORKS_NATIVE `
+                -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:P2P_RUN_SOLIDWORKS_NATIVE = $previousNativeSetting
+        }
+        if ($null -eq $previousPythonPath) {
+            Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:PYTHONPATH = $previousPythonPath
+        }
+        Set-Location $previousLocation
+    }
 }
