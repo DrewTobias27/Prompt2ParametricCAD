@@ -214,6 +214,8 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"CompileOnly" in launcher
     assert b"plan_validated" in launcher
     assert b"SolidWorks setup is ready" in launcher
+    assert b"SolidWorks API root:" in launcher
+    assert b"Interop version:" in launcher
     assert b"$LASTEXITCODE" not in files["Build-SolidWorks-Part.ps1"]
 
     replay_script = files["solidworks_replay.ps1"]
@@ -394,6 +396,19 @@ def test_extracted_package_setup_check_compiles_runner(tmp_path: Path):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "SolidWorks setup is ready" in result.stdout
+    api_root_line = next(
+        line
+        for line in result.stdout.splitlines()
+        if line.startswith("SolidWorks API root: ")
+    )
+    api_root = Path(api_root_line.removeprefix("SolidWorks API root: "))
+    assert api_root.is_dir()
+    interop_version_line = next(
+        line
+        for line in result.stdout.splitlines()
+        if line.startswith("Interop version: ")
+    )
+    assert interop_version_line.removeprefix("Interop version: ").strip()
 
 
 @pytest.mark.skipif(

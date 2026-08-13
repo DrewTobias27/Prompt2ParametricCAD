@@ -324,6 +324,8 @@ def _launcher_script(native_filename: str) -> str:
             }}
             Write-Host ""
             Write-Host "SolidWorks setup is ready" -ForegroundColor Green
+            Write-Host ("SolidWorks API root: " + $check.solidworks_api_root)
+            Write-Host ("Interop version: " + $check.solidworks_interop_version)
             Write-Host "Run Build-SolidWorks-Part.cmd to create the editable part."
             return
         }}

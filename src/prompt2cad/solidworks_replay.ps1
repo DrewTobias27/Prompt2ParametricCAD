@@ -88,6 +88,10 @@ try {
         }
     }
 
+    $solidWorksInteropVersion = (
+        [System.Diagnostics.FileVersionInfo]::GetVersionInfo($sldWorksInterop)
+    ).FileVersion
+
     Add-Type -Path $constantsInterop
     Add-Type -Path $sldWorksInterop
     Add-Type `
@@ -146,6 +150,8 @@ try {
             mutation_count = $mutationCount
             topology_changed = $topologyChanged
             topology_changing_parameter_ids = $topologyChangingParameterIds
+            solidworks_api_root = $solidWorksRoot
+            solidworks_interop_version = $solidWorksInteropVersion
         } | ConvertTo-Json -Compress
         exit 0
     }
