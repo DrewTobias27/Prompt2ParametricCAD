@@ -147,7 +147,7 @@ unsupported parameters separately instead of treating every missing native
 dimension as a feature gap. Raw revolve-axis endpoints are retained by the
 native construction line but classified as derived geometry because four
 endpoint coordinates redundantly encode one axis; they are not counted as
-automated controls or as lost geometry. Replay-plan version 10 also records a
+automated controls or as lost geometry. Replay-plan version 11 also records a
 canonical axis anchor, unit direction, normal, signed offset, and direction
 angle. Equivalent endpoint pairs therefore describe the same downstream axis
 without changing the proven native construction-line builder.

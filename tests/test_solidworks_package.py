@@ -461,6 +461,99 @@ def test_setup_check_rejects_a_malformed_geometry_oracle(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
 )
+def test_compile_only_geometry_probe_executes_native_comparator(tmp_path: Path):
+    package = create_solidworks_package(fixture_model_data(), "Geometry probe")
+    extract_package(package.content, tmp_path)
+    plan_path = tmp_path / "solidworks-replay-plan.json"
+    expected_geometry = json.loads(plan_path.read_text(encoding="utf-8"))[
+        "expected_geometry"
+    ]
+    expected_path = tmp_path / "expected-geometry.json"
+    actual_path = tmp_path / "actual-geometry.json"
+    expected_path.write_text(json.dumps(expected_geometry), encoding="utf-8")
+    actual_path.write_text(json.dumps(expected_geometry), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "solidworks_replay.ps1"),
+            "-PlanPath",
+            str(plan_path),
+            "-OutputPath",
+            str(tmp_path / "unused.SLDPRT"),
+            "-CompileOnly",
+            "-ExpectedGeometryPath",
+            str(expected_path),
+            "-ActualGeometryPath",
+            str(actual_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    output = json.loads(result.stdout.strip().splitlines()[-1])
+    assert output["geometry_contract_validated"] is True
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
+)
+def test_compile_only_geometry_probe_rejects_volume_mismatch(tmp_path: Path):
+    package = create_solidworks_package(fixture_model_data(), "Geometry mismatch")
+    extract_package(package.content, tmp_path)
+    plan_path = tmp_path / "solidworks-replay-plan.json"
+    expected_geometry = json.loads(plan_path.read_text(encoding="utf-8"))[
+        "expected_geometry"
+    ]
+    actual_geometry = dict(expected_geometry)
+    actual_geometry["volume_mm3"] *= 1.02
+    expected_path = tmp_path / "expected-geometry.json"
+    actual_path = tmp_path / "actual-geometry.json"
+    expected_path.write_text(json.dumps(expected_geometry), encoding="utf-8")
+    actual_path.write_text(json.dumps(actual_geometry), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "solidworks_replay.ps1"),
+            "-PlanPath",
+            str(plan_path),
+            "-OutputPath",
+            str(tmp_path / "unused.SLDPRT"),
+            "-CompileOnly",
+            "-ExpectedGeometryPath",
+            str(expected_path),
+            "-ActualGeometryPath",
+            str(actual_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "volume differs from the CadQuery source" in (
+        result.stdout + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
+)
 def test_setup_check_rejects_duplicate_native_names(tmp_path: Path):
     package = create_solidworks_package(fixture_model_data(), "Name validation")
     extract_package(package.content, tmp_path)

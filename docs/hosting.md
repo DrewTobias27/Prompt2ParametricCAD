@@ -54,7 +54,9 @@ it requires an installed and licensed SolidWorks application: extract the ZIP
 and optionally double-click `Check-SolidWorks-Setup.cmd` first. That preflight
 checks the package, 64-bit PowerShell, SolidWorks registration and API files,
 compiles the replay engine, and validates the replay-plan contract without
-creating a part. Then run
+creating a part. The repository's compile-only release gate also executes the
+same C# geometry comparator directly: an exact oracle must pass and an
+out-of-tolerance volume must fail before native COM execution is trusted. Then run
 `Build-SolidWorks-Part.cmd`; package v9 stages the native part, closes and
 reopens it, verifies the saved history, exact parameter/helper identities,
 localized datum/template resolution, and body/volume/area/bounds/center against
@@ -126,7 +128,7 @@ created a native SolidWorks part with editable features and dimensions. That
 result predates package v9. The August 13 v9 regression now passes 609 offline
 tests, all six frontend behavior suites, a production frontend build, the 7/7
 golden release matrix, and all 292 STEP/native-plan capability cases. Four
-installed-API compile/tamper checks also passed separately. A fresh package
+installed-API compile, comparator, and tamper checks also passed separately. A fresh package
 downloaded from the deployed site must still pass the installed-SolidWorks
 build and mutation gate above before publishing. The hosted service, external
 API, and installed SolidWorks version remain live dependencies.

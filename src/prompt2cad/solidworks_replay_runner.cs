@@ -744,6 +744,19 @@ namespace Prompt2Cad.SolidWorks
             return plan.Features.Length;
         }
 
+        public static void ValidateGeometryFiles(
+            string expectedGeometryPath,
+            string actualGeometryPath)
+        {
+            NativeGeometryResult expected = ReadGeometry(expectedGeometryPath);
+            NativeGeometryResult actual = ReadGeometry(actualGeometryPath);
+            RequireExpectedGeometryMatch(
+                expected,
+                actual,
+                "compile-only geometry probe"
+            );
+        }
+
         public static string Execute(
             string planPath,
             string outputPath,
@@ -1850,6 +1863,26 @@ namespace Prompt2Cad.SolidWorks
             using (FileStream stream = File.OpenRead(path))
             {
                 return (MutationDocument)serializer.ReadObject(stream);
+            }
+        }
+
+        private static NativeGeometryResult ReadGeometry(string path)
+        {
+            if (String.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                throw new InvalidOperationException(
+                    "Geometry probe file was not found: " + path
+                );
+            }
+            var serializer = new DataContractJsonSerializer(
+                typeof(NativeGeometryResult)
+            );
+            using (FileStream stream = File.OpenRead(path))
+            {
+                NativeGeometryResult geometry =
+                    (NativeGeometryResult)serializer.ReadObject(stream);
+                ValidateGeometryRecord(geometry, "Geometry probe", false);
+                return geometry;
             }
         }
 

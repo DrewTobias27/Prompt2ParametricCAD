@@ -11,6 +11,10 @@ param(
 
     [string]$MutationPath,
 
+    [string]$ExpectedGeometryPath,
+
+    [string]$ActualGeometryPath,
+
     [switch]$CompileOnly,
 
     [switch]$Visible
@@ -100,13 +104,32 @@ try {
         $featureCount = [Prompt2Cad.SolidWorks.NativeReplayRunner]::ValidatePlanFile(
             [System.IO.Path]::GetFullPath($PlanPath)
         )
+        if ([bool]$ExpectedGeometryPath -ne [bool]$ActualGeometryPath) {
+            throw (
+                "ExpectedGeometryPath and ActualGeometryPath must be supplied " +
+                "together."
+            )
+        }
+        $geometryContractValidated = $false
+        if ($ExpectedGeometryPath) {
+            [Prompt2Cad.SolidWorks.NativeReplayRunner]::ValidateGeometryFiles(
+                [System.IO.Path]::GetFullPath($ExpectedGeometryPath),
+                [System.IO.Path]::GetFullPath($ActualGeometryPath)
+            )
+            $geometryContractValidated = $true
+        }
         [PSCustomObject]@{
             status = "success"
             compile_only = $true
             plan_validated = $true
             feature_count = $featureCount
+            geometry_contract_validated = $geometryContractValidated
         } | ConvertTo-Json -Compress
         exit 0
+    }
+
+    if ($ExpectedGeometryPath -or $ActualGeometryPath) {
+        throw "Geometry probe paths may only be used with CompileOnly."
     }
 
     if ($MutationPath) {
