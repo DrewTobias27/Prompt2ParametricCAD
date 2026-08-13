@@ -89,8 +89,25 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 ```
 
 The script creates a new timestamped evidence directory, refuses to overwrite
-an earlier run, and executes the downloaded-package checks, all ten native
+an earlier run, and executes the portable-package checks, all ten native
 smoke/edit cases, and all seven golden native/edit cases. It makes no API calls.
+
+For the final public-release gate, download a fresh package from the deployed
+site and pass that exact ZIP to the same command:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\check_solidworks_release.ps1 `
+  -DownloadedPackagePath "C:\Users\you\Downloads\part-v8-solidworks.zip" `
+  -Visible
+```
+
+The extra gate safely extracts the ZIP, verifies every payload hash, rebuilds
+the editable document, replay plan, and editability report from the embedded
+source model, creates the SLDPRT, and checks exact feature/parameter/helper
+identities, persistent references, and geometry equivalence. The evidence
+folder retains machine-readable integrity and native-verification reports plus
+a complete terminal transcript.
 
 ### Most recent verification
 

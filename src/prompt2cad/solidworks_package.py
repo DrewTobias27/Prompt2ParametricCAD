@@ -18,6 +18,18 @@ from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
 SOLIDWORKS_PACKAGE_VERSION = 8
+SOLIDWORKS_PACKAGE_PAYLOAD_FILES = (
+    "Build-SolidWorks-Part.cmd",
+    "Build-SolidWorks-Part.ps1",
+    "Check-SolidWorks-Setup.cmd",
+    "README.txt",
+    "editable-model.json",
+    "editability-coverage.json",
+    "solidworks-replay-plan.json",
+    "solidworks_replay.ps1",
+    "solidworks_replay_runner.cs",
+    "source-model.json",
+)
 _FIXED_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 
@@ -99,49 +111,9 @@ def create_solidworks_package(
             "feature_count": len(replay_plan.features),
             "build_order": list(replay_plan.source_build_order),
         },
-        "editability": {
-            "numeric_parameter_count": editability_coverage[
-                "numeric_source_count"
-            ],
-            "named_binding_count": editability_coverage["bound_count"],
-            "relation_controlled_count": editability_coverage[
-                "relation_controlled_count"
-            ],
-            "derived_geometry_count": editability_coverage[
-                "derived_geometry_count"
-            ],
-            "derived_geometry_parameter_ids": editability_coverage[
-                "derived_geometry_parameter_ids"
-            ],
-            "derived_geometry_parameters": editability_coverage[
-                "derived_geometry_parameters"
-            ],
-            "represented_count": editability_coverage["represented_count"],
-            "representation_coverage_ratio": editability_coverage[
-                "representation_coverage_ratio"
-            ],
-            "unsupported_count": len(
-                editability_coverage["unsupported_parameter_ids"]
-            ),
-            "control_coverage_ratio": editability_coverage[
-                "control_coverage_ratio"
-            ],
-            "unsupported_parameter_ids": editability_coverage[
-                "unsupported_parameter_ids"
-            ],
-            "unsupported_parameters": editability_coverage[
-                "unsupported_parameters"
-            ],
-            "restricted_count": len(
-                editability_coverage["restricted_parameter_ids"]
-            ),
-            "restricted_parameter_ids": editability_coverage[
-                "restricted_parameter_ids"
-            ],
-            "restricted_parameters": editability_coverage[
-                "restricted_parameters"
-            ],
-        },
+        "editability": solidworks_package_editability_summary(
+            editability_coverage
+        ),
         "files": [
             {
                 "path": path,
@@ -151,6 +123,8 @@ def create_solidworks_package(
             for path, content in sorted(files.items())
         ],
     }
+    if set(files) != set(SOLIDWORKS_PACKAGE_PAYLOAD_FILES):
+        raise RuntimeError("SolidWorks package payload contract is incomplete")
     files["manifest.json"] = _json_bytes(manifest)
 
     return SolidWorksPackage(
@@ -160,6 +134,33 @@ def create_solidworks_package(
         content=_zip_bytes(files),
         manifest=manifest,
     )
+
+
+def solidworks_package_editability_summary(coverage: dict) -> dict:
+    """Return the manifest projection of a full editability report."""
+    return {
+        "numeric_parameter_count": coverage["numeric_source_count"],
+        "named_binding_count": coverage["bound_count"],
+        "relation_controlled_count": coverage["relation_controlled_count"],
+        "derived_geometry_count": coverage["derived_geometry_count"],
+        "derived_geometry_parameter_ids": coverage[
+            "derived_geometry_parameter_ids"
+        ],
+        "derived_geometry_parameters": coverage[
+            "derived_geometry_parameters"
+        ],
+        "represented_count": coverage["represented_count"],
+        "representation_coverage_ratio": coverage[
+            "representation_coverage_ratio"
+        ],
+        "unsupported_count": len(coverage["unsupported_parameter_ids"]),
+        "control_coverage_ratio": coverage["control_coverage_ratio"],
+        "unsupported_parameter_ids": coverage["unsupported_parameter_ids"],
+        "unsupported_parameters": coverage["unsupported_parameters"],
+        "restricted_count": len(coverage["restricted_parameter_ids"]),
+        "restricted_parameter_ids": coverage["restricted_parameter_ids"],
+        "restricted_parameters": coverage["restricted_parameters"],
+    }
 
 
 def _safe_package_stem(filename_hint: str, model_data: dict) -> str:
