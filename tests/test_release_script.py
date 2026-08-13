@@ -1,6 +1,7 @@
 """Contract checks for the one-command deterministic release gate."""
 
 from pathlib import Path
+import os
 import shutil
 import subprocess
 
@@ -36,6 +37,33 @@ def test_release_script_is_valid_powershell():
         ],
         capture_output=True,
         text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_release_script_restores_shell_state_after_failure():
+    environment = os.environ.copy()
+    environment["P2P_RELEASE_SCRIPT"] = str(RELEASE_SCRIPT)
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-Command",
+            (
+                "$before=(Get-Location).Path; "
+                "$env:PYTHONPATH='prompt2cad-release-sentinel'; "
+                "$env:PROMPT2CAD_PYTHON='missing-prompt2cad-python.exe'; "
+                "try { & $env:P2P_RELEASE_SCRIPT; exit 91 } catch {}; "
+                "if ((Get-Location).Path -ne $before) { exit 92 }; "
+                "if ($env:PYTHONPATH -ne 'prompt2cad-release-sentinel') "
+                "{ exit 93 }; exit 0"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        env=environment,
         check=False,
     )
 
@@ -85,6 +113,10 @@ def test_release_script_keeps_native_execution_explicit():
     assert "PROMPT2CAD_PNPM" not in source
     assert "--execute-native" not in source
     assert "OPENAI_API_KEY" not in source
+    assert "$previousLocation = Get-Location" in source
+    assert "$previousPythonPath = $env:PYTHONPATH" in source
+    assert "Set-Location $previousLocation" in source
+    assert "Remove-Item Env:PYTHONPATH" in source
 
 
 def test_native_release_script_runs_every_focused_live_gate():
