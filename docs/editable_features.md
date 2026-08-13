@@ -68,13 +68,15 @@ automation API:
 
 1. create a new part from a configured or installed template and use
    SolidWorks API system units;
-2. create each sketch on its recorded plane or resolved support reference;
-3. recreate named sketch entities and driving dimensions;
-4. create the corresponding native feature;
-5. resolve later targets from semantic selection recipes after each rebuild;
-6. capture persistent SolidWorks reference IDs for published faces and retain
+2. select standard datum planes by semantic XY/XZ/YZ identity when localized
+   display names differ;
+3. create each sketch on its recorded plane or resolved support reference;
+4. recreate named sketch entities and driving dimensions;
+5. create the corresponding native feature;
+6. resolve later targets from semantic selection recipes after each rebuild;
+7. capture persistent SolidWorks reference IDs for published faces and retain
    canonical geometric recipes for selected edge groups;
-7. save to a staged `SLDPRT`, close and reopen it, then verify dimensions,
+8. save to a staged `SLDPRT`, close and reopen it, then verify dimensions,
    helper objects, sketch constraint state, feature health, geometry, and
    reference resolution before publishing the file.
 

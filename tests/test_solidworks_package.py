@@ -436,6 +436,44 @@ def test_setup_check_rejects_duplicate_native_names(tmp_path: Path):
 
 
 @pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
+)
+def test_setup_check_rejects_unknown_semantic_datum_plane(tmp_path: Path):
+    package = create_solidworks_package(fixture_model_data(), "Datum validation")
+    extract_package(package.content, tmp_path)
+    plan_path = tmp_path / "solidworks-replay-plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan["features"][0]["support"]["semantic_plane"] = "localized-name"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "solidworks_replay.ps1"),
+            "-PlanPath",
+            str(plan_path),
+            "-OutputPath",
+            str(tmp_path / "unused.SLDPRT"),
+            "-CompileOnly",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "requires semantic plane XY, XZ, or YZ" in (
+        result.stdout + result.stderr
+    )
+
+
+@pytest.mark.skipif(
     os.getenv("P2P_RUN_SOLIDWORKS_NATIVE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_NATIVE=1 to open installed SolidWorks",
 )

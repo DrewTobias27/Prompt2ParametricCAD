@@ -1389,6 +1389,12 @@ def test_native_runner_accepts_the_current_replay_plan_version():
     assert 'DataMember(Name = "verified_parameter_ids")' in runner_source
     assert 'DataMember(Name = "verified_helper_names")' in runner_source
     assert 'DataMember(Name = "mutated_parameter_ids")' in runner_source
+    assert 'DataMember(Name = "semantic_plane")' in runner_source
+    assert "SelectDatumPlane(" in runner_source
+    assert 'feature.GetTypeName2(),\n                    "RefPlane"' in runner_source
+    assert 'case "XY":\n                    return 1;' in runner_source
+    assert 'case "XZ":\n                    return 2;' in runner_source
+    assert 'case "YZ":\n                    return 3;' in runner_source
     assert "Saved history is missing helper" in runner_source
     assert 'DataMember(Name = "surface_area_mm2")' in runner_source
     assert 'DataMember(Name = "center_of_mass_mm")' in runner_source

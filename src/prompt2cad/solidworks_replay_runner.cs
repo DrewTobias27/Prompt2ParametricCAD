@@ -94,6 +94,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "datum_name")]
         public string DatumName { get; set; }
 
+        [DataMember(Name = "semantic_plane")]
+        public string SemanticPlane { get; set; }
+
         [DataMember(Name = "offset_mm")]
         public double OffsetMillimeters { get; set; }
 
@@ -1392,6 +1395,16 @@ namespace Prompt2Cad.SolidWorks
                         "native offset-plane name"
                     );
                 }
+                if (step.Support != null &&
+                    (step.Support.Kind == "datum_plane" ||
+                     step.Support.Kind == "offset_plane") &&
+                    DatumPlaneOrdinal(step.Support.SemanticPlane) == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Native datum support for feature '" + step.Id +
+                        "' requires semantic plane XY, XZ, or YZ."
+                    );
+                }
                 if (step.Pattern != null)
                 {
                     RequireUniqueValue(
@@ -2087,21 +2100,16 @@ namespace Prompt2Cad.SolidWorks
             model.ClearSelection2(true);
             if (support.Kind == "datum_plane")
             {
-                bool selected = model.Extension.SelectByID2(
+                bool selected = SelectDatumPlane(
+                    model,
                     support.Name,
-                    "PLANE",
-                    0.0,
-                    0.0,
-                    0.0,
-                    false,
-                    0,
-                    null,
-                    0
+                    support.SemanticPlane
                 );
                 if (!selected)
                 {
                     throw new InvalidOperationException(
-                        "Could not select datum plane '" + support.Name + "'."
+                        "Could not select datum plane '" + support.Name +
+                        "' for semantic plane '" + support.SemanticPlane + "'."
                     );
                 }
                 return;
@@ -2206,17 +2214,10 @@ namespace Prompt2Cad.SolidWorks
                 );
             }
 
-            model.ClearSelection2(true);
-            bool selectedDatum = model.Extension.SelectByID2(
+            bool selectedDatum = SelectDatumPlane(
+                model,
                 support.DatumName,
-                "PLANE",
-                0.0,
-                0.0,
-                0.0,
-                false,
-                0,
-                null,
-                0
+                support.SemanticPlane
             );
             if (!selectedDatum)
             {
@@ -2262,6 +2263,78 @@ namespace Prompt2Cad.SolidWorks
                     "Offset plane '" + support.Name +
                     "' could not be selected."
                 );
+            }
+        }
+
+        private static bool SelectDatumPlane(
+            ModelDoc2 model,
+            string preferredName,
+            string semanticPlane)
+        {
+            model.ClearSelection2(true);
+            if (!String.IsNullOrWhiteSpace(preferredName) &&
+                model.Extension.SelectByID2(
+                    preferredName,
+                    "PLANE",
+                    0.0,
+                    0.0,
+                    0.0,
+                    false,
+                    0,
+                    null,
+                    0
+                ))
+            {
+                return true;
+            }
+
+            int requestedOrdinal = DatumPlaneOrdinal(semanticPlane);
+            if (requestedOrdinal == 0)
+            {
+                return false;
+            }
+            int planeOrdinal = 0;
+            Feature feature = model.FirstFeature() as Feature;
+            while (feature != null)
+            {
+                if (String.Equals(
+                    feature.GetTypeName2(),
+                    "RefPlane",
+                    StringComparison.Ordinal))
+                {
+                    planeOrdinal += 1;
+                    if (planeOrdinal == requestedOrdinal)
+                    {
+                        model.ClearSelection2(true);
+                        bool selected = feature.Select2(false, 0);
+                        if (selected)
+                        {
+                            Trace(
+                                "Selected localized datum plane '" +
+                                feature.Name + "' by semantic plane " +
+                                semanticPlane
+                            );
+                        }
+                        return selected;
+                    }
+                }
+                feature = feature.GetNextFeature() as Feature;
+            }
+            return false;
+        }
+
+        private static int DatumPlaneOrdinal(string semanticPlane)
+        {
+            switch (semanticPlane)
+            {
+                case "XY":
+                    return 1;
+                case "XZ":
+                    return 2;
+                case "YZ":
+                    return 3;
+                default:
+                    return 0;
             }
         }
 
