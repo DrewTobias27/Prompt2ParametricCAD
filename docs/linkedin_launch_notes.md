@@ -35,11 +35,12 @@ Verified against the public deployment on August 10, 2026:
   native create/edit/reopen parity across the same coverage surface.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 13 package-v8 gate passed 591 Python/compile-contract tests, all six frontend
-  behavior suites, a production frontend build, all seven golden end-to-end
-  cases, and all 292 generated capability cases. Four environment-gated C#
-  compile/plan-tamper checks ran inside that suite; only four tests requiring
-  a live SolidWorks application were skipped.
+- The August 13 package-v8 gate passed 591 Python/compile-contract tests, all
+  six frontend behavior suites, a production frontend build, all seven golden
+  end-to-end cases, and all 292 generated STEP/native-plan capability cases.
+  Four environment-gated C# compile/plan-tamper checks ran inside that suite.
+  Two exhaustive tests were run through their dedicated release commands;
+  only the two tests requiring a live SolidWorks application remain pending.
 - Package v8 assigns explicit collision-safe names to pattern/support helpers,
   reports the exact parameter/helper/mutation identities it verifies, resolves
   localized datum planes and part templates, and closes/reopens the staged

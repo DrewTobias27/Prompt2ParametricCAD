@@ -94,6 +94,7 @@ if ($CompileSolidWorksPackage) {
                 tests\test_solidworks_package.py::test_extracted_package_setup_check_compiles_runner `
                 tests\test_solidworks_package.py::test_setup_check_rejects_conflicting_canonical_revolve_axis `
                 tests\test_solidworks_package.py::test_setup_check_rejects_duplicate_native_names `
+                tests\test_solidworks_package.py::test_setup_check_rejects_unknown_semantic_datum_plane `
                 -q
         }
     }
@@ -105,6 +106,7 @@ if ($CompileSolidWorksPackage) {
 if ($FullMatrix) {
     Invoke-ReleaseStep "Running all 292 generated capability cases" {
         & $pythonExe -m prompt2cad.capability_audit `
+            --export-steps `
             --output-root generated\capability-release-final
     }
 }
