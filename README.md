@@ -224,8 +224,9 @@ validated replay plan, and local runner into a ZIP. After extraction, run
 `Build-SolidWorks-Part.cmd` on Windows with SolidWorks installed. The launcher
 checks package hashes and local prerequisites before creating the SLDPRT and a
 machine-readable verification report. No API credential is included.
-`Check-SolidWorks-Setup.cmd` performs the integrity, installation, API, and
-replay-engine compilation checks without opening or creating a part.
+`Check-SolidWorks-Setup.cmd` performs the integrity, installation, API,
+replay-engine compilation, and replay-plan consistency checks without opening
+or creating a part.
 
 Run the automated tests:
 

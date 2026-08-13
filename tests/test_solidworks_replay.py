@@ -630,7 +630,6 @@ def test_replay_supports_revolves_and_coordinate_profiles():
         "normal": [-1.0, 0.0],
         "signed_offset_mm": 0.0,
         "direction_angle_deg": 90.0,
-        "source_span_mm": 2.0,
         "automated_mutation": False,
         "edit_strategy": "edit_native_construction_line_or_regenerate",
     }
@@ -818,20 +817,8 @@ def test_canonical_revolve_axis_is_endpoint_order_and_span_independent():
     reversed_axis = _canonical_revolve_axis([7, 6], [3, -2])
     shifted_and_extended = _canonical_revolve_axis([1, -6], [9, 10])
 
-    for equivalent in (reversed_axis, shifted_and_extended):
-        assert equivalent["anchor_mm"] == pytest.approx(forward["anchor_mm"])
-        assert equivalent["direction"] == pytest.approx(forward["direction"])
-        assert equivalent["normal"] == pytest.approx(forward["normal"])
-        assert equivalent["signed_offset_mm"] == pytest.approx(
-            forward["signed_offset_mm"]
-        )
-        assert equivalent["direction_angle_deg"] == pytest.approx(
-            forward["direction_angle_deg"]
-        )
-    assert reversed_axis["source_span_mm"] == pytest.approx(
-        forward["source_span_mm"]
-    )
-    assert shifted_and_extended["source_span_mm"] > forward["source_span_mm"]
+    assert reversed_axis == pytest.approx(forward)
+    assert shifted_and_extended == pytest.approx(forward)
 
 
 def test_replay_preserves_additive_and_subtractive_revolve_build_order():

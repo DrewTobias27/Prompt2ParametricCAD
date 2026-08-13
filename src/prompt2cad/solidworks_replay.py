@@ -1656,7 +1656,6 @@ def _canonical_revolve_axis(
         "normal": [_clean_zero(normal_x), _clean_zero(normal_y)],
         "signed_offset_mm": _clean_zero(signed_offset),
         "direction_angle_deg": _clean_zero(direction_angle),
-        "source_span_mm": source_span,
         "automated_mutation": False,
         "edit_strategy": "edit_native_construction_line_or_regenerate",
     }

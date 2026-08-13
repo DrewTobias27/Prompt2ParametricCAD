@@ -88,6 +88,7 @@ if ($CompileSolidWorksPackage) {
         Invoke-ReleaseStep "Compiling downloaded SolidWorks package runner" {
             & $pythonExe -m pytest `
                 tests\test_solidworks_package.py::test_extracted_package_setup_check_compiles_runner `
+                tests\test_solidworks_package.py::test_setup_check_rejects_conflicting_canonical_revolve_axis `
                 -q
         }
     }

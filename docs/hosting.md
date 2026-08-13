@@ -53,7 +53,8 @@ API credentials. Native `SLDPRT` creation remains a local Windows step because
 it requires an installed and licensed SolidWorks application: extract the ZIP
 and optionally double-click `Check-SolidWorks-Setup.cmd` first. That preflight
 checks the package, 64-bit PowerShell, SolidWorks registration and API files,
-and compiles the replay engine without creating a part. Then run
+compiles the replay engine, and validates the replay-plan contract without
+creating a part. Then run
 `Build-SolidWorks-Part.cmd`; it writes both the native part and a JSON
 verification report.
 

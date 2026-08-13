@@ -343,9 +343,6 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "direction_angle_deg")]
         public double DirectionAngleDegrees { get; set; }
 
-        [DataMember(Name = "source_span_mm")]
-        public double SourceSpanMillimeters { get; set; }
-
         [DataMember(Name = "automated_mutation")]
         public bool AutomatedMutation { get; set; }
 
@@ -1359,10 +1356,6 @@ namespace Prompt2Cad.SolidWorks
                 canonical.DirectionAngleDegrees,
                 "canonical axis direction angle"
             );
-            RequireFiniteValue(
-                canonical.SourceSpanMillimeters,
-                "canonical axis source span"
-            );
 
             double deltaX = feature.AxisEndMillimeters[0] -
                 feature.AxisStartMillimeters[0];
@@ -1408,11 +1401,6 @@ namespace Prompt2Cad.SolidWorks
                 canonical.DirectionAngleDegrees,
                 directionAngle,
                 "axis direction angle"
-            );
-            RequireNear(
-                canonical.SourceSpanMillimeters,
-                sourceSpan,
-                "axis source span"
             );
             if (canonical.AutomatedMutation || !String.Equals(
                 canonical.EditStrategy,
