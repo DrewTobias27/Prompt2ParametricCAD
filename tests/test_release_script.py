@@ -43,6 +43,7 @@ def test_release_script_keeps_native_execution_explicit():
     source = RELEASE_SCRIPT.read_text(encoding="utf-8")
 
     assert "-m pytest -q" in source
+    assert "scripts\\check_secrets.py" in source
     assert "prompt2cad.release_matrix" in source
     assert "prompt2cad.capability_audit" in source
     assert "P2P_RUN_SOLIDWORKS_COMPILE" in source

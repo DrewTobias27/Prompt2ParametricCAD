@@ -44,6 +44,10 @@ function Invoke-ReleaseStep {
 Set-Location $repoRoot
 $env:PYTHONPATH = "src"
 
+Invoke-ReleaseStep "Scanning tracked files for credentials" {
+    & $pythonExe scripts\check_secrets.py
+}
+
 Invoke-ReleaseStep "Running Python regression suite" {
     & $pythonExe -m pytest -q
 }
