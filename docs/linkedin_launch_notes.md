@@ -32,10 +32,12 @@ Verified against the public deployment on August 10, 2026:
   `SLDPRT` with one solid, two native features, and twelve editable dimensions.
 - The generated 292-case matrix passed schema, CadQuery build, editable repair,
   and native replay planning; an earlier installed-SolidWorks run established
-  native create/edit/reopen parity across the same coverage surface.
+  native create/edit/reopen parity across the same coverage surface. Native
+  history represents 98.23% of 4,234 numeric source values; the remaining 75
+  are exclusively fixed polygon side-count topology controls.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 13 package-v12 regression collects 674 Python test cases with all 16
+- The August 13 package-v12 regression collects 675 Python test cases with all 16
   installed-API compile/setup cases passing, all six frontend behavior suites, a
   production frontend build, and all seven golden end-to-end cases. The
   established 292-case STEP/native-plan capability baseline remains green.

@@ -119,6 +119,12 @@ def test_representative_high_risk_cases_build_plan_and_repair():
     assert coverage["fully_controlled_cases"] >= coverage["fully_bound_cases"]
     assert coverage["restricted_parameter_count"] >= 0
     assert coverage["unsupported_parameter_count"] >= 0
+    assert coverage["unexpected_unsupported_parameter_count"] == 0
+    assert coverage["unexpected_unsupported_parameters"] == []
+    assert coverage["intentional_unsupported_parameter_suffixes"] == [
+        ".sketch.sides"
+    ]
+    assert report["release_gate_passed"] is True
     assert coverage["derived_geometry_count"] >= 0
     assert coverage["fully_represented_cases"] >= (
         coverage["fully_controlled_cases"]
@@ -136,6 +142,33 @@ def test_representative_step_round_trips(tmp_path: Path):
     assert len(tuple((tmp_path / "steps").glob("*.step"))) == len(
         REPRESENTATIVE_CASE_NAMES
     )
+
+
+def test_capability_gate_rejects_a_new_unsupported_parameter(monkeypatch):
+    original_coverage = capability_audit.native_parameter_coverage
+
+    def coverage_with_regression(*args, **kwargs):
+        coverage = original_coverage(*args, **kwargs)
+        coverage["unsupported_parameter_ids"] = [
+            *coverage["unsupported_parameter_ids"],
+            "base.sketch.new_unbound_control",
+        ]
+        return coverage
+
+    monkeypatch.setattr(
+        capability_audit,
+        "native_parameter_coverage",
+        coverage_with_regression,
+    )
+    report = run_capability_audit(case_names=("base_extrude__rectangle",))
+
+    assert report["failed"] == 0
+    assert report["release_gate_passed"] is False
+    coverage = report["native_parameter_coverage"]
+    assert coverage["unexpected_unsupported_parameter_count"] == 1
+    assert coverage["unexpected_unsupported_parameters"] == [
+        "base_extrude__rectangle:base.sketch.new_unbound_control"
+    ]
 
 
 def test_native_audit_mode_verifies_replay_and_edited_reopen(
@@ -232,6 +265,10 @@ def test_complete_generated_capability_matrix_builds_and_plans():
         result for result in report["results"] if result["status"] == "fail"
     ]
     assert report["passed"] == report["case_count"]
+    assert report["release_gate_passed"] is True
+    assert report["native_parameter_coverage"][
+        "unexpected_unsupported_parameter_count"
+    ] == 0
 
 
 @run_release_audits

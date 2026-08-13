@@ -181,6 +181,10 @@ A nonzero coordinate may be edited on its current side of the origin; moving
 it across or onto the origin requires regenerating the package so the sketch
 relation and direction are rebuilt safely. Polygon side count remains fixed at
 native sketch creation and is reported as unsupported topology.
+The generated capability gate treats that one documented topology control as
+intentional and fails if any other numeric source parameter silently loses a
+native representation. The current 292-case matrix represents 98.23% of 4,234
+numeric values; all 75 unsupported values are polygon side counts.
 
 Hole Wizard countersink position points use the same named X/Y placement
 controls as other profiles. Patterned countersinks retain one editable seed;

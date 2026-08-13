@@ -38,6 +38,7 @@ from prompt2cad.solidworks_verification import validate_published_references
 PROFILE_TYPES = ("rectangle", "circle", "polygon", "polyline", "sketch")
 PLANAR_FACE_TARGETS = ("top", "bottom", "front", "back", "left", "right")
 PATTERN_TYPES = ("mirror", "circular", "linear")
+INTENTIONAL_UNSUPPORTED_PARAMETER_SUFFIXES = (".sketch.sides",)
 
 
 @dataclass(frozen=True)
@@ -1183,12 +1184,29 @@ def run_capability_audit(
         len(coverage["unsupported_parameter_ids"])
         for coverage in successful_coverages
     )
+    unexpected_unsupported_parameters = sorted(
+        {
+            f"{result['name']}:{parameter_id}"
+            for result in results
+            if result["status"] == "pass"
+            for parameter_id in result["native_parameter_coverage"][
+                "unsupported_parameter_ids"
+            ]
+            if not parameter_id.endswith(
+                INTENTIONAL_UNSUPPORTED_PARAMETER_SUFFIXES
+            )
+        }
+    )
     controlled_count = bound_count + relation_controlled_count
     represented_count = controlled_count + derived_geometry_count
+    failed_count = sum(result["status"] == "fail" for result in results)
     return {
         "case_count": len(cases),
         "passed": sum(result["status"] == "pass" for result in results),
-        "failed": sum(result["status"] == "fail" for result in results),
+        "failed": failed_count,
+        "release_gate_passed": (
+            failed_count == 0 and not unexpected_unsupported_parameters
+        ),
         "categories": category_summary,
         "native_parameter_coverage": {
             "numeric_source_count": numeric_source_count,
@@ -1234,6 +1252,19 @@ def run_capability_audit(
                 for coverage in successful_coverages
             ),
             "unsupported_parameter_count": unsupported_parameter_count,
+            "intentional_unsupported_parameter_suffixes": list(
+                INTENTIONAL_UNSUPPORTED_PARAMETER_SUFFIXES
+            ),
+            "intentional_unsupported_parameter_count": (
+                unsupported_parameter_count
+                - len(unexpected_unsupported_parameters)
+            ),
+            "unexpected_unsupported_parameter_count": len(
+                unexpected_unsupported_parameters
+            ),
+            "unexpected_unsupported_parameters": (
+                unexpected_unsupported_parameters
+            ),
             "cases_with_unsupported_parameters": sum(
                 bool(coverage["unsupported_parameter_ids"])
                 for coverage in successful_coverages
@@ -1313,8 +1344,15 @@ def main() -> None:
         f"RESULTS pass={report['passed']} fail={report['failed']} "
         f"total={report['case_count']}"
     )
+    coverage = report["native_parameter_coverage"]
+    print(
+        "EDITABILITY GATE "
+        f"passed={report['release_gate_passed']} "
+        "unexpected_unsupported="
+        f"{coverage['unexpected_unsupported_parameter_count']}"
+    )
     print(f"WROTE {report_path}")
-    if report["failed"]:
+    if not report["release_gate_passed"]:
         raise SystemExit(1)
 
 
