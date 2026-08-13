@@ -96,6 +96,14 @@ def parse_args() -> argparse.Namespace:
         help="Optional path for the validated SOLIDWORKS replay-plan JSON.",
     )
     parser.add_argument(
+        "--result-output",
+        type=Path,
+        help=(
+            "Verification-report JSON path; defaults to "
+            "<output>.result.json."
+        ),
+    )
+    parser.add_argument(
         "--plan-only",
         action="store_true",
         help="Validate and print/write the replay plan without opening SOLIDWORKS.",
@@ -118,6 +126,8 @@ def main() -> None:
     args = parse_args()
     if not args.plan_only and args.output is None:
         raise SystemExit("ERROR: --output is required unless --plan-only is used")
+    if args.plan_only and args.result_output is not None:
+        raise SystemExit("ERROR: --result-output cannot be used with --plan-only")
 
     try:
         plan = model_path_to_replay_plan(args.model_path)
@@ -130,16 +140,21 @@ def main() -> None:
                 print(json.dumps(plan.to_dict(), indent=2))
             return
 
+        result_output_path = args.result_output or Path(
+            f"{args.output}.result.json"
+        )
         output_path = export_solidworks_part(
             plan,
             args.output,
             visible=args.visible,
             template_path=args.template,
+            result_output_path=result_output_path,
         )
     except (SolidWorksReplayError, SolidWorksExecutionError) as error:
         raise SystemExit(f"ERROR: {error}") from error
 
     print(f"SAVED native SOLIDWORKS part: {output_path}")
+    print(f"SAVED verification report: {result_output_path.resolve()}")
 
 
 if __name__ == "__main__":

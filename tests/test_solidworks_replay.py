@@ -4,9 +4,11 @@ import base64
 import json
 from pathlib import Path
 import subprocess
+import sys
 
 import pytest
 
+import prompt2cad.solidworks_export as solidworks_export_cli
 from prompt2cad.editable_model import build_editable_model_document
 from prompt2cad.editable_model import model_data_to_editable_document
 from prompt2cad.editable_model import rebuild_with_parameter_updates
@@ -2893,6 +2895,80 @@ def test_plan_file_helpers_are_deterministic(tmp_path: Path):
     assert saved["features"][0]["feature_name"] == "P2P_base"
     assert saved["expected_geometry"]["solid_body_count"] == 1
     assert saved["capabilities"]["native_geometry_oracle"] is True
+
+
+@pytest.mark.parametrize("custom_report", [False, True])
+def test_solidworks_cli_writes_a_verification_report_by_default(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+    custom_report: bool,
+):
+    model_path = tmp_path / "model.json"
+    model_path.write_text(json.dumps(native_model_data()), encoding="utf-8")
+    output_path = tmp_path / "native" / "part.SLDPRT"
+    requested_report = tmp_path / "reports" / "proof.json"
+    captured: dict = {}
+
+    def fake_export(plan, output, **kwargs):
+        captured["plan"] = plan
+        captured["output"] = Path(output).resolve()
+        captured["report"] = kwargs["result_output_path"].resolve()
+        captured["report"].parent.mkdir(parents=True, exist_ok=True)
+        captured["report"].write_text(
+            '{"status":"success"}\n',
+            encoding="utf-8",
+        )
+        return captured["output"]
+
+    arguments = [
+        "prompt2cad-solidworks",
+        str(model_path),
+        "--output",
+        str(output_path),
+    ]
+    if custom_report:
+        arguments.extend(["--result-output", str(requested_report)])
+    monkeypatch.setattr(sys, "argv", arguments)
+    monkeypatch.setattr(
+        solidworks_export_cli,
+        "export_solidworks_part",
+        fake_export,
+    )
+
+    solidworks_export_cli.main()
+
+    expected_report = (
+        requested_report
+        if custom_report
+        else Path(f"{output_path}.result.json")
+    ).resolve()
+    assert captured["output"] == output_path.resolve()
+    assert captured["report"] == expected_report
+    assert expected_report.is_file()
+    output = capsys.readouterr().out
+    assert f"SAVED native SOLIDWORKS part: {output_path.resolve()}" in output
+    assert f"SAVED verification report: {expected_report}" in output
+
+
+def test_solidworks_cli_rejects_a_result_report_in_plan_only_mode(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prompt2cad-solidworks",
+            str(tmp_path / "unused.json"),
+            "--plan-only",
+            "--result-output",
+            str(tmp_path / "unused.result.json"),
+        ],
+    )
+
+    with pytest.raises(SystemExit, match="cannot be used with --plan-only"):
+        solidworks_export_cli.main()
 
 
 @pytest.mark.parametrize(

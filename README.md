@@ -181,6 +181,11 @@ prompt2cad-solidworks examples\models\circular_base_rectangular_boss.json `
   --output generated\model.SLDPRT
 ```
 
+Successful native CLI exports also write `<output>.result.json`, containing
+the verified feature, parameter, helper, geometry, health, and persistent-
+reference receipt. Use `--result-output` to choose another report path;
+existing parts and reports are never overwritten.
+
 Run the deterministic parity fixtures without opening SolidWorks, then execute
 the same suite in the installed application:
 
