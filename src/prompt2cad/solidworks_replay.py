@@ -25,7 +25,7 @@ from prompt2cad.pattern_geometry import pattern_positions
 
 
 SOLIDWORKS_REPLAY_FORMAT = "prompt2cad.solidworks-replay-plan"
-SOLIDWORKS_REPLAY_VERSION = 8
+SOLIDWORKS_REPLAY_VERSION = 9
 SUPPORTED_OPERATION_TYPES = {
     "extrude",
     "add_extrude",

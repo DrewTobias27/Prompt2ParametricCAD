@@ -17,7 +17,7 @@ from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
-SOLIDWORKS_PACKAGE_VERSION = 4
+SOLIDWORKS_PACKAGE_VERSION = 5
 _FIXED_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 
@@ -141,7 +141,9 @@ def create_solidworks_package(
     files["manifest.json"] = _json_bytes(manifest)
 
     return SolidWorksPackage(
-        filename=f"{stem}-solidworks.zip",
+        filename=(
+            f"{stem}-v{SOLIDWORKS_PACKAGE_VERSION}-solidworks.zip"
+        ),
         content=_zip_bytes(files),
         manifest=manifest,
     )
@@ -358,8 +360,8 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
     )
     return dedent(
         f"""
-        Prompt2ParametricCAD SolidWorks Package
-        =======================================
+        Prompt2ParametricCAD SolidWorks Package v{SOLIDWORKS_PACKAGE_VERSION}
+        ==========================================
 
         This bundle contains the validated feature history used to create the
         STEP model. It does not contain a prebuilt SLDPRT file because native

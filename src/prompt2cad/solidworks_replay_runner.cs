@@ -646,7 +646,7 @@ namespace Prompt2Cad.SolidWorks
     {
         private const double MillimetersPerMeter = 1000.0;
         private const string ReplayFormat = "prompt2cad.solidworks-replay-plan";
-        private const int ReplayVersion = 8;
+        private const int ReplayVersion = 9;
         private static string tracePath;
 
         public static string Execute(

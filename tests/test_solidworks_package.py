@@ -105,6 +105,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     files = package_files(package.content)
 
     assert package.filename.endswith("-solidworks.zip")
+    assert "-v5-solidworks.zip" in package.filename
     assert set(files) == {
         "Build-SolidWorks-Part.cmd",
         "Build-SolidWorks-Part.ps1",
@@ -158,7 +159,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"will not overwrite an existing SLDPRT" in readme
     assert b"temporary staged file" in readme
     assert b"solidworks-replay-plan.json" in launcher
-    assert b"SolidWorks package version 4" in launcher
+    assert b"SolidWorks package version 5" in launcher
     assert b"Get-FileHash" in launcher
     assert b"Is64BitProcess" in launcher
     assert b"GetTypeFromProgID" in launcher
@@ -291,7 +292,7 @@ def test_launcher_rejects_an_incompatible_package_version(tmp_path: Path):
     )
 
     assert result.returncode != 0
-    assert "SolidWorks package version 4" in result.stdout + result.stderr
+    assert "SolidWorks package version 5" in result.stdout + result.stderr
 
 
 @pytest.mark.skipif(
