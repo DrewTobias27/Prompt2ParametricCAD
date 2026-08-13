@@ -2879,7 +2879,12 @@ def test_native_runner_reopens_and_reverifies_mutated_parts():
     assert "PublishStagedOutput(stagedOutput, resolvedOutput);" in edit_section
     assert 'SourceHistoryVerificationPassed = true' in edit_section
     assert 'DataMember(Name = "applied_mutations")' in runner_source
-    assert "AppliedMutations = mutations" in edit_section
+    assert "AppliedMutations = VerifiedMutationResults(" in edit_section
+    assert "AppliedMutations = mutations" not in edit_section
+    assert "VerifiedParameterValues" in runner_source
+    assert "Value = observedValue" in runner_source
+    assert "return FromSystemValue(actual, dimension.Unit);" in runner_source
+    assert "RestoreSemanticParameterValue(" in runner_source
     assert 'Reopened = true' in edit_section
     assert "RequireHealthyModel(reopenedHealth" in edit_section
     assert "private static void RequireSuccessfulRebuild(" in runner_source

@@ -238,7 +238,8 @@ publish a native part if its reopened geometry does not match that oracle.
 Package v11 applies the same rule to native edits: a mutation carries the
 geometry from a validated CadQuery rebuild, and the runner refuses to publish
 the edited `SLDPRT` unless its reopened result matches. Its receipt records the
-exact applied parameter values and units, not only their IDs.
+exact parameter values read back from the reopened model and their units, not
+only the requested IDs.
 `Check-SolidWorks-Setup.cmd` performs the integrity, installation, API,
 replay-engine compilation, and replay-plan consistency checks without opening
 or creating a part, and reports the selected API root and interop version when

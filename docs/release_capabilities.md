@@ -158,8 +158,8 @@ before it publishes either the SLDPRT or its report: exact feature order,
 parameter and helper identities, feature/sketch health, persistent references,
 source/output identity for edits, and the reported geometry must all match the
 replay plan. Edit receipts must also reproduce every validated mutation ID,
-value, and unit. A successful process exit or a set of success booleans is not
-sufficient.
+unit, and value read back from the reopened native model. A successful process
+exit or a set of success booleans is not sufficient.
 
 Polyline vertices plus explicit-sketch start, end, and arc-through coordinates
 are exposed through stable native dimensions when nonzero. Zero coordinates use

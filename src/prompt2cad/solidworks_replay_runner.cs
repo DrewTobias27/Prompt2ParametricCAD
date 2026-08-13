@@ -1288,18 +1288,10 @@ namespace Prompt2Cad.SolidWorks
                             .Select(item => item.ParameterId)
                             .OrderBy(item => item, StringComparer.Ordinal)
                             .ToArray(),
-                        AppliedMutations = mutations
-                            .OrderBy(
-                                item => item.ParameterId,
-                                StringComparer.Ordinal
-                            )
-                            .Select(item => new ParameterMutation
-                            {
-                                ParameterId = item.ParameterId,
-                                Value = item.Value,
-                                Unit = item.Unit,
-                            })
-                            .ToArray(),
+                        AppliedMutations = VerifiedMutationResults(
+                            verification,
+                            mutations
+                        ),
                         TopologyChanged =
                             topologyChangingParameterIds.Length > 0,
                         TopologyChangingParameterIds =
@@ -5707,6 +5699,11 @@ namespace Prompt2Cad.SolidWorks
             public int VerifiedHelperCount { get; set; }
             public string[] VerifiedParameterIds { get; set; }
             public string[] VerifiedHelperNames { get; set; }
+            public Dictionary<string, double> VerifiedParameterValues
+            {
+                get;
+                set;
+            }
         }
 
         private static NativeHealthResult InspectNativeHealth(
@@ -6396,6 +6393,9 @@ namespace Prompt2Cad.SolidWorks
             int verifiedHelperCount = 0;
             var verifiedParameterIds = new List<string>();
             var verifiedHelperNames = new List<string>();
+            var verifiedParameterValues = new Dictionary<string, double>(
+                StringComparer.Ordinal
+            );
             foreach (ReplayStep step in plan.Features)
             {
                 if (!String.IsNullOrWhiteSpace(step.SketchName) &&
@@ -6430,12 +6430,13 @@ namespace Prompt2Cad.SolidWorks
                 foreach (NativeParameterBinding binding in bindings)
                 {
                     declaredParameterCount += 1;
+                    double verifiedValue;
                     if (String.Equals(
                         binding.BindingKind,
                         "named_dimension",
                         StringComparison.Ordinal))
                     {
-                        VerifyDimension(
+                        verifiedValue = VerifyDimension(
                             model,
                             new DimensionSpec
                             {
@@ -6453,7 +6454,10 @@ namespace Prompt2Cad.SolidWorks
                         "feature_property",
                         StringComparison.Ordinal))
                     {
-                        VerifyFeaturePropertyBinding(model, binding);
+                        verifiedValue = VerifyFeaturePropertyBinding(
+                            model,
+                            binding
+                        );
                     }
                     else
                     {
@@ -6463,8 +6467,16 @@ namespace Prompt2Cad.SolidWorks
                             binding.ParameterId + "'."
                         );
                     }
+                    verifiedValue = RestoreSemanticParameterValue(
+                        binding,
+                        verifiedValue
+                    );
                     verifiedParameterCount += 1;
                     verifiedParameterIds.Add(binding.ParameterId);
+                    verifiedParameterValues.Add(
+                        binding.ParameterId,
+                        verifiedValue
+                    );
                 }
 
                 foreach (NativeReferenceSpec reference in
@@ -6501,7 +6513,42 @@ namespace Prompt2Cad.SolidWorks
                 VerifiedHelperCount = verifiedHelperCount,
                 VerifiedParameterIds = verifiedParameterIds.ToArray(),
                 VerifiedHelperNames = verifiedHelperNames.ToArray(),
+                VerifiedParameterValues = verifiedParameterValues,
             };
+        }
+
+        private static ParameterMutation[] VerifiedMutationResults(
+            ParameterVerificationResult verification,
+            ParameterMutation[] requestedMutations)
+        {
+            var results = new List<ParameterMutation>();
+            foreach (ParameterMutation requested in requestedMutations.OrderBy(
+                item => item.ParameterId,
+                StringComparer.Ordinal
+            ))
+            {
+                double observedValue;
+                if (verification.VerifiedParameterValues == null ||
+                    !verification.VerifiedParameterValues.TryGetValue(
+                        requested.ParameterId,
+                        out observedValue
+                    ))
+                {
+                    throw new InvalidOperationException(
+                        "Reopened native verification did not read parameter '" +
+                        requested.ParameterId + "'."
+                    );
+                }
+                results.Add(
+                    new ParameterMutation
+                    {
+                        ParameterId = requested.ParameterId,
+                        Value = observedValue,
+                        Unit = requested.Unit,
+                    }
+                );
+            }
+            return results.ToArray();
         }
 
         private static IEnumerable<string> ExpectedNativeHelperNames(
@@ -6685,7 +6732,7 @@ namespace Prompt2Cad.SolidWorks
             return converted;
         }
 
-        private static void VerifyFeaturePropertyBinding(
+        private static double VerifyFeaturePropertyBinding(
             ModelDoc2 model,
             NativeParameterBinding binding)
         {
@@ -6708,7 +6755,22 @@ namespace Prompt2Cad.SolidWorks
                 );
             }
 
-            ResolveFeaturePropertyName(definition, binding);
+            string propertyName = ResolveFeaturePropertyName(
+                definition,
+                binding
+            );
+            object actualObject = definition.GetType().InvokeMember(
+                propertyName,
+                BindingFlags.GetProperty,
+                null,
+                definition,
+                null,
+                CultureInfo.InvariantCulture
+            );
+            return FromSystemValue(
+                Convert.ToDouble(actualObject, CultureInfo.InvariantCulture),
+                binding.Unit
+            );
         }
 
         private static string ResolveFeaturePropertyName(
@@ -6801,7 +6863,7 @@ namespace Prompt2Cad.SolidWorks
             }
         }
 
-        private static void VerifyDimension(
+        private static double VerifyDimension(
             ModelDoc2 model,
             DimensionSpec dimension,
             string ownerName)
@@ -6845,6 +6907,7 @@ namespace Prompt2Cad.SolidWorks
                     expected.ToString("R", CultureInfo.InvariantCulture) + "."
                 );
             }
+            return FromSystemValue(actual, dimension.Unit);
         }
 
         private static IEnumerable<object> ObjectItems(object value)
@@ -6886,6 +6949,43 @@ namespace Prompt2Cad.SolidWorks
                 return value;
             }
             return ToMeters(value);
+        }
+
+        private static double FromSystemValue(double value, string unit)
+        {
+            if (String.Equals(unit, "deg", StringComparison.OrdinalIgnoreCase))
+            {
+                return value * 180.0 / Math.PI;
+            }
+            if (String.Equals(unit, "count", StringComparison.OrdinalIgnoreCase))
+            {
+                return value;
+            }
+            return value * MillimetersPerMeter;
+        }
+
+        private static double RestoreSemanticParameterValue(
+            NativeParameterBinding binding,
+            double observedValue)
+        {
+            if (!String.Equals(
+                binding.MutationMode,
+                "absolute_same_side",
+                StringComparison.Ordinal))
+            {
+                return observedValue;
+            }
+            if (!binding.SourceValue.HasValue ||
+                Math.Abs(binding.SourceValue.Value) <= 1e-12)
+            {
+                throw new InvalidOperationException(
+                    "Signed native parameter '" + binding.ParameterId +
+                    "' is missing its semantic source value."
+                );
+            }
+            return binding.SourceValue.Value < 0.0
+                ? -Math.Abs(observedValue)
+                : Math.Abs(observedValue);
         }
 
         private static double DegreesToRadians(double degrees)
