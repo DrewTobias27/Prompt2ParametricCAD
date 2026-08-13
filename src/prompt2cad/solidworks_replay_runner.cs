@@ -820,11 +820,7 @@ namespace Prompt2Cad.SolidWorks
             string templatePath,
             bool visible)
         {
-            tracePath = Path.GetFullPath(outputPath) + ".replay.log";
-            if (File.Exists(tracePath))
-            {
-                File.Delete(tracePath);
-            }
+            InitializeTrace(outputPath, "native build");
             Trace("Reading replay plan");
             ReplayPlan plan = ReadPlan(planPath);
             ValidateReplayPlan(plan);
@@ -1133,11 +1129,7 @@ namespace Prompt2Cad.SolidWorks
             string mutationPath,
             bool visible)
         {
-            tracePath = Path.GetFullPath(outputPath) + ".replay.log";
-            if (File.Exists(tracePath))
-            {
-                File.Delete(tracePath);
-            }
+            InitializeTrace(outputPath, "native edit verification");
             Trace("Reading replay plan for native edit verification");
             ReplayPlan plan = ReadPlan(planPath);
             ValidateReplayPlan(plan);
@@ -7079,6 +7071,23 @@ namespace Prompt2Cad.SolidWorks
             File.AppendAllText(
                 tracePath,
                 DateTime.UtcNow.ToString("O") + " " + message + System.Environment.NewLine
+            );
+        }
+
+        private static void InitializeTrace(string outputPath, string operation)
+        {
+            tracePath = Path.GetFullPath(outputPath) + ".replay.log";
+            bool priorAttemptExists = File.Exists(tracePath);
+            if (priorAttemptExists)
+            {
+                File.AppendAllText(tracePath, System.Environment.NewLine);
+            }
+            Trace(
+                "=== Starting " + operation + " attempt" +
+                (priorAttemptExists
+                    ? "; previous unsuccessful attempt retained above"
+                    : String.Empty) +
+                " ==="
             );
         }
 

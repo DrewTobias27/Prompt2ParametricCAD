@@ -1932,10 +1932,15 @@ def test_native_build_and_edit_keep_failure_traces_only():
         / "solidworks_replay_runner.cs"
     ).read_text(encoding="utf-8")
 
-    trace_initialization = (
-        'tracePath = Path.GetFullPath(outputPath) + ".replay.log";'
-    )
-    assert runner_source.count(trace_initialization) == 2
+    assert runner_source.count("InitializeTrace(outputPath,") == 2
+    assert "private static void InitializeTrace(" in runner_source
+    assert "previous unsuccessful attempt retained above" in runner_source
+    initialize_section = runner_source[
+        runner_source.index("private static void InitializeTrace(") :
+        runner_source.index("private static void TraceSketchPoints(")
+    ]
+    assert "File.AppendAllText(tracePath" in initialize_section
+    assert "File.Delete(tracePath)" not in initialize_section
     assert runner_source.count('"P2P_KEEP_SOLIDWORKS_TRACE"') == 2
     assert runner_source.count("TryDeleteTrace();") == 2
     edit_section = runner_source[

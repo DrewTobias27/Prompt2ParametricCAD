@@ -675,7 +675,9 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
         records the verified native result. If any stage fails, the staged file
         is removed, the window identifies the failing condition, and a
         `<part>.SLDPRT.replay.log` file retains the completed stage history for
-        troubleshooting. Successful runs remove this diagnostic log. No
-        successful native export should be assumed after a reported failure.
+        troubleshooting. Successful runs remove this diagnostic log. Failed
+        retries append a timestamped attempt instead of erasing the preceding
+        evidence. No successful native export should be assumed after a
+        reported failure.
         """
     ).lstrip()
