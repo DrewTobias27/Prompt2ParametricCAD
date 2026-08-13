@@ -107,6 +107,19 @@ def create_solidworks_package(
             "relation_controlled_count": editability_coverage[
                 "relation_controlled_count"
             ],
+            "derived_geometry_count": editability_coverage[
+                "derived_geometry_count"
+            ],
+            "derived_geometry_parameter_ids": editability_coverage[
+                "derived_geometry_parameter_ids"
+            ],
+            "derived_geometry_parameters": editability_coverage[
+                "derived_geometry_parameters"
+            ],
+            "represented_count": editability_coverage["represented_count"],
+            "representation_coverage_ratio": editability_coverage[
+                "representation_coverage_ratio"
+            ],
             "unsupported_count": len(
                 editability_coverage["unsupported_parameter_ids"]
             ),
@@ -352,6 +365,7 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
     parameter_count = editability_coverage["numeric_source_count"]
     named_count = editability_coverage["bound_count"]
     relation_count = editability_coverage["relation_controlled_count"]
+    derived_count = editability_coverage["derived_geometry_count"]
     unsupported_count = len(
         editability_coverage["unsupported_parameter_ids"]
     )
@@ -378,13 +392,15 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
         - Source numeric parameters: {parameter_count}
         - Named automated edit bindings: {named_count}
         - Zero coordinates held by sketch relations: {relation_count}
+        - Derived coordinates retained as native reference geometry: {derived_count}
         - Parameters without automated mutation bindings: {unsupported_count}
         - Coordinate controls limited to their current origin side: {restricted_count}
 
         Every operation is replayed as native SolidWorks history. The counts
-        above describe what the included verification runner can change by
-        stable parameter ID; they do not prevent normal manual feature-tree
-        editing. See editability-coverage.json for the exact parameter IDs.
+        above distinguish stable automated controls from redundant geometry
+        retained in native sketches; they do not prevent normal manual
+        feature-tree editing. See editability-coverage.json for the exact
+        parameter IDs.
         A side-limited coordinate remains editable in its current direction;
         regenerate the package to move it across or onto the sketch origin.
 

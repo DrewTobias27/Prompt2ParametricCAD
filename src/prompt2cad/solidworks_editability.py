@@ -16,8 +16,10 @@ def native_parameter_coverage(
 
     Named bindings support stable automated mutation. Zero placement and sketch
     coordinates instead use geometric relations because CAD systems do not
-    accept a useful zero-length driving dimension. Remaining IDs are reported
-    as unsupported so new profile families cannot silently reduce coverage.
+    accept a useful zero-length driving dimension. Redundant reference geometry
+    is retained by the native sketch but reported separately from controls.
+    Remaining IDs are unsupported so new profile families cannot silently
+    reduce coverage.
     """
     if document is None:
         document = model_data_to_editable_document(model_data)
@@ -49,8 +51,17 @@ def native_parameter_coverage(
         and abs(float(parameter.value)) <= 1e-12
         and parameter_id not in binding_ids
     }
+    derived_geometry_ids = {
+        parameter_id
+        for parameter_id, parameter in source_parameters.items()
+        if _is_derived_reference_geometry(parameter)
+        and parameter_id not in binding_ids
+    }
     unsupported_ids = (
-        source_parameter_ids - binding_ids - relation_controlled_ids
+        source_parameter_ids
+        - binding_ids
+        - relation_controlled_ids
+        - derived_geometry_ids
     )
     unsupported_parameters = [
         {
@@ -75,7 +86,15 @@ def native_parameter_coverage(
         }
         for parameter_id in restricted_parameter_ids
     ]
+    derived_geometry_parameters = [
+        {
+            "parameter_id": parameter_id,
+            "reason": _derived_geometry_reason(source_parameters[parameter_id]),
+        }
+        for parameter_id in sorted(derived_geometry_ids)
+    ]
     controlled_count = len(bound_source_ids) + len(relation_controlled_ids)
+    represented_count = controlled_count + len(derived_geometry_ids)
     return {
         "numeric_source_count": len(source_parameter_ids),
         "bound_count": len(bound_source_ids),
@@ -91,6 +110,15 @@ def native_parameter_coverage(
             if source_parameter_ids
             else 1.0
         ),
+        "derived_geometry_count": len(derived_geometry_ids),
+        "derived_geometry_parameter_ids": sorted(derived_geometry_ids),
+        "derived_geometry_parameters": derived_geometry_parameters,
+        "represented_count": represented_count,
+        "representation_coverage_ratio": (
+            represented_count / len(source_parameter_ids)
+            if source_parameter_ids
+            else 1.0
+        ),
         "unbound_parameter_ids": sorted(source_parameter_ids - binding_ids),
         "relation_controlled_parameter_ids": sorted(
             relation_controlled_ids
@@ -103,14 +131,26 @@ def native_parameter_coverage(
     }
 
 
+def _is_derived_reference_geometry(parameter: EditableParameter) -> bool:
+    """Identify redundant revolve-axis endpoint coordinates."""
+    return (
+        parameter.role == "reference_geometry"
+        and len(parameter.source_path) >= 2
+        and parameter.source_path[-2] in {"axis_start", "axis_end"}
+    )
+
+
+def _derived_geometry_reason(parameter: EditableParameter) -> str:
+    """Explain why retained reference geometry is not a driving control."""
+    return (
+        "The native construction axis retains this endpoint, but four endpoint "
+        "coordinates redundantly encode one line. Edit the construction line "
+        "manually or regenerate from a future canonical axis control."
+    )
+
+
 def _unsupported_parameter_reason(parameter: EditableParameter) -> str:
     """Explain a native mutation gap without implying lost CAD history."""
-    if parameter.role == "reference_geometry":
-        return (
-            "The value defines a raw revolve-axis endpoint. The SLDPRT keeps "
-            "an editable native sketch axis, but the package does not expose "
-            "its redundant endpoint coordinates as named mutation controls."
-        )
     if parameter.value_type == "count" and parameter.id.endswith(
         ".sketch.sides"
     ):

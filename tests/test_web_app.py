@@ -51,6 +51,7 @@ def test_solidworks_package_route_returns_downloadable_zip(monkeypatch):
                 "numeric_parameter_count": 12,
                 "named_binding_count": 9,
                 "relation_controlled_count": 2,
+                "derived_geometry_count": 1,
                 "unsupported_count": 1,
                 "control_coverage_ratio": 11 / 12,
             },
@@ -78,6 +79,7 @@ def test_solidworks_package_route_returns_downloadable_zip(monkeypatch):
     assert response.headers["x-prompt2cad-numeric-parameters"] == "12"
     assert response.headers["x-prompt2cad-named-bindings"] == "9"
     assert response.headers["x-prompt2cad-relation-controls"] == "2"
+    assert response.headers["x-prompt2cad-derived-geometry"] == "1"
     assert response.headers["x-prompt2cad-unsupported-parameters"] == "1"
     assert float(response.headers["x-prompt2cad-control-coverage"]) == pytest.approx(
         11 / 12

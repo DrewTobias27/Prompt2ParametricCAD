@@ -43,7 +43,7 @@ it.
 | `sketch_model.py` | Normalized sketch entities and geometric metadata |
 | `editable_model.py` | Versioned features, named parameters, source paths, and transactional rebuilds |
 | `solidworks_replay.py` | Validates and lowers the supported editable subset into a deterministic native replay plan |
-| `solidworks_editability.py` | Classifies named, relation-controlled, and unsupported native parameter controls |
+| `solidworks_editability.py` | Classifies named controls, relation-controlled zeros, derived reference geometry, and unsupported native parameters |
 | `solidworks_verification.py` | Compares CadQuery/SolidWorks geometry and verifies persistent semantic references |
 | `solidworks_replay_runner.cs` | Replays native sketches, dimensions, dependencies, boss/cut features, and `SLDPRT` output through the installed SolidWorks API |
 | `capability_audit.py` | Generates profile/operation composition cases and verifies schema, STEP, repair, and optional native SolidWorks parity |

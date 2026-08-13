@@ -115,6 +115,53 @@ def test_parameter_coverage_binds_nonzero_freeform_coordinates():
     assert coverage["control_coverage_ratio"] > coverage["coverage_ratio"]
 
 
+def test_revolve_axis_endpoints_are_retained_derived_geometry():
+    from prompt2cad.solidworks_replay import build_solidworks_replay_plan
+
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "shaft",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[5, 0]],
+                "axis_start": [0, -20],
+                "axis_end": [0, 20],
+                "angle": 360,
+                "width": 10,
+                "height": 40,
+            }
+        ]
+    }
+    document = model_data_to_editable_document(model_data)
+    coverage = native_parameter_coverage(
+        model_data,
+        build_solidworks_replay_plan(document),
+        document=document,
+    )
+
+    expected_axis_parameters = {
+        "shaft.reference.axis_start.x",
+        "shaft.reference.axis_start.y",
+        "shaft.reference.axis_end.x",
+        "shaft.reference.axis_end.y",
+    }
+    assert set(coverage["derived_geometry_parameter_ids"]) == (
+        expected_axis_parameters
+    )
+    assert expected_axis_parameters.isdisjoint(
+        coverage["unsupported_parameter_ids"]
+    )
+    assert coverage["derived_geometry_count"] == 4
+    assert coverage["representation_coverage_ratio"] == 1.0
+    assert coverage["control_coverage_ratio"] < 1.0
+    assert all(
+        "redundantly encode one line" in parameter["reason"]
+        for parameter in coverage["derived_geometry_parameters"]
+    )
+
+
 def test_native_smoke_execution_uses_the_validated_plan(tmp_path: Path):
     fixture = smoke_fixture_paths(["solidworks_smoke_patterned_plate"])
     captured = []

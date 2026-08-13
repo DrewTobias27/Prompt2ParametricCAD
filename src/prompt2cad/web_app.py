@@ -491,6 +491,9 @@ def download_solidworks_package(request: CADSolidWorksPackageRequest):
             "X-Prompt2CAD-Relation-Controls": str(
                 package.manifest["editability"]["relation_controlled_count"]
             ),
+            "X-Prompt2CAD-Derived-Geometry": str(
+                package.manifest["editability"]["derived_geometry_count"]
+            ),
             "X-Prompt2CAD-Unsupported-Parameters": str(
                 package.manifest["editability"]["unsupported_count"]
             ),
@@ -502,6 +505,7 @@ def download_solidworks_package(request: CADSolidWorksPackageRequest):
                 "X-Prompt2CAD-Numeric-Parameters, "
                 "X-Prompt2CAD-Named-Bindings, "
                 "X-Prompt2CAD-Relation-Controls, "
+                "X-Prompt2CAD-Derived-Geometry, "
                 "X-Prompt2CAD-Unsupported-Parameters, "
                 "X-Prompt2CAD-Control-Coverage"
             ),

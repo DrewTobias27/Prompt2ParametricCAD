@@ -1157,6 +1157,10 @@ def run_capability_audit(
         coverage["relation_controlled_count"]
         for coverage in successful_coverages
     )
+    derived_geometry_count = sum(
+        coverage["derived_geometry_count"]
+        for coverage in successful_coverages
+    )
     restricted_parameter_count = sum(
         len(coverage["restricted_parameter_ids"])
         for coverage in successful_coverages
@@ -1166,6 +1170,7 @@ def run_capability_audit(
         for coverage in successful_coverages
     )
     controlled_count = bound_count + relation_controlled_count
+    represented_count = controlled_count + derived_geometry_count
     return {
         "case_count": len(cases),
         "passed": sum(result["status"] == "pass" for result in results),
@@ -1186,12 +1191,27 @@ def run_capability_audit(
                 if numeric_source_count
                 else 1.0
             ),
+            "derived_geometry_count": derived_geometry_count,
+            "represented_count": represented_count,
+            "representation_coverage_ratio": (
+                represented_count / numeric_source_count
+                if numeric_source_count
+                else 1.0
+            ),
             "fully_bound_cases": sum(
                 coverage["coverage_ratio"] == 1.0
                 for coverage in successful_coverages
             ),
             "fully_controlled_cases": sum(
                 coverage["control_coverage_ratio"] == 1.0
+                for coverage in successful_coverages
+            ),
+            "fully_represented_cases": sum(
+                coverage["representation_coverage_ratio"] == 1.0
+                for coverage in successful_coverages
+            ),
+            "cases_with_derived_geometry": sum(
+                bool(coverage["derived_geometry_parameter_ids"])
                 for coverage in successful_coverages
             ),
             "restricted_parameter_count": restricted_parameter_count,

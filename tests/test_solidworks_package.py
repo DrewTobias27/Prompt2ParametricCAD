@@ -133,6 +133,18 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert manifest["editability"]["numeric_parameter_count"] > 0
     assert manifest["editability"]["named_binding_count"] > 0
     assert manifest["editability"]["control_coverage_ratio"] <= 1
+    assert manifest["editability"]["derived_geometry_count"] == (
+        editability_coverage["derived_geometry_count"]
+    )
+    assert manifest["editability"]["derived_geometry_parameter_ids"] == (
+        editability_coverage["derived_geometry_parameter_ids"]
+    )
+    assert manifest["editability"]["derived_geometry_parameters"] == (
+        editability_coverage["derived_geometry_parameters"]
+    )
+    assert manifest["editability"]["represented_count"] == (
+        editability_coverage["represented_count"]
+    )
     assert manifest["editability"]["unsupported_parameter_ids"] == (
         editability_coverage["unsupported_parameter_ids"]
     )
@@ -154,6 +166,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     check_launcher = files["Check-SolidWorks-Setup.cmd"]
     assert b"Build-SolidWorks-Part.cmd" in readme
     assert b"Editability summary" in readme
+    assert b"retained as native reference geometry" in readme
     assert b"editability-coverage.json" in readme
     assert b"limited to their current origin side" in readme
     assert b"will not overwrite an existing SLDPRT" in readme
