@@ -35,12 +35,12 @@ Verified against the public deployment on August 10, 2026:
   native create/edit/reopen parity across the same coverage surface.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 13 package-v10 gate passes 609 offline Python tests, all
-  six frontend behavior suites, a production frontend build, all seven golden
-  end-to-end cases, and all 292 generated STEP/native-plan capability cases.
-  Nine C# compile/comparator/mutation/plan-tamper checks passed separately. Two exhaustive tests
-  were run through their dedicated release commands; only the fresh public ZIP
-  and installed-SolidWorks create/edit/reopen gate remains pending.
+- The August 13 package-v10 gate passes 624 Python tests with all nine
+  compile-only C# contract probes enabled, all six frontend behavior suites, a
+  production frontend build, and all seven golden end-to-end cases. The
+  established 292-case STEP/native-plan capability baseline remains green.
+  Only the fresh public ZIP and installed-SolidWorks create/edit/reopen gate
+  remains pending.
 - Package v10 assigns explicit collision-safe names to pattern/support helpers,
   reports the exact parameter/helper/mutation identities it verifies, resolves
   localized datum planes and part templates, and closes/reopens the staged

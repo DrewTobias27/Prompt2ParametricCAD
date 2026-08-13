@@ -14,11 +14,35 @@ else {
     "python"
 }
 
+$versionPythonPath = $env:PYTHONPATH
+try {
+    $env:PYTHONPATH = Join-Path $repoRoot "src"
+    $packageVersionText = (& $pythonExe -c (
+        "from prompt2cad.solidworks_package import " +
+        "SOLIDWORKS_PACKAGE_VERSION; print(SOLIDWORKS_PACKAGE_VERSION)"
+    ) | Out-String).Trim()
+    $packageVersionExitCode = $LASTEXITCODE
+}
+finally {
+    if ($null -eq $versionPythonPath) {
+        Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:PYTHONPATH = $versionPythonPath
+    }
+}
+if ($packageVersionExitCode -ne 0 -or $packageVersionText -notmatch '^\d+$') {
+    throw "Could not resolve the current SolidWorks package version."
+}
+$packageVersion = [int]$packageVersionText
+
 if (-not $OutputRoot) {
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $OutputRoot = Join-Path `
         $repoRoot `
-        ("generated\solidworks-release-v10-" + $timestamp)
+        ("generated\solidworks-release-v{0}-{1}" -f `
+            $packageVersion, `
+            $timestamp)
 }
 $OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 if (Test-Path -LiteralPath $OutputRoot) {
@@ -64,14 +88,6 @@ try {
     $transcriptStarted = $true
     $env:P2P_RUN_SOLIDWORKS_NATIVE = "1"
     $env:PYTHONPATH = "src"
-    $packageVersionText = (& $pythonExe -c (
-        "from prompt2cad.solidworks_package import " +
-        "SOLIDWORKS_PACKAGE_VERSION; print(SOLIDWORKS_PACKAGE_VERSION)"
-    ) | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $packageVersionText -notmatch '^\d+$') {
-        throw "Could not resolve the current SolidWorks package version."
-    }
-    $packageVersion = [int]$packageVersionText
 
     Invoke-NativeReleaseStep "Running portable-package native checks" {
         & $pythonExe -m pytest `
