@@ -129,6 +129,9 @@ def test_native_release_script_runs_every_focused_live_gate():
     assert "P2P_RUN_SOLIDWORKS_NATIVE" in source
     assert "-m solidworks_native" in source
     assert "tests\\test_solidworks_package.py" in source
+    assert "--junitxml $portablePackageReport" in source
+    assert "portablePackageNativeCases" in source
+    assert "portable_package_report = $portablePackageReport" in source
     assert "prompt2cad.solidworks_smoke" in source
     assert "--verify-editability" in source
     assert "prompt2cad.release_matrix" in source
@@ -159,6 +162,13 @@ def test_native_release_script_runs_every_focused_live_gate():
     assert "native_edit_coverage.passed" in source
     assert "native_smoke_coverage" in source
     assert "native_edit_coverage" in source
+    assert "$nativeSmokeCases = @($smokeReport.results).Count" in source
+    assert "$nativeGoldenCases = @($goldenReport.results).Count" in source
+    assert "missingGoldenEdits" in source
+    assert "Golden report does not prove native create and edit parity" in source
+    assert "portable_package_native_cases = 2" not in source
+    assert "native_smoke_cases = 10" not in source
+    assert "native_golden_cases = 7" not in source
     assert "package_version = 8" not in source
     assert "source_zip_sha256" in source
     assert "release-summary.json" in source

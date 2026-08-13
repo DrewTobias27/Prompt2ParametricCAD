@@ -89,11 +89,33 @@ try {
     $env:P2P_RUN_SOLIDWORKS_NATIVE = "1"
     $env:PYTHONPATH = "src"
 
+    $portablePackageReport = Join-Path `
+        $OutputRoot `
+        "portable-package-native-tests.xml"
     Invoke-NativeReleaseStep "Running portable-package native checks" {
         & $pythonExe -m pytest `
             -m solidworks_native `
             tests\test_solidworks_package.py `
+            --junitxml $portablePackageReport `
             -q
+    }
+    [xml]$portableJUnit = Get-Content `
+        -LiteralPath $portablePackageReport `
+        -Raw
+    $portableSuites = @($portableJUnit.testsuites.testsuite)
+    $portablePackageNativeCases = [int](
+        ($portableSuites | Measure-Object -Property tests -Sum).Sum
+    )
+    $portablePackageFailures = [int](
+        ($portableSuites | Measure-Object -Property failures -Sum).Sum
+    ) + [int](
+        ($portableSuites | Measure-Object -Property errors -Sum).Sum
+    ) + [int](
+        ($portableSuites | Measure-Object -Property skipped -Sum).Sum
+    )
+    if ($portablePackageNativeCases -le 0 -or
+        $portablePackageFailures -ne 0) {
+        throw "Portable-package native test evidence is incomplete."
     }
 
     if ($DownloadedPackagePath) {
@@ -216,7 +238,7 @@ try {
     if ($TemplatePath) {
         $smokeArguments += @("--template", $TemplatePath)
     }
-    Invoke-NativeReleaseStep "Running ten-case native smoke and edit gate" {
+    Invoke-NativeReleaseStep "Running native smoke and edit gate" {
         & $pythonExe @smokeArguments
     }
     $smokeReportPath = Join-Path $OutputRoot "smoke\report.json"
@@ -229,6 +251,12 @@ try {
             "Native smoke cases passed without complete replay or edit " +
             "coverage. Add a gate fixture or mutation before release."
         )
+    }
+    $nativeSmokeCases = @($smokeReport.results).Count
+    if ($nativeSmokeCases -le 0 -or
+        [int]$smokeReport.passed -ne $nativeSmokeCases -or
+        [int]$smokeReport.failed -ne 0) {
+        throw "Native smoke report does not prove every selected case passed."
     }
 
     $goldenArguments = @(
@@ -243,8 +271,27 @@ try {
     if ($TemplatePath) {
         $goldenArguments += @("--template", $TemplatePath)
     }
-    Invoke-NativeReleaseStep "Running seven-case golden native and edit gate" {
+    Invoke-NativeReleaseStep "Running golden native and edit gate" {
         & $pythonExe @goldenArguments
+    }
+    $goldenReportPath = Join-Path $OutputRoot "golden\report.json"
+    $goldenReport = Get-Content -LiteralPath $goldenReportPath -Raw |
+        ConvertFrom-Json
+    $nativeGoldenCases = @($goldenReport.results).Count
+    $missingGoldenEdits = @(
+        $goldenReport.results | Where-Object {
+            $_.status -ne "pass" -or
+            $_.checks.solidworks_native.passed -ne $true -or
+            $_.checks.solidworks_native.editability.passed -ne $true
+        }
+    )
+    if ($goldenReport.mode -ne "native" -or
+        $nativeGoldenCases -le 0 -or
+        [int]$goldenReport.case_count -ne $nativeGoldenCases -or
+        [int]$goldenReport.passed -ne $nativeGoldenCases -or
+        [int]$goldenReport.failed -ne 0 -or
+        $missingGoldenEdits.Count -ne 0) {
+        throw "Golden report does not prove native create and edit parity."
     }
 
     $publicReleaseReady = [bool]$DownloadedPackagePath
@@ -277,14 +324,15 @@ try {
         completed_at_utc = [DateTime]::UtcNow.ToString("o")
         package_version = $packageVersion
         public_release_ready = $publicReleaseReady
-        portable_package_native_cases = 2
-        native_smoke_cases = 10
+        portable_package_native_cases = $portablePackageNativeCases
+        portable_package_report = $portablePackageReport
+        native_smoke_cases = $nativeSmokeCases
         native_smoke_coverage = $smokeReport.native_gate_coverage
         native_edit_coverage = $smokeReport.native_edit_coverage
-        native_golden_cases = 7
+        native_golden_cases = $nativeGoldenCases
         downloaded_package = $downloadedEvidence
         smoke_report = $smokeReportPath
-        golden_report = (Join-Path $OutputRoot "golden\report.json")
+        golden_report = $goldenReportPath
         transcript = $transcriptPath
     } | ConvertTo-Json -Depth 8 |
         Set-Content -LiteralPath $releaseSummaryPath -Encoding UTF8
