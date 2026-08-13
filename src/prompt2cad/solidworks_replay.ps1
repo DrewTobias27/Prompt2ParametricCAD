@@ -118,12 +118,25 @@ try {
             )
             $geometryContractValidated = $true
         }
+        $mutationContractValidated = $false
+        $mutationCount = 0
+        if ($MutationPath) {
+            $mutationCount = (
+                [Prompt2Cad.SolidWorks.NativeReplayRunner]::ValidateMutationFile(
+                    [System.IO.Path]::GetFullPath($PlanPath),
+                    [System.IO.Path]::GetFullPath($MutationPath)
+                )
+            )
+            $mutationContractValidated = $true
+        }
         [PSCustomObject]@{
             status = "success"
             compile_only = $true
             plan_validated = $true
             feature_count = $featureCount
             geometry_contract_validated = $geometryContractValidated
+            mutation_contract_validated = $mutationContractValidated
+            mutation_count = $mutationCount
         } | ConvertTo-Json -Compress
         exit 0
     }

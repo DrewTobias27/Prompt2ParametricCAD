@@ -258,6 +258,36 @@ def extract_package(content: bytes, destination: Path) -> None:
         archive.extractall(destination)
 
 
+def write_mutation_document(
+    plan_path: Path,
+    mutation_path: Path,
+    changes: dict[str, float | int],
+) -> None:
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    bindings = {
+        binding["parameter_id"]: binding
+        for feature in plan["features"]
+        for binding in feature["parameter_bindings"]
+    }
+    mutation_path.write_text(
+        json.dumps(
+            {
+                "format": "prompt2cad.solidworks-mutations",
+                "version": 1,
+                "mutations": [
+                    {
+                        "parameter_id": parameter_id,
+                        "value": value,
+                        "unit": bindings[parameter_id]["unit"],
+                    }
+                    for parameter_id, value in changes.items()
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_generated_launcher_is_valid_powershell(tmp_path: Path):
     package = create_solidworks_package(fixture_model_data(), "Parser check")
     extract_package(package.content, tmp_path)
@@ -548,6 +578,114 @@ def test_compile_only_geometry_probe_rejects_volume_mismatch(tmp_path: Path):
     assert "volume differs from the CadQuery source" in (
         result.stdout + result.stderr
     )
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
+)
+def test_compile_only_mutation_probe_accepts_pattern_controls(tmp_path: Path):
+    model_data = json.loads(
+        (
+            PROJECT_ROOT
+            / "examples"
+            / "models"
+            / "solidworks_smoke_circular_pattern.json"
+        ).read_text(encoding="utf-8")
+    )
+    package = create_solidworks_package(model_data, "Pattern mutation probe")
+    extract_package(package.content, tmp_path)
+    plan_path = tmp_path / "solidworks-replay-plan.json"
+    mutation_path = tmp_path / "mutations.json"
+    write_mutation_document(
+        plan_path,
+        mutation_path,
+        {
+            "radial_posts.pattern.count": 5,
+            "radial_posts.pattern.total_angle": 300,
+        },
+    )
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "solidworks_replay.ps1"),
+            "-PlanPath",
+            str(plan_path),
+            "-OutputPath",
+            str(tmp_path / "unused.SLDPRT"),
+            "-CompileOnly",
+            "-MutationPath",
+            str(mutation_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    output = json.loads(result.stdout.strip().splitlines()[-1])
+    assert output["mutation_contract_validated"] is True
+    assert output["mutation_count"] == 2
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
+)
+def test_compile_only_mutation_probe_rejects_collapsed_linear_pattern(
+    tmp_path: Path,
+):
+    model_data = json.loads(
+        (
+            PROJECT_ROOT
+            / "examples"
+            / "models"
+            / "solidworks_smoke_linear_pattern.json"
+        ).read_text(encoding="utf-8")
+    )
+    package = create_solidworks_package(model_data, "Invalid pattern mutation")
+    extract_package(package.content, tmp_path)
+    plan_path = tmp_path / "solidworks-replay-plan.json"
+    mutation_path = tmp_path / "mutations.json"
+    write_mutation_document(
+        plan_path,
+        mutation_path,
+        {
+            "mounting_pads.pattern.count_1": 1,
+            "mounting_pads.pattern.count_2": 1,
+        },
+    )
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "solidworks_replay.ps1"),
+            "-PlanPath",
+            str(plan_path),
+            "-OutputPath",
+            str(tmp_path / "unused.SLDPRT"),
+            "-CompileOnly",
+            "-MutationPath",
+            str(mutation_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "must retain at least two instances" in result.stdout + result.stderr
 
 
 @pytest.mark.skipif(

@@ -38,7 +38,7 @@ Verified against the public deployment on August 10, 2026:
 - The August 13 package-v9 gate passes 609 offline Python tests, all
   six frontend behavior suites, a production frontend build, all seven golden
   end-to-end cases, and all 292 generated STEP/native-plan capability cases.
-  Seven C# compile/comparator/plan-tamper checks passed separately. Two exhaustive tests
+  Nine C# compile/comparator/mutation/plan-tamper checks passed separately. Two exhaustive tests
   were run through their dedicated release commands; only the fresh public ZIP
   and installed-SolidWorks create/edit/reopen gate remains pending.
 - Package v9 assigns explicit collision-safe names to pattern/support helpers,

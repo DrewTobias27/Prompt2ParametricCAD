@@ -56,7 +56,9 @@ checks the package, 64-bit PowerShell, SolidWorks registration and API files,
 compiles the replay engine, and validates the replay-plan contract without
 creating a part. The repository's compile-only release gate also executes the
 same C# geometry comparator directly: an exact oracle must pass and an
-out-of-tolerance volume must fail before native COM execution is trusted. Then run
+out-of-tolerance volume must fail before native COM execution is trusted. It
+also executes the production C# mutation preflight with valid pattern controls
+and a deliberately collapsed linear pattern. Then run
 `Build-SolidWorks-Part.cmd`; package v9 stages the native part, closes and
 reopens it, verifies the saved history, exact parameter/helper identities,
 localized datum/template resolution, and body/volume/area/bounds/center against

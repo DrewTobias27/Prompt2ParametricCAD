@@ -757,6 +757,25 @@ namespace Prompt2Cad.SolidWorks
             );
         }
 
+        public static int ValidateMutationFile(
+            string planPath,
+            string mutationPath)
+        {
+            ReplayPlan plan = ReadPlan(planPath);
+            ValidateReplayPlan(plan);
+            RequireExecutableGeometryOracle(plan);
+            ParameterMutation[] mutations = ReadValidatedMutations(mutationPath);
+            Dictionary<string, NativeParameterBinding> bindings;
+            Dictionary<string, double> nativeValues;
+            PrepareParameterMutations(
+                plan,
+                mutations,
+                out bindings,
+                out nativeValues
+            );
+            return mutations.Length;
+        }
+
         public static string Execute(
             string planPath,
             string outputPath,
@@ -1074,24 +1093,7 @@ namespace Prompt2Cad.SolidWorks
             ReplayPlan plan = ReadPlan(planPath);
             ValidateReplayPlan(plan);
             RequireExecutableGeometryOracle(plan);
-            MutationDocument mutationDocument = ReadMutations(mutationPath);
-            if (!String.Equals(
-                mutationDocument.Format,
-                "prompt2cad.solidworks-mutations",
-                StringComparison.Ordinal) || mutationDocument.Version != 1)
-            {
-                throw new InvalidOperationException(
-                    "Unsupported SOLIDWORKS mutation document."
-                );
-            }
-            ParameterMutation[] mutations =
-                mutationDocument.Mutations ?? new ParameterMutation[0];
-            if (mutations.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    "The mutation document contains no parameter changes."
-                );
-            }
+            ParameterMutation[] mutations = ReadValidatedMutations(mutationPath);
 
             string resolvedSource = Path.GetFullPath(sourcePath);
             string resolvedOutput = PrepareNewOutputPath(outputPath);
@@ -1864,6 +1866,29 @@ namespace Prompt2Cad.SolidWorks
             {
                 return (MutationDocument)serializer.ReadObject(stream);
             }
+        }
+
+        private static ParameterMutation[] ReadValidatedMutations(string path)
+        {
+            MutationDocument document = ReadMutations(path);
+            if (document == null || !String.Equals(
+                document.Format,
+                "prompt2cad.solidworks-mutations",
+                StringComparison.Ordinal) || document.Version != 1)
+            {
+                throw new InvalidOperationException(
+                    "Unsupported SOLIDWORKS mutation document."
+                );
+            }
+            ParameterMutation[] mutations =
+                document.Mutations ?? new ParameterMutation[0];
+            if (mutations.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "The mutation document contains no parameter changes."
+                );
+            }
+            return mutations;
         }
 
         private static NativeGeometryResult ReadGeometry(string path)
@@ -5678,65 +5703,14 @@ namespace Prompt2Cad.SolidWorks
             ReplayPlan plan,
             ParameterMutation[] mutations)
         {
-            var bindings = new Dictionary<string, NativeParameterBinding>(
-                StringComparer.Ordinal
+            Dictionary<string, NativeParameterBinding> bindings;
+            Dictionary<string, double> nativeValues;
+            PrepareParameterMutations(
+                plan,
+                mutations,
+                out bindings,
+                out nativeValues
             );
-            foreach (ReplayStep step in plan.Features)
-            {
-                foreach (NativeParameterBinding binding in
-                    step.ParameterBindings ?? new NativeParameterBinding[0])
-                {
-                    if (bindings.ContainsKey(binding.ParameterId))
-                    {
-                        throw new InvalidOperationException(
-                            "Replay plan contains duplicate parameter binding '" +
-                            binding.ParameterId + "'."
-                        );
-                    }
-                    bindings.Add(binding.ParameterId, binding);
-                }
-            }
-
-            var mutated = new HashSet<string>(StringComparer.Ordinal);
-            var nativeValues = bindings.ToDictionary(
-                item => item.Key,
-                item => item.Value.Value,
-                StringComparer.Ordinal
-            );
-            foreach (ParameterMutation mutation in mutations)
-            {
-                if (!mutated.Add(mutation.ParameterId))
-                {
-                    throw new InvalidOperationException(
-                        "Mutation document repeats parameter '" +
-                        mutation.ParameterId + "'."
-                    );
-                }
-                NativeParameterBinding binding;
-                if (!bindings.TryGetValue(mutation.ParameterId, out binding))
-                {
-                    throw new InvalidOperationException(
-                        "Mutation references unknown parameter '" +
-                        mutation.ParameterId + "'."
-                    );
-                }
-                if (!String.Equals(
-                    mutation.Unit,
-                    binding.Unit,
-                    StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        "Mutation unit for '" + mutation.ParameterId +
-                        "' does not match its replay binding."
-                    );
-                }
-
-                nativeValues[mutation.ParameterId] = ResolveNativeMutationValue(
-                    binding,
-                    mutation.Value
-                );
-            }
-            ValidateNativeMutationSet(plan, nativeValues);
 
             foreach (ParameterMutation mutation in mutations)
             {
@@ -5773,6 +5747,81 @@ namespace Prompt2Cad.SolidWorks
                     binding.SourceValue = mutation.Value;
                 }
             }
+        }
+
+        private static void PrepareParameterMutations(
+            ReplayPlan plan,
+            ParameterMutation[] mutations,
+            out Dictionary<string, NativeParameterBinding> bindings,
+            out Dictionary<string, double> nativeValues)
+        {
+            bindings = new Dictionary<string, NativeParameterBinding>(
+                StringComparer.Ordinal
+            );
+            foreach (ReplayStep step in plan.Features)
+            {
+                foreach (NativeParameterBinding binding in
+                    step.ParameterBindings ?? new NativeParameterBinding[0])
+                {
+                    if (bindings.ContainsKey(binding.ParameterId))
+                    {
+                        throw new InvalidOperationException(
+                            "Replay plan contains duplicate parameter binding '" +
+                            binding.ParameterId + "'."
+                        );
+                    }
+                    bindings.Add(binding.ParameterId, binding);
+                }
+            }
+
+            var mutated = new HashSet<string>(StringComparer.Ordinal);
+            nativeValues = bindings.ToDictionary(
+                item => item.Key,
+                item => item.Value.Value,
+                StringComparer.Ordinal
+            );
+            foreach (ParameterMutation mutation in mutations)
+            {
+                if (mutation == null || String.IsNullOrWhiteSpace(
+                    mutation.ParameterId
+                ))
+                {
+                    throw new InvalidOperationException(
+                        "Mutation entries require a parameter ID."
+                    );
+                }
+                if (!mutated.Add(mutation.ParameterId))
+                {
+                    throw new InvalidOperationException(
+                        "Mutation document repeats parameter '" +
+                        mutation.ParameterId + "'."
+                    );
+                }
+                NativeParameterBinding binding;
+                if (!bindings.TryGetValue(mutation.ParameterId, out binding))
+                {
+                    throw new InvalidOperationException(
+                        "Mutation references unknown parameter '" +
+                        mutation.ParameterId + "'."
+                    );
+                }
+                if (!String.Equals(
+                    mutation.Unit,
+                    binding.Unit,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "Mutation unit for '" + mutation.ParameterId +
+                        "' does not match its replay binding."
+                    );
+                }
+
+                nativeValues[mutation.ParameterId] = ResolveNativeMutationValue(
+                    binding,
+                    mutation.Value
+                );
+            }
+            ValidateNativeMutationSet(plan, nativeValues);
         }
 
         private static void ValidateNativeMutationSet(

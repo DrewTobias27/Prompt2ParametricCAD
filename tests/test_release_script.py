@@ -73,6 +73,9 @@ def test_release_script_keeps_native_execution_explicit():
     assert "P2P_RUN_SOLIDWORKS_COMPILE" in source
     assert "test_setup_check_rejects_conflicting_canonical_revolve_axis" in source
     assert "test_setup_check_rejects_a_malformed_geometry_oracle" in source
+    assert "test_compile_only_geometry_probe_executes_native_comparator" in source
+    assert "test_compile_only_mutation_probe_accepts_pattern_controls" in source
+    assert "test_compile_only_mutation_probe_rejects_collapsed_linear_pattern" in source
     assert "test_setup_check_rejects_duplicate_native_names" in source
     assert "test_setup_check_rejects_unknown_semantic_datum_plane" in source
     assert "--export-steps" in source

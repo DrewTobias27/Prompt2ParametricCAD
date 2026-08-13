@@ -1455,7 +1455,8 @@ def test_native_runner_accepts_the_current_replay_plan_version():
     assert 'DataMember(Name = "expected_geometry")' in runner_source
     assert 'DataMember(Name = "geometry_verification_passed")' in runner_source
     assert "RequireExpectedGeometryMatch(" in runner_source
-    assert runner_source.count("RequireExecutableGeometryOracle(plan)") == 2
+    assert "ValidateMutationFile(" in runner_source
+    assert runner_source.count("RequireExecutableGeometryOracle(plan)") == 3
     assert runner_source.index('"reopened native build"') < runner_source.index(
         "PublishStagedOutput(stagedOutput, resolvedOutput)"
     )

@@ -223,6 +223,9 @@ properties. Its enforced coverage includes mirror-seed placement, circular
 pattern count and total angle, both linear-pattern counts and spacings, length,
 angle, and count units, and signed same-side coordinates. A fixture set that
 only creates those controls but no longer edits them fails the release gate.
+The compile-only package gate invokes the same C# mutation parser, range rules,
+integer checks, signed-coordinate rules, and dependent linear-pattern checks
+used immediately before native modification, without opening SolidWorks.
 
 Run `prompt2cad-release-matrix` for the compact deterministic whole-pipeline
 gate and `prompt2cad-solidworks-smoke` for the broader CadQuery build and
