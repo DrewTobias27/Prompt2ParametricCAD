@@ -64,6 +64,14 @@ try {
     $transcriptStarted = $true
     $env:P2P_RUN_SOLIDWORKS_NATIVE = "1"
     $env:PYTHONPATH = "src"
+    $packageVersionText = (& $pythonExe -c (
+        "from prompt2cad.solidworks_package import " +
+        "SOLIDWORKS_PACKAGE_VERSION; print(SOLIDWORKS_PACKAGE_VERSION)"
+    ) | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $packageVersionText -notmatch '^\d+$') {
+        throw "Could not resolve the current SolidWorks package version."
+    }
+    $packageVersion = [int]$packageVersionText
 
     Invoke-NativeReleaseStep "Running portable-package native checks" {
         & $pythonExe -m pytest `
@@ -195,6 +203,16 @@ try {
     Invoke-NativeReleaseStep "Running ten-case native smoke and edit gate" {
         & $pythonExe @smokeArguments
     }
+    $smokeReportPath = Join-Path $OutputRoot "smoke\report.json"
+    $smokeReport = Get-Content -LiteralPath $smokeReportPath -Raw |
+        ConvertFrom-Json
+    if (-not $smokeReport.release_gate_passed -or
+        -not $smokeReport.native_gate_coverage.passed) {
+        throw (
+            "Native smoke cases passed without complete replay-family " +
+            "coverage. Add a gate fixture before release."
+        )
+    }
 
     $goldenArguments = @(
         "-m", "prompt2cad.release_matrix",
@@ -240,13 +258,14 @@ try {
         version = 1
         status = $releaseStatus
         completed_at_utc = [DateTime]::UtcNow.ToString("o")
-        package_version = 8
+        package_version = $packageVersion
         public_release_ready = $publicReleaseReady
         portable_package_native_cases = 2
         native_smoke_cases = 10
+        native_smoke_coverage = $smokeReport.native_gate_coverage
         native_golden_cases = 7
         downloaded_package = $downloadedEvidence
-        smoke_report = (Join-Path $OutputRoot "smoke\report.json")
+        smoke_report = $smokeReportPath
         golden_report = (Join-Path $OutputRoot "golden\report.json")
         transcript = $transcriptPath
     } | ConvertTo-Json -Depth 8 |

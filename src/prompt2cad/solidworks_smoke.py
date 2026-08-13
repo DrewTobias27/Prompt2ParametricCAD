@@ -17,6 +17,8 @@ from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_export import save_plan
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
+from prompt2cad.solidworks_replay import SUPPORTED_OPERATION_TYPES
+from prompt2cad.solidworks_replay import SUPPORTED_PROFILE_TYPES
 from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_replay import verify_solidworks_editability
 from prompt2cad.solidworks_verification import compare_geometry_metrics
@@ -91,6 +93,35 @@ EDITABILITY_SCENARIOS = {
     },
 }
 
+NATIVE_GATE_REQUIRED_COVERAGE = {
+    "operation_types": set(SUPPORTED_OPERATION_TYPES),
+    "source_profiles": set(SUPPORTED_PROFILE_TYPES),
+    "support_kinds": {
+        "datum_plane",
+        "feature_edges",
+        "named_face",
+        "resolved_feature_face",
+    },
+    "pattern_kinds": {
+        "circular_pattern",
+        "linear_pattern",
+        "mirror_pattern",
+    },
+    "feature_kinds": {
+        "boss_extrude",
+        "boss_revolve",
+        "countersink",
+        "cut_extrude",
+        "cut_revolve",
+        "edge_chamfer",
+        "edge_fillet",
+    },
+    "end_conditions": {"blind", "through_all"},
+    "binding_kinds": {"feature_property", "named_dimension"},
+    "binding_units": {"count", "deg", "mm"},
+    "mutation_modes": {"absolute_same_side"},
+}
+
 
 def project_root() -> Path:
     """Return the repository root for an editable or installed source tree."""
@@ -132,6 +163,9 @@ def run_smoke_suite(
     """Build STEP, plan native replay, and optionally execute each fixture."""
     output_root.mkdir(parents=True, exist_ok=True)
     results: list[dict] = []
+    observed_coverage = {
+        category: set() for category in NATIVE_GATE_REQUIRED_COVERAGE
+    }
 
     for fixture_path in fixture_paths:
         started = time.perf_counter()
@@ -166,6 +200,11 @@ def run_smoke_suite(
             plan = build_solidworks_replay_plan(
                 source_document,
                 expected_geometry=cadquery_metrics,
+            )
+            _record_native_gate_coverage(
+                observed_coverage,
+                model_data,
+                plan,
             )
             save_plan(plan, plan_path)
             result["operation_count"] = len(model_data["operations"])
@@ -274,11 +313,80 @@ def run_smoke_suite(
         results.append(result)
 
     passed = sum(result["status"] == "pass" for result in results)
+    complete_fixture_suite = (
+        len(fixture_paths) == len(SMOKE_FIXTURE_NAMES)
+        and {path.stem for path in fixture_paths} == set(SMOKE_FIXTURE_NAMES)
+    )
+    coverage = _native_gate_coverage_summary(
+        observed_coverage,
+        complete_fixture_suite=complete_fixture_suite,
+    )
+    failed = len(results) - passed
     return {
         "mode": "native" if execute_native else "plan_only",
         "passed": passed,
-        "failed": len(results) - passed,
+        "failed": failed,
+        "native_gate_coverage": coverage,
+        "release_gate_passed": (
+            failed == 0
+            and (not complete_fixture_suite or coverage["passed"] is True)
+        ),
         "results": results,
+    }
+
+
+def _record_native_gate_coverage(
+    observed: dict[str, set[str]],
+    model_data: dict,
+    plan,
+) -> None:
+    """Collect executable replay families exercised by native gate fixtures."""
+    observed["source_profiles"].update(
+        operation["profile"]
+        for operation in model_data["operations"]
+        if operation.get("profile")
+    )
+    for feature in plan.features:
+        observed["operation_types"].add(feature.operation_type)
+        observed["support_kinds"].add(feature.support["kind"])
+        feature_kind = feature.feature.get("kind")
+        if feature_kind:
+            observed["feature_kinds"].add(feature_kind)
+        end_condition = feature.feature.get("end_condition")
+        if end_condition:
+            observed["end_conditions"].add(end_condition)
+        if feature.pattern:
+            observed["pattern_kinds"].add(feature.pattern["kind"])
+        for binding in feature.parameter_bindings:
+            observed["binding_kinds"].add(binding["binding_kind"])
+            observed["binding_units"].add(binding["unit"])
+            mutation_mode = binding.get("mutation_mode")
+            if mutation_mode:
+                observed["mutation_modes"].add(mutation_mode)
+
+
+def _native_gate_coverage_summary(
+    observed: dict[str, set[str]],
+    *,
+    complete_fixture_suite: bool,
+) -> dict:
+    normalized_observed = {
+        category: sorted(values) for category, values in observed.items()
+    }
+    missing = {
+        category: sorted(required - observed[category])
+        for category, required in NATIVE_GATE_REQUIRED_COVERAGE.items()
+        if required - observed[category]
+    }
+    return {
+        "complete_fixture_suite": complete_fixture_suite,
+        "passed": (not missing) if complete_fixture_suite else None,
+        "observed": normalized_observed,
+        "required": {
+            category: sorted(values)
+            for category, values in NATIVE_GATE_REQUIRED_COVERAGE.items()
+        },
+        "missing": missing,
     }
 
 
@@ -351,7 +459,7 @@ def main() -> None:
         f"mode={report['mode']}"
     )
     print(f"WROTE {report_path}")
-    if report["failed"]:
+    if not report["release_gate_passed"]:
         raise SystemExit(1)
 
 

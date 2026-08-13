@@ -92,7 +92,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 The script creates a new timestamped evidence directory, refuses to overwrite
 an earlier run, and executes the portable-package checks, all ten native
-smoke/edit cases, and all seven golden native/edit cases. It makes no API calls.
+smoke/edit cases, and all seven golden native/edit cases. The ten-case report
+must also cover every supported operation, source profile, support, native
+pattern, feature kind, end condition, mutation mechanism, and parameter unit.
+It makes no API calls.
 
 For the final public-release gate, download a fresh package from the deployed
 site and pass that exact ZIP to the same command:

@@ -12,6 +12,7 @@ from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_smoke import SMOKE_FIXTURE_NAMES
 from prompt2cad.solidworks_smoke import EDITABILITY_SCENARIOS
+from prompt2cad.solidworks_smoke import NATIVE_GATE_REQUIRED_COVERAGE
 from prompt2cad.solidworks_smoke import run_smoke_suite
 from prompt2cad.solidworks_smoke import smoke_fixture_paths
 from prompt2cad.solidworks_verification import compare_geometry_metrics
@@ -53,6 +54,14 @@ def test_every_native_smoke_fixture_builds_and_plans(tmp_path: Path):
     assert report["passed"] == len(SMOKE_FIXTURE_NAMES)
     assert report["failed"] == 0
     assert report["mode"] == "plan_only"
+    assert report["release_gate_passed"] is True
+    assert report["native_gate_coverage"]["complete_fixture_suite"] is True
+    assert report["native_gate_coverage"]["passed"] is True
+    assert report["native_gate_coverage"]["missing"] == {}
+    assert report["native_gate_coverage"]["required"] == {
+        category: sorted(values)
+        for category, values in NATIVE_GATE_REQUIRED_COVERAGE.items()
+    }
     for result in report["results"]:
         assert Path(result["step_path"]).is_file()
         assert Path(result["plan_path"]).is_file()
@@ -60,6 +69,21 @@ def test_every_native_smoke_fixture_builds_and_plans(tmp_path: Path):
         assert result["native_mutation_preflight"]["mutation_count"] == len(
             EDITABILITY_SCENARIOS[result["name"]]
         )
+
+
+def test_partial_native_smoke_selection_reports_but_does_not_claim_coverage(
+    tmp_path: Path,
+):
+    report = run_smoke_suite(
+        smoke_fixture_paths(["solidworks_smoke_patterned_plate"]),
+        tmp_path,
+    )
+
+    assert report["failed"] == 0
+    assert report["release_gate_passed"] is True
+    assert report["native_gate_coverage"]["complete_fixture_suite"] is False
+    assert report["native_gate_coverage"]["passed"] is None
+    assert report["native_gate_coverage"]["missing"]
 
 
 def test_every_native_fixture_has_a_valid_bound_editability_scenario():
