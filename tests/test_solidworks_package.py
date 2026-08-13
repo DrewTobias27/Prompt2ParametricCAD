@@ -1014,6 +1014,7 @@ def test_setup_check_rejects_unknown_semantic_datum_plane(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_NATIVE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_NATIVE=1 to open installed SolidWorks",
 )
+@pytest.mark.solidworks_native
 def test_extracted_package_builds_verified_native_part(tmp_path: Path):
     model_data = fixture_model_data()
     expected_geometry = geometry_metrics(build_model(model_data))
@@ -1067,6 +1068,7 @@ def test_extracted_package_builds_verified_native_part(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_NATIVE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_NATIVE=1 to open installed SolidWorks",
 )
+@pytest.mark.solidworks_native
 def test_curved_side_attachment_matches_cadquery_in_native_solidworks(
     tmp_path: Path,
 ):

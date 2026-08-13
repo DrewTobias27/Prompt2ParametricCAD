@@ -91,8 +91,8 @@ try {
 
     Invoke-NativeReleaseStep "Running portable-package native checks" {
         & $pythonExe -m pytest `
-            tests\test_solidworks_package.py::test_extracted_package_builds_verified_native_part `
-            tests\test_solidworks_package.py::test_curved_side_attachment_matches_cadquery_in_native_solidworks `
+            -m solidworks_native `
+            tests\test_solidworks_package.py `
             -q
     }
 

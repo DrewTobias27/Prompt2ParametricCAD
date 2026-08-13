@@ -49,4 +49,5 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
     "solidworks_compile: compile and validate the native runner without opening SolidWorks",
+    "solidworks_native: run package checks that open installed SolidWorks",
 ]

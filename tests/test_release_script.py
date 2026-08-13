@@ -127,8 +127,8 @@ def test_native_release_script_runs_every_focused_live_gate():
     source = NATIVE_RELEASE_SCRIPT.read_text(encoding="utf-8")
 
     assert "P2P_RUN_SOLIDWORKS_NATIVE" in source
-    assert "test_extracted_package_builds_verified_native_part" in source
-    assert "test_curved_side_attachment_matches_cadquery" in source
+    assert "-m solidworks_native" in source
+    assert "tests\\test_solidworks_package.py" in source
     assert "prompt2cad.solidworks_smoke" in source
     assert "--verify-editability" in source
     assert "prompt2cad.release_matrix" in source
@@ -163,3 +163,11 @@ def test_native_release_script_runs_every_focused_live_gate():
     assert "source_zip_sha256" in source
     assert "release-summary.json" in source
     assert "OPENAI_API_KEY" not in source
+
+
+def test_every_native_package_case_is_in_the_release_marker():
+    source = SOLIDWORKS_PACKAGE_TESTS.read_text(encoding="utf-8")
+
+    assert source.count("@pytest.mark.solidworks_native") == source.count(
+        'os.getenv("P2P_RUN_SOLIDWORKS_NATIVE")'
+    )
