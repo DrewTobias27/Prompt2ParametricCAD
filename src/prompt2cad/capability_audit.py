@@ -1039,6 +1039,7 @@ def audit_capability_case(
                     plan,
                     edit_result,
                     expected_mutation_ids=case.mutations,
+                    expected_mutations=case.mutations,
                     context=f"{case.name} native edit",
                 )
                 edited_references = validate_published_references(

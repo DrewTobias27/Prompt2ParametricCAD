@@ -196,6 +196,7 @@ def test_native_audit_mode_verifies_replay_and_edited_reopen(
                     plan,
                     editability=True,
                     mutated_parameter_ids=mutations,
+                    mutated_parameters=mutations,
                     after_geometry=edited_geometry,
                     published_references=reference_records(plan),
                 )

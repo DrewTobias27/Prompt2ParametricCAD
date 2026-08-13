@@ -9,7 +9,7 @@ Windows PowerShell/COM runner only after every feature has been accepted.
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from hashlib import sha1
@@ -788,7 +788,7 @@ def verify_solidworks_editability(
                 plan,
                 receipt,
                 expected_source_path=source_path,
-                expected_mutation_ids=mutations,
+                expected_mutations=mutations,
                 expected_edited_geometry=mutation_document[
                     "expected_geometry"
                 ],
@@ -892,7 +892,7 @@ def _validate_native_edit_receipt(
     receipt: dict,
     *,
     expected_source_path: Path,
-    expected_mutation_ids: Collection[str],
+    expected_mutations: Mapping[str, float | int],
     expected_edited_geometry: dict,
     context: str,
 ) -> None:
@@ -916,7 +916,8 @@ def _validate_native_edit_receipt(
         validate_native_editability_result(
             plan,
             receipt,
-            expected_mutation_ids=expected_mutation_ids,
+            expected_mutation_ids=expected_mutations,
+            expected_mutations=expected_mutations,
             context=context,
         )
         validate_published_references(plan, receipt, context=context)

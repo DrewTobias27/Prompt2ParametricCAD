@@ -294,6 +294,11 @@ def native_edit_receipt(
     **extra,
 ) -> dict:
     mutation_ids = sorted(mutations or {})
+    bindings_by_id = {
+        binding["parameter_id"]: binding
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    }
     topology_ids = [
         binding["parameter_id"]
         for feature in plan.features
@@ -312,6 +317,14 @@ def native_edit_receipt(
         "edited_geometry_verification_passed": True,
         "mutation_count": len(mutation_ids),
         "mutated_parameter_ids": mutation_ids,
+        "applied_mutations": [
+            {
+                "parameter_id": parameter_id,
+                "value": (mutations or {})[parameter_id],
+                "unit": bindings_by_id[parameter_id]["unit"],
+            }
+            for parameter_id in mutation_ids
+        ],
         "topology_changed": bool(topology_ids),
         "topology_changing_parameter_ids": sorted(topology_ids),
         "before_geometry": plan.expected_geometry,
@@ -2347,6 +2360,7 @@ def test_editability_removes_output_without_complete_proof(tmp_path: Path):
     "corruption",
     [
         "mutation_identity",
+        "mutation_value",
         "source_identity",
         "sketch_health",
         "persistent_reference",
@@ -2379,6 +2393,8 @@ def test_editability_rejects_incomplete_native_contract(
         )
         if corruption == "mutation_identity":
             receipt["mutated_parameter_ids"] = ["wrong.parameter"]
+        elif corruption == "mutation_value":
+            receipt["applied_mutations"][0]["value"] += 1
         elif corruption == "source_identity":
             receipt["source_path"] = str(
                 (tmp_path / "different-source.SLDPRT").resolve()
@@ -2857,6 +2873,8 @@ def test_native_runner_reopens_and_reverifies_mutated_parts():
     )
     assert "PublishStagedOutput(stagedOutput, resolvedOutput);" in edit_section
     assert 'SourceHistoryVerificationPassed = true' in edit_section
+    assert 'DataMember(Name = "applied_mutations")' in runner_source
+    assert "AppliedMutations = mutations" in edit_section
     assert 'Reopened = true' in edit_section
     assert "RequireHealthyModel(reopenedHealth" in edit_section
     assert "private static void RequireSuccessfulRebuild(" in runner_source

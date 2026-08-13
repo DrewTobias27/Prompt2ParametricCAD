@@ -360,6 +360,7 @@ def verify_solidworks_package_editability_result(
         verified.plan,
         native_result,
         expected_mutation_ids=mutations,
+        expected_mutations=mutations,
         context=context,
     )
     references = validate_published_references(

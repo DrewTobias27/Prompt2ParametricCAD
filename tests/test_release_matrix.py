@@ -125,6 +125,7 @@ def test_release_matrix_native_mode_checks_create_edit_and_reopen(
                     plan,
                     editability=True,
                     mutated_parameter_ids=mutations,
+                    mutated_parameters=mutations,
                     after_geometry=geometry_metrics(edited_part),
                     published_references=reference_records(edited_plan),
                 )

@@ -300,6 +300,7 @@ def test_native_smoke_editability_rebuilds_and_compares_mutated_geometry(
                     plan,
                     editability=True,
                     mutated_parameter_ids=mutations,
+                    mutated_parameters=mutations,
                     after_geometry=geometry_metrics(expected_part),
                     published_references=persistent_reference_records(plan),
                 )
@@ -369,6 +370,7 @@ def test_native_smoke_pattern_count_edit_preserves_source_reference_contract(
                     plan,
                     editability=True,
                     mutated_parameter_ids=requested_mutations,
+                    mutated_parameters=requested_mutations,
                     after_geometry=edited_metrics,
                     published_references=persistent_reference_records(plan),
                 )

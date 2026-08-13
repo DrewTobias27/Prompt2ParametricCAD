@@ -157,7 +157,8 @@ The Python/CLI execution boundary also revalidates the complete native receipt
 before it publishes either the SLDPRT or its report: exact feature order,
 parameter and helper identities, feature/sketch health, persistent references,
 source/output identity for edits, and the reported geometry must all match the
-replay plan. A successful process exit or a set of success booleans is not
+replay plan. Edit receipts must also reproduce every validated mutation ID,
+value, and unit. A successful process exit or a set of success booleans is not
 sufficient.
 
 Polyline vertices plus explicit-sketch start, end, and arc-through coordinates

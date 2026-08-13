@@ -621,6 +621,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "mutated_parameter_ids")]
         public string[] MutatedParameterIds { get; set; }
 
+        [DataMember(Name = "applied_mutations")]
+        public ParameterMutation[] AppliedMutations { get; set; }
+
         [DataMember(Name = "topology_changed")]
         public bool TopologyChanged { get; set; }
 
@@ -1292,6 +1295,18 @@ namespace Prompt2Cad.SolidWorks
                         MutatedParameterIds = mutations
                             .Select(item => item.ParameterId)
                             .OrderBy(item => item, StringComparer.Ordinal)
+                            .ToArray(),
+                        AppliedMutations = mutations
+                            .OrderBy(
+                                item => item.ParameterId,
+                                StringComparer.Ordinal
+                            )
+                            .Select(item => new ParameterMutation
+                            {
+                                ParameterId = item.ParameterId,
+                                Value = item.Value,
+                                Unit = item.Unit,
+                            })
                             .ToArray(),
                         TopologyChanged =
                             topologyChangingParameterIds.Length > 0,

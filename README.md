@@ -237,15 +237,16 @@ surface-area, bounding-box, and center-of-mass metrics. The runner refuses to
 publish a native part if its reopened geometry does not match that oracle.
 Package v11 applies the same rule to native edits: a mutation carries the
 geometry from a validated CadQuery rebuild, and the runner refuses to publish
-the edited `SLDPRT` unless its reopened result matches.
+the edited `SLDPRT` unless its reopened result matches. Its receipt records the
+exact applied parameter values and units, not only their IDs.
 `Check-SolidWorks-Setup.cmd` performs the integrity, installation, API,
 replay-engine compilation, and replay-plan consistency checks without opening
 or creating a part, and reports the selected API root and interop version when
 multiple SolidWorks installations are present. The downloaded launcher now
 requires a complete receipt matching the exact replay-plan feature order,
 parameter and helper identities, feature/sketch health, geometry oracle, and
-persistent references. It removes the new output and any stale report when
-that proof is incomplete.
+persistent references. It removes the new output and any report created by a
+failed run, while refusing to overwrite evidence from an earlier run.
 
 Run the automated tests:
 

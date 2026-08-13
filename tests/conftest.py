@@ -11,6 +11,7 @@ def native_result_factory() -> Callable[..., dict]:
 
     def factory(plan, *, editability: bool = False, **values) -> dict:
         mutated_parameter_ids = sorted(values.pop("mutated_parameter_ids", ()))
+        mutated_parameters = values.pop("mutated_parameters", {})
         parameter_bindings = [
             binding
             for feature in plan.features
@@ -64,6 +65,10 @@ def native_result_factory() -> Callable[..., dict]:
             },
         }
         if editability:
+            bindings_by_id = {
+                binding["parameter_id"]: binding
+                for binding in parameter_bindings
+            }
             topology_ids = sorted(
                 binding["parameter_id"]
                 for binding in parameter_bindings
@@ -81,6 +86,23 @@ def native_result_factory() -> Callable[..., dict]:
                     "edited_geometry_verification_passed": True,
                     "mutation_count": len(mutated_parameter_ids),
                     "mutated_parameter_ids": mutated_parameter_ids,
+                    "applied_mutations": [
+                        {
+                            "parameter_id": parameter_id,
+                            "value": mutated_parameters.get(
+                                parameter_id,
+                                bindings_by_id.get(
+                                    parameter_id,
+                                    {"value": 0.0},
+                                )["value"],
+                            ),
+                            "unit": bindings_by_id.get(
+                                parameter_id,
+                                {"unit": "mm"},
+                            )["unit"],
+                        }
+                        for parameter_id in mutated_parameter_ids
+                    ],
                     "topology_changed": bool(topology_ids),
                     "topology_changing_parameter_ids": topology_ids,
                 }

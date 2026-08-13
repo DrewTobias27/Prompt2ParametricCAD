@@ -1,7 +1,7 @@
 """Shared geometry and persistent-reference checks for native CAD replay."""
 
 import math
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 
 from prompt2cad.solidworks_replay import SolidWorksReplayPlan
 from prompt2cad.solidworks_replay import topology_changing_mutation_ids
@@ -54,6 +54,7 @@ def validate_native_editability_result(
     native_result: dict,
     *,
     expected_mutation_ids: Collection[str],
+    expected_mutations: Mapping[str, float | int] | None = None,
     context: str,
 ) -> dict:
     """Require a complete save/reopen report after native parameter edits."""
@@ -71,6 +72,13 @@ def validate_native_editability_result(
         raise RuntimeError(
             f"{context} mutated parameter identities do not match the request"
         )
+    _validate_applied_mutations(
+        plan,
+        native_result,
+        expected_ids=expected_ids,
+        expected_mutations=expected_mutations,
+        context=context,
+    )
     expected_topology_ids = list(
         topology_changing_mutation_ids(plan, expected_ids)
     )
@@ -112,6 +120,80 @@ def validate_native_editability_result(
         }
     )
     return summary
+
+
+def _validate_applied_mutations(
+    plan: SolidWorksReplayPlan,
+    native_result: dict,
+    *,
+    expected_ids: list[str],
+    expected_mutations: Mapping[str, float | int] | None,
+    context: str,
+) -> None:
+    if (
+        expected_mutations is not None
+        and sorted(expected_mutations) != expected_ids
+    ):
+        raise RuntimeError(
+            f"{context} expected mutation values do not match the request"
+        )
+    records = native_result.get("applied_mutations")
+    if not isinstance(records, list) or len(records) != len(expected_ids):
+        raise RuntimeError(
+            f"{context} did not report every applied mutation"
+        )
+    if any(not isinstance(record, dict) for record in records):
+        raise RuntimeError(f"{context} reported an invalid applied mutation")
+    actual_ids = [record.get("parameter_id") for record in records]
+    if actual_ids != expected_ids:
+        raise RuntimeError(
+            f"{context} applied mutation identities do not match the request"
+        )
+
+    bindings = {
+        binding["parameter_id"]: binding
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    }
+    for record in records:
+        parameter_id = record["parameter_id"]
+        binding = bindings.get(parameter_id)
+        if binding is None or record.get("unit") != binding["unit"]:
+            raise RuntimeError(
+                f"{context} applied mutation unit does not match "
+                f"{parameter_id}"
+            )
+        value = record.get("value")
+        if isinstance(value, bool):
+            raise RuntimeError(
+                f"{context} applied mutation value is invalid for "
+                f"{parameter_id}"
+            )
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError) as error:
+            raise RuntimeError(
+                f"{context} applied mutation value is invalid for "
+                f"{parameter_id}"
+            ) from error
+        if not math.isfinite(numeric_value):
+            raise RuntimeError(
+                f"{context} applied mutation value is invalid for "
+                f"{parameter_id}"
+            )
+        if expected_mutations is None:
+            continue
+        expected_value = float(expected_mutations[parameter_id])
+        if not math.isclose(
+            numeric_value,
+            expected_value,
+            rel_tol=1e-9,
+            abs_tol=1e-9,
+        ):
+            raise RuntimeError(
+                f"{context} applied mutation value does not match "
+                f"{parameter_id}"
+            )
 
 
 def _require_success_result(native_result: dict, *, context: str) -> None:
