@@ -13,6 +13,7 @@ RELEASE_SCRIPT = PROJECT_ROOT / "scripts" / "check_release.ps1"
 NATIVE_RELEASE_SCRIPT = (
     PROJECT_ROOT / "scripts" / "check_solidworks_release.ps1"
 )
+SOLIDWORKS_PACKAGE_TESTS = PROJECT_ROOT / "tests" / "test_solidworks_package.py"
 
 
 def powershell_path() -> str:
@@ -99,13 +100,8 @@ def test_release_script_keeps_native_execution_explicit():
     assert "prompt2cad.release_matrix" in source
     assert "prompt2cad.capability_audit" in source
     assert "P2P_RUN_SOLIDWORKS_COMPILE" in source
-    assert "test_setup_check_rejects_conflicting_canonical_revolve_axis" in source
-    assert "test_setup_check_rejects_a_malformed_geometry_oracle" in source
-    assert "test_compile_only_geometry_probe_executes_native_comparator" in source
-    assert "test_compile_only_mutation_probe_accepts_pattern_controls" in source
-    assert "test_compile_only_mutation_probe_rejects_collapsed_linear_pattern" in source
-    assert "test_setup_check_rejects_duplicate_native_names" in source
-    assert "test_setup_check_rejects_unknown_semantic_datum_plane" in source
+    assert "-m pytest -m solidworks_compile -q" in source
+    assert "test_setup_check_rejects_conflicting_canonical_revolve_axis" not in source
     assert "--export-steps" in source
     assert "PROMPT2CAD_NODE" in source
     assert "solidworks-package-smoke.mjs" in source
@@ -117,6 +113,14 @@ def test_release_script_keeps_native_execution_explicit():
     assert "$previousPythonPath = $env:PYTHONPATH" in source
     assert "Set-Location $previousLocation" in source
     assert "Remove-Item Env:PYTHONPATH" in source
+
+
+def test_every_compile_gated_package_case_is_in_the_release_marker():
+    source = SOLIDWORKS_PACKAGE_TESTS.read_text(encoding="utf-8")
+
+    assert source.count("@pytest.mark.solidworks_compile") == source.count(
+        'os.getenv("P2P_RUN_SOLIDWORKS_COMPILE")'
+    )
 
 
 def test_native_release_script_runs_every_focused_live_gate():

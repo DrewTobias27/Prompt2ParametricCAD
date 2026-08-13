@@ -47,3 +47,6 @@ prompt2cad = ["solidworks_replay.ps1", "solidworks_replay_runner.cs"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "solidworks_compile: compile and validate the native runner without opening SolidWorks",
+]

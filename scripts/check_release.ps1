@@ -96,17 +96,7 @@ try {
         try {
             $env:P2P_RUN_SOLIDWORKS_COMPILE = "1"
             Invoke-ReleaseStep "Compiling downloaded SolidWorks package runner" {
-                & $pythonExe -m pytest `
-                    tests\test_solidworks_package.py::test_extracted_package_setup_check_compiles_runner `
-                    tests\test_solidworks_package.py::test_setup_check_rejects_conflicting_canonical_revolve_axis `
-                    tests\test_solidworks_package.py::test_setup_check_rejects_a_malformed_geometry_oracle `
-                    tests\test_solidworks_package.py::test_compile_only_geometry_probe_executes_native_comparator `
-                    tests\test_solidworks_package.py::test_compile_only_geometry_probe_rejects_volume_mismatch `
-                    tests\test_solidworks_package.py::test_compile_only_mutation_probe_accepts_pattern_controls `
-                    tests\test_solidworks_package.py::test_compile_only_mutation_probe_rejects_collapsed_linear_pattern `
-                    tests\test_solidworks_package.py::test_setup_check_rejects_duplicate_native_names `
-                    tests\test_solidworks_package.py::test_setup_check_rejects_unknown_semantic_datum_plane `
-                    -q
+                & $pythonExe -m pytest -m solidworks_compile -q
             }
         }
         finally {

@@ -96,6 +96,17 @@ def curved_side_attachment_model_data() -> dict:
     }
 
 
+def patterned_model_data() -> dict:
+    return json.loads(
+        (
+            PROJECT_ROOT
+            / "examples"
+            / "models"
+            / "solidworks_smoke_patterned_plate.json"
+        ).read_text(encoding="utf-8")
+    )
+
+
 def package_files(content: bytes) -> dict[str, bytes]:
     with ZipFile(BytesIO(content)) as archive:
         return {name: archive.read(name) for name in archive.namelist()}
@@ -479,8 +490,21 @@ def test_launcher_rejects_an_incompatible_package_version(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to use installed API registration",
 )
-def test_launcher_accepts_only_a_complete_native_receipt(tmp_path: Path):
-    package = create_solidworks_package(fixture_model_data(), "Receipt check")
+@pytest.mark.solidworks_compile
+@pytest.mark.parametrize(
+    "model_data",
+    [
+        fixture_model_data(),
+        patterned_model_data(),
+        curved_side_attachment_model_data(),
+    ],
+    ids=["basic", "native-patterns", "virtual-face-supports"],
+)
+def test_launcher_accepts_only_a_complete_native_receipt(
+    tmp_path: Path,
+    model_data: dict,
+):
+    package = create_solidworks_package(model_data, "Receipt check")
     extract_package(package.content, tmp_path)
     plan = json.loads(
         (tmp_path / "solidworks-replay-plan.json").read_text(encoding="utf-8")
@@ -519,6 +543,7 @@ def test_launcher_accepts_only_a_complete_native_receipt(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to use installed API registration",
 )
+@pytest.mark.solidworks_compile
 def test_launcher_removes_output_when_native_receipt_is_incomplete(
     tmp_path: Path,
 ):
@@ -566,6 +591,7 @@ def test_launcher_removes_output_when_native_receipt_is_incomplete(
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
 )
+@pytest.mark.solidworks_compile
 def test_extracted_package_setup_check_compiles_runner(tmp_path: Path):
     package = create_solidworks_package(fixture_model_data(), "Setup check")
     extract_package(package.content, tmp_path)
@@ -607,6 +633,7 @@ def test_extracted_package_setup_check_compiles_runner(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
 )
+@pytest.mark.solidworks_compile
 def test_setup_check_rejects_conflicting_canonical_revolve_axis(tmp_path: Path):
     model_data = {
         "operations": [
@@ -661,6 +688,7 @@ def test_setup_check_rejects_conflicting_canonical_revolve_axis(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
 )
+@pytest.mark.solidworks_compile
 def test_setup_check_rejects_a_malformed_geometry_oracle(tmp_path: Path):
     package = create_solidworks_package(fixture_model_data(), "Oracle validation")
     extract_package(package.content, tmp_path)
@@ -699,6 +727,7 @@ def test_setup_check_rejects_a_malformed_geometry_oracle(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
 )
+@pytest.mark.solidworks_compile
 def test_compile_only_geometry_probe_executes_native_comparator(tmp_path: Path):
     package = create_solidworks_package(fixture_model_data(), "Geometry probe")
     extract_package(package.content, tmp_path)
@@ -744,6 +773,7 @@ def test_compile_only_geometry_probe_executes_native_comparator(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
 )
+@pytest.mark.solidworks_compile
 def test_compile_only_geometry_probe_rejects_volume_mismatch(tmp_path: Path):
     package = create_solidworks_package(fixture_model_data(), "Geometry mismatch")
     extract_package(package.content, tmp_path)
@@ -792,6 +822,7 @@ def test_compile_only_geometry_probe_rejects_volume_mismatch(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
 )
+@pytest.mark.solidworks_compile
 def test_compile_only_mutation_probe_accepts_pattern_controls(tmp_path: Path):
     model_data = json.loads(
         (
@@ -850,6 +881,7 @@ def test_compile_only_mutation_probe_accepts_pattern_controls(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
 )
+@pytest.mark.solidworks_compile
 def test_compile_only_mutation_probe_rejects_collapsed_linear_pattern(
     tmp_path: Path,
 ):
@@ -904,6 +936,7 @@ def test_compile_only_mutation_probe_rejects_collapsed_linear_pattern(
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
 )
+@pytest.mark.solidworks_compile
 def test_setup_check_rejects_duplicate_native_names(tmp_path: Path):
     package = create_solidworks_package(fixture_model_data(), "Name validation")
     extract_package(package.content, tmp_path)
@@ -942,6 +975,7 @@ def test_setup_check_rejects_duplicate_native_names(tmp_path: Path):
     os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
 )
+@pytest.mark.solidworks_compile
 def test_setup_check_rejects_unknown_semantic_datum_plane(tmp_path: Path):
     package = create_solidworks_package(fixture_model_data(), "Datum validation")
     extract_package(package.content, tmp_path)
