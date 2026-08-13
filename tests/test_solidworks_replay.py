@@ -286,6 +286,7 @@ def native_edit_receipt(
     plan,
     output_path: Path,
     *,
+    source_path: Path,
     mutations: dict[str, float] | None = None,
     after_geometry: dict | None = None,
     **extra,
@@ -301,6 +302,7 @@ def native_edit_receipt(
     ]
     return {
         "status": "success",
+        "source_path": str(source_path.resolve()),
         "output_path": str(output_path.resolve()),
         "reopened": True,
         "source_geometry_verification_passed": True,
@@ -2089,6 +2091,7 @@ def test_export_removes_unverified_output_and_new_receipt(tmp_path: Path):
     [
         "feature_order",
         "parameter_identity",
+        "dimension_count",
         "sketch_health",
         "persistent_reference",
         "geometry",
@@ -2112,6 +2115,8 @@ def test_export_rejects_incomplete_native_contract(
             )
         elif corruption == "parameter_identity":
             receipt["verified_parameter_ids"][0] = "wrong.parameter"
+        elif corruption == "dimension_count":
+            receipt.pop("verified_dimension_count")
         elif corruption == "sketch_health":
             receipt["health"]["sketches"][0]["is_valid"] = False
         elif corruption == "persistent_reference":
@@ -2203,6 +2208,7 @@ def test_editability_verification_reopens_and_mutates_bound_parameters(
                 native_edit_receipt(
                     plan,
                     actual_output,
+                    source_path=source_path,
                     mutations=changes,
                     after_geometry=expected_edited_geometry,
                 )
@@ -2293,6 +2299,7 @@ def test_editability_removes_output_without_complete_proof(tmp_path: Path):
         receipt = native_edit_receipt(
             plan,
             actual_output,
+            source_path=source_path,
             mutations={"base.sketch.width": 90},
             after_geometry=edited_geometry(
                 model_data,
@@ -2327,6 +2334,7 @@ def test_editability_removes_output_without_complete_proof(tmp_path: Path):
     "corruption",
     [
         "mutation_identity",
+        "source_identity",
         "sketch_health",
         "persistent_reference",
         "source_geometry",
@@ -2352,11 +2360,16 @@ def test_editability_rejects_incomplete_native_contract(
         receipt = native_edit_receipt(
             plan,
             actual_output,
+            source_path=source_path,
             mutations=changes,
             after_geometry=expected_edited_geometry,
         )
         if corruption == "mutation_identity":
             receipt["mutated_parameter_ids"] = ["wrong.parameter"]
+        elif corruption == "source_identity":
+            receipt["source_path"] = str(
+                (tmp_path / "different-source.SLDPRT").resolve()
+            )
         elif corruption == "sketch_health":
             receipt["health"]["sketches"][0]["is_valid"] = False
         elif corruption == "persistent_reference":
@@ -2419,6 +2432,7 @@ def test_editability_verification_preserves_signed_placement_side(
                 native_edit_receipt(
                     plan,
                     actual_output,
+                    source_path=source_path,
                     mutations=changes,
                     after_geometry=expected_edited_geometry,
                 )
@@ -2704,6 +2718,7 @@ def test_editability_preflight_validates_countersink_dimensions_together(
                 native_edit_receipt(
                     plan,
                     actual_output,
+                    source_path=source_path,
                     mutations=changes,
                     after_geometry=expected_edited_geometry,
                 )

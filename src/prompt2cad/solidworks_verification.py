@@ -40,6 +40,7 @@ def validate_native_build_result(
         plan,
         native_result,
         context=context,
+        require_dimension_count=True,
     )
     summary["verification_passed"] = True
     summary["geometry_verification_passed"] = (
@@ -91,6 +92,7 @@ def validate_native_editability_result(
         plan,
         native_result,
         context=context,
+        require_dimension_count=False,
     )
     summary.update(
         {
@@ -120,6 +122,7 @@ def _validate_native_contract_counts(
     native_result: dict,
     *,
     context: str,
+    require_dimension_count: bool,
 ) -> dict:
     expected_parameter_count = sum(
         len(feature.parameter_bindings) for feature in plan.features
@@ -152,7 +155,7 @@ def _validate_native_contract_counts(
         raise RuntimeError(
             f"{context} verified parameter identities do not match the replay plan"
         )
-    if "verified_dimension_count" in native_result:
+    if require_dimension_count:
         _require_exact_count(
             native_result,
             "verified_dimension_count",

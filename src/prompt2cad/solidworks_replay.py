@@ -786,6 +786,7 @@ def verify_solidworks_editability(
             receipt_validator=lambda receipt: _validate_native_edit_receipt(
                 plan,
                 receipt,
+                expected_source_path=source_path,
                 expected_mutation_ids=mutations,
                 expected_edited_geometry=mutation_document[
                     "expected_geometry"
@@ -889,6 +890,7 @@ def _validate_native_edit_receipt(
     plan: SolidWorksReplayPlan,
     receipt: dict,
     *,
+    expected_source_path: Path,
     expected_mutation_ids: Collection[str],
     expected_edited_geometry: dict,
     context: str,
@@ -901,6 +903,15 @@ def _validate_native_edit_receipt(
     from prompt2cad.solidworks_verification import validate_published_references
 
     try:
+        reported_source = receipt.get("source_path")
+        if not isinstance(reported_source, str) or not reported_source.strip():
+            raise RuntimeError(
+                f"{context} receipt did not identify its source part"
+            )
+        if Path(reported_source).resolve() != expected_source_path:
+            raise RuntimeError(
+                f"{context} receipt identifies a different source part"
+            )
         validate_native_editability_result(
             plan,
             receipt,
