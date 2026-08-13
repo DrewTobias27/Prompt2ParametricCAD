@@ -216,9 +216,10 @@ patterns; countersinks; chamfers; and fillets. It preserves semantic face and
 edge targets, persistent native reference IDs, local placement frames, and
 deterministic feature names rather than importing a featureless STEP body. The
 runner verifies declared parameters, fully defined sketches, feature health,
-geometry parity, and persistent-reference resolution. Planning, serialization,
-and automation are regression-tested without opening SolidWorks; each installed
-SolidWorks version still requires a native smoke test before release use.
+body count, volume, surface area, absolute bounds, center of mass, and
+persistent-reference resolution. Planning, serialization, and automation are
+regression-tested without opening SolidWorks; each installed SolidWorks version
+still requires a native smoke test before release use.
 The hosted application packages the source model, editable-model document,
 validated replay plan, and local runner into a ZIP. After extraction, run
 `Build-SolidWorks-Part.cmd` on Windows with SolidWorks installed. The launcher

@@ -550,6 +550,12 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "volume_mm3")]
         public double VolumeCubicMillimeters { get; set; }
 
+        [DataMember(Name = "surface_area_mm2")]
+        public double SurfaceAreaSquareMillimeters { get; set; }
+
+        [DataMember(Name = "center_of_mass_mm")]
+        public double[] CenterOfMassMillimeters { get; set; }
+
         [DataMember(Name = "bounding_box_mm")]
         public double[] BoundingBoxMillimeters { get; set; }
     }
@@ -1495,6 +1501,8 @@ namespace Prompt2Cad.SolidWorks
             }
 
             double volumeCubicMeters = 0.0;
+            double surfaceAreaSquareMeters = 0.0;
+            double[] volumeWeightedCenter = new double[3];
             double[] boundingBox = null;
             foreach (object bodyObject in bodyObjects)
             {
@@ -1509,13 +1517,27 @@ namespace Prompt2Cad.SolidWorks
                     value,
                     CultureInfo.InvariantCulture
                 )).ToArray();
-                if (massProperties.Length < 4)
+                if (massProperties.Length < 5)
                 {
                     throw new InvalidOperationException(
                         "SOLIDWORKS did not return solid-body mass properties."
                     );
                 }
-                volumeCubicMeters += massProperties[3];
+                double bodyVolume = massProperties[3];
+                if (Double.IsNaN(bodyVolume) ||
+                    Double.IsInfinity(bodyVolume) || bodyVolume <= 0.0)
+                {
+                    throw new InvalidOperationException(
+                        "SOLIDWORKS returned an invalid solid-body volume."
+                    );
+                }
+                volumeCubicMeters += bodyVolume;
+                surfaceAreaSquareMeters += massProperties[4];
+                for (int axis = 0; axis < 3; axis++)
+                {
+                    volumeWeightedCenter[axis] +=
+                        massProperties[axis] * bodyVolume;
+                }
                 double[] bodyBox = ObjectItems(body.GetBodyBox())
                     .Select(value => Convert.ToDouble(
                         value,
@@ -1549,11 +1571,32 @@ namespace Prompt2Cad.SolidWorks
                     "SOLIDWORKS did not return a solid-body bounding box."
                 );
             }
+            if (volumeCubicMeters <= 0.0 ||
+                Double.IsNaN(surfaceAreaSquareMeters) ||
+                Double.IsInfinity(surfaceAreaSquareMeters) ||
+                surfaceAreaSquareMeters <= 0.0)
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS returned invalid aggregate mass properties."
+                );
+            }
             return new NativeGeometryResult
             {
                 SolidBodyCount = bodyObjects.Length,
                 VolumeCubicMillimeters =
                     volumeCubicMeters * Math.Pow(MillimetersPerMeter, 3),
+                SurfaceAreaSquareMillimeters =
+                    surfaceAreaSquareMeters *
+                    Math.Pow(MillimetersPerMeter, 2),
+                CenterOfMassMillimeters = new[]
+                {
+                    volumeWeightedCenter[0] / volumeCubicMeters *
+                        MillimetersPerMeter,
+                    volumeWeightedCenter[1] / volumeCubicMeters *
+                        MillimetersPerMeter,
+                    volumeWeightedCenter[2] / volumeCubicMeters *
+                        MillimetersPerMeter,
+                },
                 BoundingBoxMillimeters = boundingBox,
             };
         }

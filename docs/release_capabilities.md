@@ -130,6 +130,12 @@ angles, pattern controls, and non-centered rectangle/circle placements have
 named automated mutation bindings. Centered placement is held by a coincident
 relation rather than a zero-valued driving dimension.
 
+Native geometry parity requires more than a successful rebuild. The verifier
+compares body count, volume, surface area, every absolute bounding-box limit,
+and center of mass against CadQuery. This catches equal-size geometry built in
+the wrong location and materially different shapes that happen to share a
+volume or envelope.
+
 Polyline vertices plus explicit-sketch start, end, and arc-through coordinates
 are exposed through stable native dimensions when nonzero. Zero coordinates use
 native horizontal/vertical relations. Three-point arc centers and radii are

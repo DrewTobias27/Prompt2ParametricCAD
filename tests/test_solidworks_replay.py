@@ -1340,6 +1340,8 @@ def test_native_runner_accepts_the_current_replay_plan_version():
     assert 'DataMember(Name = "canonical_axis")' in runner_source
     assert "ValidateCanonicalRevolveAxis(step)" in runner_source
     assert "ValidatePlanFile(string planPath)" in runner_source
+    assert 'DataMember(Name = "surface_area_mm2")' in runner_source
+    assert 'DataMember(Name = "center_of_mass_mm")' in runner_source
 
 
 def test_native_runner_replays_offset_planes_and_reverse_attachment_depths():

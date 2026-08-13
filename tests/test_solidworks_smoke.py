@@ -306,3 +306,56 @@ def test_geometry_comparison_rejects_a_missing_pattern_instance():
 
     with pytest.raises(RuntimeError, match="volume differs"):
         compare_geometry_metrics(cadquery, missing_instance)
+
+
+def test_geometry_metrics_include_position_and_shape_invariants():
+    import cadquery as cq
+
+    metrics = geometry_metrics(
+        cq.Workplane("XY").box(20, 10, 5).translate((7, -3, 2))
+    )
+
+    assert metrics["surface_area_mm2"] == pytest.approx(700)
+    assert metrics["center_of_mass_mm"] == pytest.approx([7, -3, 2])
+    assert metrics["bounding_box_mm"] == pytest.approx(
+        [-3, -8, -0.5, 17, 2, 4.5]
+    )
+
+
+def test_geometry_comparison_rejects_a_translated_equal_size_part():
+    expected = {
+        "solid_body_count": 1,
+        "volume_mm3": 1000.0,
+        "surface_area_mm2": 700.0,
+        "center_of_mass_mm": [0, 0, 0],
+        "bounding_box_mm": [-10, -5, -2.5, 10, 5, 2.5],
+    }
+    translated = {
+        **expected,
+        "center_of_mass_mm": [5, 0, 0],
+        "bounding_box_mm": [-5, -5, -2.5, 15, 5, 2.5],
+    }
+
+    with pytest.raises(RuntimeError, match="bounding-box position"):
+        compare_geometry_metrics(expected, translated)
+
+
+def test_geometry_comparison_rejects_wrong_surface_or_mass_distribution():
+    expected = {
+        "solid_body_count": 1,
+        "volume_mm3": 1000.0,
+        "surface_area_mm2": 700.0,
+        "center_of_mass_mm": [0, 0, 0],
+        "bounding_box_mm": [-10, -5, -2.5, 10, 5, 2.5],
+    }
+
+    with pytest.raises(RuntimeError, match="surface area differs"):
+        compare_geometry_metrics(
+            expected,
+            {**expected, "surface_area_mm2": 760.0},
+        )
+    with pytest.raises(RuntimeError, match="center of mass"):
+        compare_geometry_metrics(
+            expected,
+            {**expected, "center_of_mass_mm": [2, 0, 0]},
+        )
