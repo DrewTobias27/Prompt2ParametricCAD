@@ -317,6 +317,16 @@ def test_native_contract_rejects_missing_helpers_and_unhealthy_sketches(
     with pytest.raises(RuntimeError, match="verified_helper_count"):
         validate_native_build_result(plan, missing_helper, context="test")
 
+    wrong_helper_identity = native_result_factory(plan)
+    wrong_helper_identity["verified_helper_names"][0] = "wrong_helper"
+    with pytest.raises(RuntimeError, match="helper identities"):
+        validate_native_build_result(plan, wrong_helper_identity, context="test")
+
+    wrong_parameter_identity = native_result_factory(plan)
+    wrong_parameter_identity["verified_parameter_ids"][0] = "wrong.parameter"
+    with pytest.raises(RuntimeError, match="parameter identities"):
+        validate_native_build_result(plan, wrong_parameter_identity, context="test")
+
     not_reopened = native_result_factory(plan)
     not_reopened["reopened"] = False
     with pytest.raises(RuntimeError, match="did not reopen"):

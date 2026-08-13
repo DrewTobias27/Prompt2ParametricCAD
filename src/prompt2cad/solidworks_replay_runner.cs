@@ -543,11 +543,17 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "verified_parameter_count")]
         public int VerifiedParameterCount { get; set; }
 
+        [DataMember(Name = "verified_parameter_ids")]
+        public string[] VerifiedParameterIds { get; set; }
+
         [DataMember(Name = "declared_helper_count")]
         public int DeclaredHelperCount { get; set; }
 
         [DataMember(Name = "verified_helper_count")]
         public int VerifiedHelperCount { get; set; }
+
+        [DataMember(Name = "verified_helper_names")]
+        public string[] VerifiedHelperNames { get; set; }
 
         [DataMember(Name = "health")]
         public NativeHealthResult Health { get; set; }
@@ -602,11 +608,17 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "verified_parameter_count")]
         public int VerifiedParameterCount { get; set; }
 
+        [DataMember(Name = "verified_parameter_ids")]
+        public string[] VerifiedParameterIds { get; set; }
+
         [DataMember(Name = "declared_helper_count")]
         public int DeclaredHelperCount { get; set; }
 
         [DataMember(Name = "verified_helper_count")]
         public int VerifiedHelperCount { get; set; }
+
+        [DataMember(Name = "verified_helper_names")]
+        public string[] VerifiedHelperNames { get; set; }
 
         [DataMember(Name = "before_geometry")]
         public NativeGeometryResult BeforeGeometry { get; set; }
@@ -949,10 +961,14 @@ namespace Prompt2Cad.SolidWorks
                             parameterVerification.DeclaredParameterCount,
                         VerifiedParameterCount =
                             parameterVerification.VerifiedParameterCount,
+                        VerifiedParameterIds =
+                            parameterVerification.VerifiedParameterIds,
                         DeclaredHelperCount =
                             parameterVerification.DeclaredHelperCount,
                         VerifiedHelperCount =
                             parameterVerification.VerifiedHelperCount,
+                        VerifiedHelperNames =
+                            parameterVerification.VerifiedHelperNames,
                         Health = health,
                         Geometry = geometry,
                         PublishedReferences = publishedReferences,
@@ -1169,10 +1185,12 @@ namespace Prompt2Cad.SolidWorks
                             verification.DeclaredParameterCount,
                         VerifiedParameterCount =
                             verification.VerifiedParameterCount,
+                        VerifiedParameterIds = verification.VerifiedParameterIds,
                         DeclaredHelperCount =
                             verification.DeclaredHelperCount,
                         VerifiedHelperCount =
                             verification.VerifiedHelperCount,
+                        VerifiedHelperNames = verification.VerifiedHelperNames,
                         BeforeGeometry = beforeGeometry,
                         AfterGeometry = afterGeometry,
                         Health = reopenedHealth,
@@ -5147,6 +5165,8 @@ namespace Prompt2Cad.SolidWorks
             public int VerifiedDimensionCount { get; set; }
             public int DeclaredHelperCount { get; set; }
             public int VerifiedHelperCount { get; set; }
+            public string[] VerifiedParameterIds { get; set; }
+            public string[] VerifiedHelperNames { get; set; }
         }
 
         private static NativeHealthResult InspectNativeHealth(
@@ -5782,6 +5802,8 @@ namespace Prompt2Cad.SolidWorks
             int verifiedDimensionCount = 0;
             int declaredHelperCount = 0;
             int verifiedHelperCount = 0;
+            var verifiedParameterIds = new List<string>();
+            var verifiedHelperNames = new List<string>();
             foreach (ReplayStep step in plan.Features)
             {
                 if (!String.IsNullOrWhiteSpace(step.SketchName) &&
@@ -5808,6 +5830,7 @@ namespace Prompt2Cad.SolidWorks
                         );
                     }
                     verifiedHelperCount += 1;
+                    verifiedHelperNames.Add(helperName);
                 }
 
                 NativeParameterBinding[] bindings =
@@ -5849,6 +5872,7 @@ namespace Prompt2Cad.SolidWorks
                         );
                     }
                     verifiedParameterCount += 1;
+                    verifiedParameterIds.Add(binding.ParameterId);
                 }
 
                 foreach (NativeReferenceSpec reference in
@@ -5883,6 +5907,8 @@ namespace Prompt2Cad.SolidWorks
                 VerifiedDimensionCount = verifiedDimensionCount,
                 DeclaredHelperCount = declaredHelperCount,
                 VerifiedHelperCount = verifiedHelperCount,
+                VerifiedParameterIds = verifiedParameterIds.ToArray(),
+                VerifiedHelperNames = verifiedHelperNames.ToArray(),
             };
         }
 

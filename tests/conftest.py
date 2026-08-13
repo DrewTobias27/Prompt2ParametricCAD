@@ -34,8 +34,12 @@ def native_result_factory() -> Callable[..., dict]:
             "status": "success",
             "declared_parameter_count": len(parameter_bindings),
             "verified_parameter_count": len(parameter_bindings),
+            "verified_parameter_ids": [
+                binding["parameter_id"] for binding in parameter_bindings
+            ],
             "declared_helper_count": len(helper_names),
             "verified_helper_count": len(helper_names),
+            "verified_helper_names": helper_names,
             "health": {
                 "features": [
                     {

@@ -99,6 +99,15 @@ def _validate_native_contract_counts(
         expected_parameter_count,
         context=context,
     )
+    expected_parameter_ids = [
+        binding["parameter_id"]
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    ]
+    if native_result.get("verified_parameter_ids") != expected_parameter_ids:
+        raise RuntimeError(
+            f"{context} verified parameter identities do not match the replay plan"
+        )
     if "verified_dimension_count" in native_result:
         _require_exact_count(
             native_result,
@@ -118,6 +127,10 @@ def _validate_native_contract_counts(
         len(expected_helper_names),
         context=context,
     )
+    if native_result.get("verified_helper_names") != list(expected_helper_names):
+        raise RuntimeError(
+            f"{context} verified helper identities do not match the replay plan"
+        )
     _validate_native_health(plan, native_result.get("health"), context=context)
     return {
         "parameter_count": expected_parameter_count,
