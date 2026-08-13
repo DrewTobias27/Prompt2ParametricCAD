@@ -1787,6 +1787,30 @@ def test_native_runner_stages_verified_outputs_before_publication():
     assert "File.Move(stagedOutput, resolvedOutput)" in runner_source
 
 
+def test_native_build_and_edit_keep_failure_traces_only():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    trace_initialization = (
+        'tracePath = Path.GetFullPath(outputPath) + ".replay.log";'
+    )
+    assert runner_source.count(trace_initialization) == 2
+    assert runner_source.count('"P2P_KEEP_SOLIDWORKS_TRACE"') == 2
+    assert runner_source.count("TryDeleteTrace();") == 2
+    edit_section = runner_source[
+        runner_source.index("public static string VerifyEditablePart") :
+        runner_source.index("private static string PrepareNewOutputPath")
+    ]
+    assert "Reading replay plan for native edit verification" in edit_section
+    assert "string resultJson = WriteEditabilityJson(" in edit_section
+    assert "TryDeleteTrace();" in edit_section
+    assert "return resultJson;" in edit_section
+
+
 def test_native_runner_dimensions_rectangles_in_their_local_feature_frame():
     runner_source = (
         Path(__file__).parents[1]

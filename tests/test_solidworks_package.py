@@ -193,6 +193,8 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"limited to their current origin side" in readme
     assert b"will not overwrite an existing SLDPRT" in readme
     assert b"temporary staged file" in readme
+    assert b"SLDPRT.replay.log" in readme
+    assert b"Successful runs remove this diagnostic log" in readme
     assert b"solidworks-replay-plan.json" in launcher
     assert b"SolidWorks package version 10" in launcher
     assert b"Saved file reopened" in launcher

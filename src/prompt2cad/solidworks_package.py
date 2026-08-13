@@ -490,7 +490,9 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
         the source CadQuery result; rebuilds; and publishes the SLDPRT from a
         temporary staged file only after those checks pass. The JSON report
         records the verified native result. If any stage fails, the staged file
-        is removed, the window identifies the failing condition, and no
-        successful native export should be assumed.
+        is removed, the window identifies the failing condition, and a
+        `<part>.SLDPRT.replay.log` file retains the completed stage history for
+        troubleshooting. Successful runs remove this diagnostic log. No
+        successful native export should be assumed after a reported failure.
         """
     ).lstrip()

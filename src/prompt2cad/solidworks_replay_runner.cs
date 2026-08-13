@@ -1122,6 +1122,12 @@ namespace Prompt2Cad.SolidWorks
             string mutationPath,
             bool visible)
         {
+            tracePath = Path.GetFullPath(outputPath) + ".replay.log";
+            if (File.Exists(tracePath))
+            {
+                File.Delete(tracePath);
+            }
+            Trace("Reading replay plan for native edit verification");
             ReplayPlan plan = ReadPlan(planPath);
             ValidateReplayPlan(plan);
             RequireExecutableGeometryOracle(plan);
@@ -1261,7 +1267,7 @@ namespace Prompt2Cad.SolidWorks
                 PublishStagedOutput(stagedOutput, resolvedOutput);
                 stagedOutput = null;
 
-                return WriteEditabilityJson(
+                string resultJson = WriteEditabilityJson(
                     new EditabilityResult
                     {
                         Status = "success",
@@ -1296,6 +1302,16 @@ namespace Prompt2Cad.SolidWorks
                         PublishedReferences = publishedReferences,
                     }
                 );
+                if (!String.Equals(
+                    System.Environment.GetEnvironmentVariable(
+                        "P2P_KEEP_SOLIDWORKS_TRACE"
+                    ),
+                    "1",
+                    StringComparison.Ordinal))
+                {
+                    TryDeleteTrace();
+                }
+                return resultJson;
             }
             finally
             {
