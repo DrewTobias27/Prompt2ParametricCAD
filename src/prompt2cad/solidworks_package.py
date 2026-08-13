@@ -17,7 +17,7 @@ from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
-SOLIDWORKS_PACKAGE_VERSION = 7
+SOLIDWORKS_PACKAGE_VERSION = 8
 _FIXED_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 

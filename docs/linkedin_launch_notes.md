@@ -35,12 +35,14 @@ Verified against the public deployment on August 10, 2026:
   native create/edit/reopen parity across the same coverage surface.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 13 package-v7 gate passed 584 Python tests, all six frontend
+- The August 13 package-v8 gate passed 591 Python/compile-contract tests, all six frontend
   behavior suites, a production frontend build, all seven golden end-to-end
-  cases, and all 292 generated capability cases. The three environment-gated
-  C# compile/plan-tamper checks also passed separately.
-- Package v7 assigns explicit collision-safe names to pattern/support helpers,
-  validates the complete native result contract, and closes/reopens the staged
+  cases, and all 292 generated capability cases. Four environment-gated C#
+  compile/plan-tamper checks ran inside that suite; only four tests requiring
+  a live SolidWorks application were skipped.
+- Package v8 assigns explicit collision-safe names to pattern/support helpers,
+  reports the exact parameter/helper/mutation identities it verifies, resolves
+  localized datum planes and part templates, and closes/reopens the staged
   `SLDPRT` before publishing it. The two installed-SolidWorks package tests
   remain the final workstation gate before the native claim is published.
 
@@ -68,7 +70,7 @@ The prepared portfolio renders are stored in the portfolio repository under
   scrollbars, API keys, local paths, or unrelated tabs.
 - Run one known-good prompt and one correction immediately before publishing.
 - Download both the STEP file and SolidWorks package from the public site.
-- Confirm the fresh download is a `v7-solidworks.zip`, run its setup check, then
+- Confirm the fresh download is a `v8-solidworks.zip`, run its setup check, then
   build it on Windows with SolidWorks and confirm the JSON report says the saved
   file reopened and all declared parameters/helpers verified.
 - Run the ten-case native smoke suite with editability verification and capture

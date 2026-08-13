@@ -55,9 +55,10 @@ and optionally double-click `Check-SolidWorks-Setup.cmd` first. That preflight
 checks the package, 64-bit PowerShell, SolidWorks registration and API files,
 compiles the replay engine, and validates the replay-plan contract without
 creating a part. Then run
-`Build-SolidWorks-Part.cmd`; package v7 stages the native part, closes and
-reopens it, verifies the saved history and helpers, and only then writes the
-final part plus a JSON verification report.
+`Build-SolidWorks-Part.cmd`; package v8 stages the native part, closes and
+reopens it, verifies the saved history, exact parameter/helper identities, and
+localized datum/template resolution, and only then writes the final part plus
+a JSON verification report.
 
 ## Public-release gate
 
@@ -67,9 +68,9 @@ Before linking the application from a LinkedIn post:
 2. Run its launcher on Windows with the supported SolidWorks version.
 3. Confirm the resulting `SLDPRT` opens, rebuilds, and exposes editable named
    sketches, dimensions, patterns, and ordered features.
-4. Confirm the package-v7 result reports `reopened: true`, equal declared and
-   verified parameter/helper counts, healthy features/sketches, matching
-   geometry, and resolved persistent face references.
+4. Confirm the package-v8 result reports `reopened: true`, exact verified
+   parameter/helper identities, healthy features/sketches, matching geometry,
+   and resolved persistent face references.
 5. Run `prompt2cad-solidworks-smoke --execute --verify-editability` and require
    every native parity fixture to pass. This is the focused native rerun for the
    current helper-identity and initial-save/reopen changes.
@@ -86,6 +87,9 @@ The public-release gate was exercised on August 10, 2026. The deployed site
 generated and refined a valid multi-feature model, both public download paths
 returned non-empty artifacts, and a package downloaded from the public URL
 created a native SolidWorks part with editable features and dimensions. That
-result predates the latest native-runner polish, so repeat the focused package
-and mutation checks above before publishing. The hosted service, external API,
-and installed SolidWorks version remain live dependencies.
+result predates package v8. The August 13 local v8 gate passed 591 tests, the
+7/7 golden release matrix, and all 292 STEP/native-plan capability cases. A
+fresh package downloaded from the deployed site must still pass the focused
+installed-SolidWorks build and mutation checks above before publishing. The
+hosted service, external API, and installed SolidWorks version remain live
+dependencies.
