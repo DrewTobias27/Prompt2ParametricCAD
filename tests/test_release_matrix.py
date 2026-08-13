@@ -46,6 +46,9 @@ def test_release_matrix_traverses_every_deterministic_stage(
     assert result["checks"]["step_round_trip"]["passed"] is True
     assert result["checks"]["editable_parameter_rebuild"]["passed"] is True
     assert result["checks"]["solidworks_replay_plan"]["passed"] is True
+    assert result["checks"]["solidworks_replay_plan"][
+        "native_mutation_preflight"
+    ]["mutation_count"] > 0
     assert (tmp_path / f"{case_name}.step").is_file()
     assert (tmp_path / f"{case_name}.solidworks-plan.json").is_file()
 

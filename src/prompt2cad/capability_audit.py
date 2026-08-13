@@ -26,6 +26,7 @@ from prompt2cad.schema import validate_model_data
 from prompt2cad.solidworks_replay import export_solidworks_part
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import verify_solidworks_editability
+from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_verification import compare_geometry_metrics
 from prompt2cad.solidworks_verification import geometry_metrics
@@ -945,6 +946,12 @@ def audit_capability_case(
             document=document,
         )
 
+        stage = "solidworks_mutation_preflight"
+        mutation_preflight = validate_solidworks_mutations(
+            plan,
+            case.mutations,
+        )
+
         stage = "parameter_repair"
         edited_part, edited_document = rebuild_with_parameter_updates(
             document,
@@ -1053,6 +1060,7 @@ def audit_capability_case(
             "original_geometry": original_metrics,
             "edited_geometry": edited_metrics,
             "mutations": case.mutations,
+            "native_mutation_preflight": mutation_preflight,
             "step_round_trip": step_result,
             "solidworks_native": native_result,
             "elapsed_seconds": round(time.perf_counter() - started, 4),
@@ -1149,6 +1157,14 @@ def run_capability_audit(
         coverage["relation_controlled_count"]
         for coverage in successful_coverages
     )
+    restricted_parameter_count = sum(
+        len(coverage["restricted_parameter_ids"])
+        for coverage in successful_coverages
+    )
+    unsupported_parameter_count = sum(
+        len(coverage["unsupported_parameter_ids"])
+        for coverage in successful_coverages
+    )
     controlled_count = bound_count + relation_controlled_count
     return {
         "case_count": len(cases),
@@ -1172,6 +1188,20 @@ def run_capability_audit(
             ),
             "fully_bound_cases": sum(
                 coverage["coverage_ratio"] == 1.0
+                for coverage in successful_coverages
+            ),
+            "fully_controlled_cases": sum(
+                coverage["control_coverage_ratio"] == 1.0
+                for coverage in successful_coverages
+            ),
+            "restricted_parameter_count": restricted_parameter_count,
+            "cases_with_restricted_parameters": sum(
+                bool(coverage["restricted_parameter_ids"])
+                for coverage in successful_coverages
+            ),
+            "unsupported_parameter_count": unsupported_parameter_count,
+            "cases_with_unsupported_parameters": sum(
+                bool(coverage["unsupported_parameter_ids"])
                 for coverage in successful_coverages
             ),
             "cases_measured": len(successful_coverages),

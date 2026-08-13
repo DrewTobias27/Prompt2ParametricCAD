@@ -45,6 +45,9 @@ def test_every_native_smoke_fixture_builds_and_plans(tmp_path: Path):
         assert Path(result["step_path"]).is_file()
         assert Path(result["plan_path"]).is_file()
         assert result["operation_count"] == result["native_feature_count"]
+        assert result["native_mutation_preflight"]["mutation_count"] == len(
+            EDITABILITY_SCENARIOS[result["name"]]
+        )
 
 
 def test_every_native_fixture_has_a_valid_bound_editability_scenario():

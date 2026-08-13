@@ -17,6 +17,7 @@ from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_export import save_plan
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
+from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_replay import verify_solidworks_editability
 from prompt2cad.solidworks_verification import compare_geometry_metrics
 from prompt2cad.solidworks_verification import geometry_metrics
@@ -172,6 +173,12 @@ def run_smoke_suite(
                 plan,
                 document=source_document,
             )
+            mutations = EDITABILITY_SCENARIOS.get(name)
+            result["native_mutation_preflight"] = (
+                validate_solidworks_mutations(plan, mutations)
+                if mutations is not None
+                else None
+            )
 
             if execute_native:
                 native_exporter(
@@ -204,7 +211,6 @@ def run_smoke_suite(
                     cadquery_metrics,
                     native_metrics,
                 )
-                mutations = EDITABILITY_SCENARIOS.get(name)
                 if verify_editability and mutations is not None:
                     expected_part, _ = rebuild_with_parameter_updates(
                         source_document,

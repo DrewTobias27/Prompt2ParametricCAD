@@ -455,6 +455,44 @@ def export_solidworks_part(
     return output_path
 
 
+def validate_solidworks_mutations(
+    plan: SolidWorksReplayPlan,
+    mutations: dict[str, float],
+) -> dict:
+    """Validate one native edit transaction without launching SolidWorks."""
+    if not mutations:
+        raise SolidWorksExecutionError(
+            "Native mutation preflight requires at least one parameter change"
+        )
+    bindings = {
+        binding["parameter_id"]: binding
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    }
+    unknown = sorted(set(mutations) - set(bindings))
+    if unknown:
+        raise SolidWorksExecutionError(
+            "Unknown native parameter IDs: " + ", ".join(unknown)
+        )
+    native_mutations = {
+        parameter_id: _validate_native_mutation(
+            parameter_id,
+            float(value),
+            bindings[parameter_id],
+        )
+        for parameter_id, value in mutations.items()
+    }
+    _validate_native_mutation_set(plan, bindings, native_mutations)
+    return {
+        "mutation_count": len(mutations),
+        "parameter_ids": sorted(mutations),
+        "native_values": {
+            parameter_id: native_mutations[parameter_id]
+            for parameter_id in sorted(native_mutations)
+        },
+    }
+
+
 def verify_solidworks_editability(
     plan: SolidWorksReplayPlan,
     source_path: Path,
@@ -491,30 +529,12 @@ def verify_solidworks_editability(
         raise SolidWorksExecutionError(
             f"Refusing to overwrite existing SOLIDWORKS output: {output_path}"
         )
-    if not mutations:
-        raise SolidWorksExecutionError(
-            "Editability verification requires at least one parameter mutation"
-        )
-
+    validate_solidworks_mutations(plan, mutations)
     bindings = {
         binding["parameter_id"]: binding
         for feature in plan.features
         for binding in feature.parameter_bindings
     }
-    unknown = sorted(set(mutations) - set(bindings))
-    if unknown:
-        raise SolidWorksExecutionError(
-            "Unknown native parameter IDs: " + ", ".join(unknown)
-        )
-    native_mutations = {
-        parameter_id: _validate_native_mutation(
-            parameter_id,
-            float(value),
-            bindings[parameter_id],
-        )
-        for parameter_id, value in mutations.items()
-    }
-    _validate_native_mutation_set(plan, bindings, native_mutations)
     mutation_document = {
         "format": "prompt2cad.solidworks-mutations",
         "version": 1,

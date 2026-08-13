@@ -110,6 +110,15 @@ def test_representative_high_risk_cases_build_plan_and_repair():
         result for result in report["results"] if result["status"] == "fail"
     ]
     assert report["passed"] == len(REPRESENTATIVE_CASE_NAMES)
+    assert all(
+        result["native_mutation_preflight"]["mutation_count"]
+        == len(result["mutations"])
+        for result in report["results"]
+    )
+    coverage = report["native_parameter_coverage"]
+    assert coverage["fully_controlled_cases"] >= coverage["fully_bound_cases"]
+    assert coverage["restricted_parameter_count"] >= 0
+    assert coverage["unsupported_parameter_count"] >= 0
 
 
 def test_representative_step_round_trips(tmp_path: Path):

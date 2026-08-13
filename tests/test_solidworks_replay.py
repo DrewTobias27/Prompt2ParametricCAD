@@ -16,6 +16,7 @@ from prompt2cad.solidworks_replay import SOLIDWORKS_PARITY_MATRIX
 from prompt2cad.solidworks_replay import SolidWorksExecutionError
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
+from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_replay import verify_solidworks_editability
 
 
@@ -1770,6 +1771,31 @@ def test_editability_verification_preserves_signed_placement_side(
     )
 
     assert captured["mutations"]["mutations"][0]["value"] == -20.0
+
+
+def test_native_mutation_preflight_needs_no_solidworks_files():
+    model_data = native_model_data()
+    model_data["operations"][1]["positions"] = [[-12, 7]]
+
+    result = validate_solidworks_mutations(
+        replay_plan(model_data),
+        {
+            "base.sketch.width": 90,
+            "boss.placement.inst001.x": -20,
+        },
+    )
+
+    assert result == {
+        "mutation_count": 2,
+        "parameter_ids": [
+            "base.sketch.width",
+            "boss.placement.inst001.x",
+        ],
+        "native_values": {
+            "base.sketch.width": 90.0,
+            "boss.placement.inst001.x": 20.0,
+        },
+    }
 
 
 @pytest.mark.parametrize("unsafe_value", [0, 12])

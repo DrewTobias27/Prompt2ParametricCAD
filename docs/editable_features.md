@@ -131,6 +131,9 @@ well as boss/cut features, through and blind end conditions, patterns, full and
 partial revolves, asymmetric freeform edge treatments, and multi-level feature
 dependencies. A separate generated release matrix expands this to 292
 profile/operation/face/pattern combinations and multi-feature repair chains.
+A plan-only mutation preflight now runs across that entire 292-case matrix, so
+binding, value-domain, and dependent-parameter failures are caught without
+waiting for a SolidWorks session. The current matrix passes 292/292.
 A focused installed-SolidWorks follow-up completed native creation and
 save/reopen mutation verification for the six angled-planar cases added after
 the original 286-case run, establishing a 292-case native baseline. The latest

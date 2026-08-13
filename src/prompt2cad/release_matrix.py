@@ -24,6 +24,7 @@ from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.exporter import export_step
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
+from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_replay import verify_solidworks_editability
 from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_verification import compare_geometry_metrics
@@ -255,21 +256,15 @@ def run_release_case(
             plan,
             document=document,
         )
-        bound_ids = {
-            binding["parameter_id"]
-            for feature in plan.features
-            for binding in feature.parameter_bindings
-        }
-        unbound_mutations = sorted(set(case.mutations) - bound_ids)
-        if unbound_mutations:
-            raise ValueError(
-                "Editability probe parameters lack native bindings: "
-                + ", ".join(unbound_mutations)
-            )
+        mutation_preflight = validate_solidworks_mutations(
+            plan,
+            case.mutations,
+        )
         result["checks"][stage] = {
             "passed": True,
             "native_feature_count": len(plan.features),
             "native_parameter_coverage": coverage,
+            "native_mutation_preflight": mutation_preflight,
             "published_reference_count": sum(
                 len(feature.publish_references) for feature in plan.features
             ),
