@@ -1441,6 +1441,22 @@ def test_powershell_runner_discovers_solidworks_without_one_fixed_install_path()
     assert "Could not locate a SolidWorks API installation" in script_source
 
 
+def test_native_runner_resolves_part_templates_without_an_english_filename():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    configured_index = runner_source.index("swDefaultTemplatePart")
+    api_index = runner_source.index("application.GetDocumentTemplate(")
+    legacy_index = runner_source.index('"Part.PRTDOT"')
+
+    assert configured_index < api_index < legacy_index
+    assert "(int)swDocumentTypes_e.swDocPART" in runner_source[api_index:legacy_index]
+
+
 def test_native_runner_reports_feature_errors_and_sketch_constraint_status():
     runner_source = (
         Path(__file__).parents[1]

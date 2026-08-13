@@ -133,8 +133,9 @@ not larger than the through-hole diameter.
 
 The runner temporarily disables SolidWorks' interactive dimension-entry prompt
 and restores the user's prior setting after replay. It uses the configured part
-template when available and falls back to the newest installed standard part
-template. Ten real-application smoke models cover every supported profile as
+template when available, asks the SolidWorks document-template API for the
+local part template when needed, and only then falls back to the newest
+installed standard part template. Ten real-application smoke models cover every supported profile as
 well as boss/cut features, through and blind end conditions, patterns, full and
 partial revolves, asymmetric freeform edge treatments, and multi-level feature
 dependencies. A separate generated release matrix expands this to 292

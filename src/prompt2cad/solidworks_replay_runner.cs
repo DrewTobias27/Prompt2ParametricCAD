@@ -1807,6 +1807,29 @@ namespace Prompt2Cad.SolidWorks
             {
             }
 
+            try
+            {
+                string discovered = application.GetDocumentTemplate(
+                    (int)swDocumentTypes_e.swDocPART,
+                    "",
+                    0,
+                    0.0,
+                    0.0
+                );
+                if (!String.IsNullOrWhiteSpace(discovered) &&
+                    File.Exists(discovered))
+                {
+                    Trace(
+                        "Resolved part template through the SOLIDWORKS " +
+                        "document-template API"
+                    );
+                    return discovered;
+                }
+            }
+            catch
+            {
+            }
+
             string root = Path.Combine(
                 System.Environment.GetFolderPath(
                     System.Environment.SpecialFolder.CommonApplicationData
