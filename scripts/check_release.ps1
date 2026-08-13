@@ -12,12 +12,20 @@ $pythonExe = if ($env:PROMPT2CAD_PYTHON) {
 else {
     "python"
 }
-$pnpmExe = if ($env:PROMPT2CAD_PNPM) {
-    $env:PROMPT2CAD_PNPM
+$nodeExe = if ($env:PROMPT2CAD_NODE) {
+    $env:PROMPT2CAD_NODE
 }
 else {
-    "pnpm"
+    "node"
 }
+$frontendChecks = @(
+    "manual-assistance-smoke.mjs",
+    "preview-qa.mjs",
+    "generated-review-smoke.mjs",
+    "refinement-smoke.mjs",
+    "editable-parameters-smoke.mjs",
+    "solidworks-package-smoke.mjs"
+)
 
 function Invoke-ReleaseStep {
     param(
@@ -43,7 +51,12 @@ Invoke-ReleaseStep "Running Python regression suite" {
 Invoke-ReleaseStep "Running frontend behavior checks" {
     Push-Location $frontendRoot
     try {
-        & $pnpmExe qa
+        foreach ($check in $frontendChecks) {
+            & $nodeExe (Join-Path "scripts" $check)
+            if ($LASTEXITCODE -ne 0) {
+                throw "Frontend check $check failed with exit code $LASTEXITCODE."
+            }
+        }
     }
     finally {
         Pop-Location
@@ -53,7 +66,10 @@ Invoke-ReleaseStep "Running frontend behavior checks" {
 Invoke-ReleaseStep "Building production frontend" {
     Push-Location $frontendRoot
     try {
-        & $pnpmExe build
+        & $nodeExe `
+            (Join-Path "node_modules" "vite\bin\vite.js") `
+            build `
+            --configLoader runner
     }
     finally {
         Pop-Location

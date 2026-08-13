@@ -241,6 +241,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\scripts\check_release.ps1 -CompileSolidWorksPackage
 ```
 
+The gate invokes the installed frontend QA scripts directly through Node. Set
+`PROMPT2CAD_NODE` to a full `node.exe` path when Node is not on `PATH`.
+
 Add `-FullMatrix` before a tagged release to include all 292 generated
 capability cases. Native create/edit/reopen verification remains the separate,
 explicit workstation gate in [docs/hosting.md](docs/hosting.md).

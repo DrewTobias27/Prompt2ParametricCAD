@@ -91,6 +91,7 @@ If `python` or `pnpm` is not the desired executable:
 
 ```powershell
 $env:PROMPT2CAD_PYTHON = "C:\Path\To\python.exe"
+$env:PROMPT2CAD_NODE = "C:\Path\To\node.exe"
 $env:PROMPT2CAD_PNPM = "C:\Path\To\pnpm.cmd"
 ```
 
