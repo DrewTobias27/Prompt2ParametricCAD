@@ -1,3 +1,4 @@
+import base64
 import json
 from pathlib import Path
 
@@ -23,12 +24,20 @@ def persistent_reference_records(plan) -> list[dict]:
             "reference_id": reference["reference_id"],
             "entity_name": reference["entity_name"],
             "entity_type": reference["entity_type"],
-            "persistent_id_base64": "AQ==",
+            "persistent_id_base64": base64.b64encode(
+                index.to_bytes(4, byteorder="little")
+            ).decode("ascii"),
             "resolved": True,
             "resolution_error_code": 0,
         }
-        for feature in plan.features
-        for reference in feature.publish_references
+        for index, reference in enumerate(
+            (
+                reference
+                for feature in plan.features
+                for reference in feature.publish_references
+            ),
+            start=1,
+        )
     ]
 
 
@@ -283,6 +292,41 @@ def test_persistent_reference_check_rejects_a_missing_semantic_entity():
         validate_published_references(
             plan,
             {"published_references": incomplete},
+            context="test",
+        )
+
+
+def test_persistent_reference_check_rejects_duplicate_or_wrong_identity():
+    fixture = smoke_fixture_paths(["solidworks_smoke_patterned_plate"])[0]
+    from prompt2cad.solidworks_export import model_path_to_replay_plan
+
+    plan = model_path_to_replay_plan(fixture)
+    records = persistent_reference_records(plan)
+
+    with pytest.raises(RuntimeError, match="repeats a native reference ID"):
+        validate_published_references(
+            plan,
+            {"published_references": [*records, records[0]]},
+            context="test",
+        )
+
+    duplicate_entity = [dict(record) for record in records]
+    duplicate_entity[1]["persistent_id_base64"] = duplicate_entity[0][
+        "persistent_id_base64"
+    ]
+    with pytest.raises(RuntimeError, match="one native entity"):
+        validate_published_references(
+            plan,
+            {"published_references": duplicate_entity},
+            context="test",
+        )
+
+    wrong_metadata = [dict(record) for record in records]
+    wrong_metadata[0]["entity_name"] = "wrong-face"
+    with pytest.raises(RuntimeError, match="metadata does not match"):
+        validate_published_references(
+            plan,
+            {"published_references": wrong_metadata},
             context="test",
         )
 

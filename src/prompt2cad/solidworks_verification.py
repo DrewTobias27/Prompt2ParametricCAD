@@ -12,16 +12,27 @@ def validate_published_references(
     context: str,
 ) -> dict:
     """Require every planned semantic entity to retain a resolvable PID."""
-    expected = {
-        reference["reference_id"]
+    expected_records = [
+        reference
         for feature in plan.features
         for reference in feature.publish_references
+    ]
+    expected_ids = [reference["reference_id"] for reference in expected_records]
+    expected = set(expected_ids)
+    if len(expected) != len(expected_ids):
+        raise RuntimeError(f"{context} replay plan repeats a reference ID")
+    expected_by_id = {
+        reference["reference_id"]: reference
+        for reference in expected_records
     }
     records = native_result.get("published_references")
     if not isinstance(records, list):
         raise RuntimeError(f"{context} did not report persistent references")
 
-    actual = {record.get("reference_id") for record in records}
+    actual_ids = [record.get("reference_id") for record in records]
+    actual = set(actual_ids)
+    if len(actual) != len(actual_ids):
+        raise RuntimeError(f"{context} repeats a native reference ID")
     if actual != expected:
         missing = sorted(expected - actual)
         unexpected = sorted(actual - expected)
@@ -29,16 +40,37 @@ def validate_published_references(
             f"{context} persistent-reference mismatch; "
             f"missing={missing}, unexpected={unexpected}"
         )
+    metadata_mismatches = [
+        reference_id
+        for reference_id, expected_record in expected_by_id.items()
+        for actual_record in records
+        if actual_record.get("reference_id") == reference_id
+        and (
+            actual_record.get("entity_name") != expected_record["entity_name"]
+            or actual_record.get("entity_type") != expected_record["entity_type"]
+        )
+    ]
+    if metadata_mismatches:
+        raise RuntimeError(
+            f"{context} native reference metadata does not match the plan: "
+            + ", ".join(metadata_mismatches)
+        )
     invalid = [
         record.get("reference_id")
         for record in records
         if record.get("resolved") is not True
         or not record.get("persistent_id_base64")
+        or record.get("resolution_error_code") != 0
     ]
     if invalid:
         raise RuntimeError(
             f"{context} has unresolved persistent references: "
             + ", ".join(str(reference_id) for reference_id in invalid)
+        )
+    persistent_ids = [record["persistent_id_base64"] for record in records]
+    if len(set(persistent_ids)) != len(persistent_ids):
+        raise RuntimeError(
+            f"{context} maps multiple semantic references to one native entity"
         )
     return {
         "expected_count": len(expected),

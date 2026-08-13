@@ -67,11 +67,20 @@ def test_release_matrix_native_mode_checks_create_edit_and_reopen(
         return [
             {
                 "reference_id": reference["reference_id"],
+                "entity_name": reference["entity_name"],
+                "entity_type": reference["entity_type"],
                 "resolved": True,
-                "persistent_id_base64": "test-persistent-id",
+                "persistent_id_base64": f"test-persistent-id-{index}",
+                "resolution_error_code": 0,
             }
-            for feature in plan.features
-            for reference in feature.publish_references
+            for index, reference in enumerate(
+                (
+                    reference
+                    for feature in plan.features
+                    for reference in feature.publish_references
+                ),
+                start=1,
+            )
         ]
 
     def fake_native_exporter(plan, output_path, **kwargs):
