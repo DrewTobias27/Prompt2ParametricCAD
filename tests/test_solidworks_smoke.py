@@ -429,6 +429,20 @@ def test_native_contract_requires_embedded_geometry_oracle_evidence(
             context="test edit",
         )
 
+    edited_geometry_missing = native_result_factory(
+        plan,
+        editability=True,
+        mutated_parameter_ids=[mutation_id],
+    )
+    edited_geometry_missing["edited_geometry_verification_passed"] = False
+    with pytest.raises(RuntimeError, match="edited geometry against CadQuery"):
+        validate_native_editability_result(
+            plan,
+            edited_geometry_missing,
+            expected_mutation_ids=[mutation_id],
+            context="test edit",
+        )
+
 
 def test_persistent_reference_check_rejects_duplicate_or_wrong_identity():
     fixture = smoke_fixture_paths(["solidworks_smoke_patterned_plate"])[0]

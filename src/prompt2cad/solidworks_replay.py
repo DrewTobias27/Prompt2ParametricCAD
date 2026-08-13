@@ -27,6 +27,8 @@ from prompt2cad.pattern_geometry import pattern_positions
 
 SOLIDWORKS_REPLAY_FORMAT = "prompt2cad.solidworks-replay-plan"
 SOLIDWORKS_REPLAY_VERSION = 11
+SOLIDWORKS_MUTATION_FORMAT = "prompt2cad.solidworks-mutations"
+SOLIDWORKS_MUTATION_VERSION = 2
 SUPPORTED_OPERATION_TYPES = {
     "extrude",
     "add_extrude",
@@ -614,6 +616,7 @@ def verify_solidworks_editability(
     output_path: Path,
     mutations: dict[str, float],
     *,
+    expected_geometry: dict | None = None,
     visible: bool = False,
     result_output_path: Path | None = None,
     powershell_executable: str = "powershell.exe",
@@ -646,14 +649,21 @@ def verify_solidworks_editability(
             f"Refusing to overwrite existing SOLIDWORKS output: {output_path}"
         )
     validate_solidworks_mutations(plan, mutations)
+    if expected_geometry is None:
+        raise SolidWorksExecutionError(
+            "SOLIDWORKS editability verification requires expected edited "
+            "CadQuery geometry"
+        )
+    normalized_edited_geometry = _normalize_expected_geometry(expected_geometry)
     bindings = {
         binding["parameter_id"]: binding
         for feature in plan.features
         for binding in feature.parameter_bindings
     }
     mutation_document = {
-        "format": "prompt2cad.solidworks-mutations",
-        "version": 1,
+        "format": SOLIDWORKS_MUTATION_FORMAT,
+        "version": SOLIDWORKS_MUTATION_VERSION,
+        "expected_geometry": normalized_edited_geometry,
         "mutations": [
             {
                 "parameter_id": parameter_id,

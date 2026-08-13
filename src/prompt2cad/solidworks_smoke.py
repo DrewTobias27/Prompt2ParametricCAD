@@ -309,6 +309,7 @@ def run_smoke_suite(
                         native_path,
                         mutated_native_path,
                         mutations,
+                        expected_geometry=expected_edited_metrics,
                         visible=visible,
                         result_output_path=editability_result_path,
                     )

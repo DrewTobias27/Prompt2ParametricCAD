@@ -18,7 +18,7 @@ if (-not $OutputRoot) {
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $OutputRoot = Join-Path `
         $repoRoot `
-        ("generated\solidworks-release-v9-" + $timestamp)
+        ("generated\solidworks-release-v10-" + $timestamp)
 }
 $OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 if (Test-Path -LiteralPath $OutputRoot) {

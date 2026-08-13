@@ -22,6 +22,7 @@ from prompt2cad.solidworks_package_check import (
     verify_solidworks_package_editability_result,
 )
 from prompt2cad.solidworks_package_check import verify_solidworks_package_result
+from prompt2cad.solidworks_verification import compare_geometry_metrics
 from prompt2cad.solidworks_verification import geometry_metrics
 from prompt2cad.solidworks_smoke import smoke_fixture_paths
 
@@ -277,7 +278,8 @@ def test_package_mutation_probe_is_native_bound_valid_and_changes_geometry(
     mutation_document = propose_solidworks_package_mutation(extracted)
 
     assert mutation_document["format"] == "prompt2cad.solidworks-mutations"
-    assert mutation_document["version"] == 1
+    assert mutation_document["version"] == 2
+    assert mutation_document["expected_geometry"]["solid_body_count"] == 1
     assert len(mutation_document["mutations"]) == 1
     record = mutation_document["mutations"][0]
     native_parameter_ids = {
@@ -289,6 +291,14 @@ def test_package_mutation_probe_is_native_bound_valid_and_changes_geometry(
     assert record["value"] != verified.document.parameter(
         record["parameter_id"]
     ).value
+    edited_part, _ = rebuild_with_parameter_updates(
+        verified.document,
+        {record["parameter_id"]: record["value"]},
+    )
+    assert compare_geometry_metrics(
+        geometry_metrics(edited_part),
+        mutation_document["expected_geometry"],
+    )["passed"] is True
 
 
 def test_package_mutation_probe_covers_every_native_smoke_model(tmp_path: Path):
@@ -402,6 +412,52 @@ def test_package_edit_result_rejects_wrong_mutation_identity(
     result_path.write_text(json.dumps(result), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="mutation count|mutated parameter"):
+        verify_solidworks_package_editability_result(
+            extracted,
+            mutation_path,
+            source_path,
+            result_path,
+        )
+
+
+def test_package_edit_rejects_a_tampered_edited_geometry_oracle(
+    tmp_path: Path,
+    native_result_factory,
+):
+    archive_path = write_package_zip(tmp_path)
+    extracted = tmp_path / "verified-package"
+    verified = extract_verified_solidworks_package(archive_path, extracted)
+    mutation_document = propose_solidworks_package_mutation(extracted)
+    mutation_document["expected_geometry"]["volume_mm3"] *= 1.02
+    mutation_path = tmp_path / "mutation.json"
+    mutation_path.write_text(json.dumps(mutation_document), encoding="utf-8")
+    mutations = {
+        record["parameter_id"]: record["value"]
+        for record in mutation_document["mutations"]
+    }
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"synthetic source part")
+    output_path = tmp_path / "edited.SLDPRT"
+    output_path.write_bytes(b"synthetic edited part")
+    result_path = Path(f"{output_path}.result.json")
+    edited_part, _ = rebuild_with_parameter_updates(verified.document, mutations)
+    result_path.write_text(
+        json.dumps(
+            native_result_factory(
+                verified.plan,
+                editability=True,
+                mutated_parameter_ids=mutations,
+                source_path=str(source_path),
+                output_path=str(output_path),
+                before_geometry=geometry_metrics(build_model(verified.model_data)),
+                after_geometry=geometry_metrics(edited_part),
+                published_references=persistent_reference_records(verified.plan),
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="volume differs"):
         verify_solidworks_package_editability_result(
             extracted,
             mutation_path,

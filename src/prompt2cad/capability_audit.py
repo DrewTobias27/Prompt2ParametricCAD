@@ -1032,6 +1032,7 @@ def audit_capability_case(
                     native_path,
                     mutated_path,
                     case.mutations,
+                    expected_geometry=geometry_metrics(edited_part),
                     visible=visible,
                     result_output_path=edit_result_path,
                 )

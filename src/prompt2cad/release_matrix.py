@@ -329,6 +329,7 @@ def run_release_case(
                     native_path,
                     edited_path,
                     case.mutations,
+                    expected_geometry=edited_metrics,
                     visible=visible,
                     result_output_path=edit_result_path,
                 )

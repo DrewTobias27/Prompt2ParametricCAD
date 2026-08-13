@@ -25,6 +25,8 @@ from prompt2cad.solidworks_package import SOLIDWORKS_PACKAGE_VERSION
 from prompt2cad.solidworks_package import solidworks_package_editability_summary
 from prompt2cad.solidworks_package import solidworks_package_static_payload
 from prompt2cad.solidworks_replay import SolidWorksReplayPlan
+from prompt2cad.solidworks_replay import SOLIDWORKS_MUTATION_FORMAT
+from prompt2cad.solidworks_replay import SOLIDWORKS_MUTATION_VERSION
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_verification import compare_geometry_metrics
@@ -37,10 +39,6 @@ from prompt2cad.solidworks_verification import validate_published_references
 MAX_ARCHIVE_FILES = 32
 MAX_ARCHIVE_FILE_BYTES = 8 * 1024 * 1024
 MAX_ARCHIVE_TOTAL_BYTES = 24 * 1024 * 1024
-SOLIDWORKS_MUTATION_FORMAT = "prompt2cad.solidworks-mutations"
-SOLIDWORKS_MUTATION_VERSION = 1
-
-
 @dataclass(frozen=True)
 class VerifiedSolidWorksPackage:
     """Reconstructed source of truth for one intact package."""
@@ -307,6 +305,7 @@ def propose_solidworks_package_mutation(package_root: Path) -> dict:
             return {
                 "format": SOLIDWORKS_MUTATION_FORMAT,
                 "version": SOLIDWORKS_MUTATION_VERSION,
+                "expected_geometry": edited_geometry,
                 "mutations": [
                     {
                         "parameter_id": parameter_id,
@@ -343,6 +342,10 @@ def verify_solidworks_package_editability_result(
     )
     original_geometry = geometry_metrics(build_model(verified.model_data))
     edited_geometry = geometry_metrics(expected_edited_part)
+    mutation_geometry = mutation_document.get("expected_geometry")
+    if not isinstance(mutation_geometry, dict):
+        raise RuntimeError("Mutation document has no edited geometry oracle")
+    compare_geometry_metrics(edited_geometry, mutation_geometry)
     if not _geometry_materially_changed(original_geometry, edited_geometry):
         raise RuntimeError("Mutation document does not materially change geometry")
 

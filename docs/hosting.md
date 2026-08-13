@@ -59,7 +59,7 @@ same C# geometry comparator directly: an exact oracle must pass and an
 out-of-tolerance volume must fail before native COM execution is trusted. It
 also executes the production C# mutation preflight with valid pattern controls
 and a deliberately collapsed linear pattern. Then run
-`Build-SolidWorks-Part.cmd`; package v9 stages the native part, closes and
+`Build-SolidWorks-Part.cmd`; package v10 stages the native part, closes and
 reopens it, verifies the saved history, exact parameter/helper identities,
 localized datum/template resolution, and body/volume/area/bounds/center against
 the embedded CadQuery geometry oracle, and only then writes the final part plus
@@ -74,7 +74,7 @@ Before linking the application from a LinkedIn post:
 2. Run its launcher on Windows with the supported SolidWorks version.
 3. Confirm the resulting `SLDPRT` opens, rebuilds, and exposes editable named
    sketches, dimensions, patterns, and ordered features.
-4. Confirm the package-v9 result reports `reopened: true`, exact verified
+4. Confirm the package-v10 result reports `reopened: true`, exact verified
    parameter/helper identities, healthy features/sketches, matching geometry,
    and resolved persistent face references.
 5. Run `prompt2cad-solidworks-smoke --execute --verify-editability` and require
@@ -108,7 +108,7 @@ site and pass that exact ZIP to the same command:
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\scripts\check_solidworks_release.ps1 `
-  -DownloadedPackagePath "C:\Users\you\Downloads\part-v9-solidworks.zip" `
+  -DownloadedPackagePath "C:\Users\you\Downloads\part-v10-solidworks.zip" `
   -Visible
 ```
 
@@ -117,8 +117,9 @@ the editable document, replay plan, and editability report from the embedded
 source model, creates the SLDPRT, and checks exact feature/parameter/helper
 identities, persistent references, and geometry equivalence. It then selects a
 safe native-bound parameter, proves the corresponding edit in CadQuery,
-applies it to the downloaded SLDPRT, saves and reopens a second SLDPRT, and
-compares that edited geometry too. The evidence folder retains both native
+embeds the edited geometry in a version-2 mutation document, applies it to the
+downloaded SLDPRT, and saves and reopens a second SLDPRT. The runner refuses to
+publish a mismatched edit. The evidence folder retains both native
 parts, the mutation, machine-readable verification reports, and a complete
 terminal transcript.
 
@@ -128,7 +129,7 @@ The public-release gate was exercised on August 10, 2026. The deployed site
 generated and refined a valid multi-feature model, both public download paths
 returned non-empty artifacts, and a package downloaded from the public URL
 created a native SolidWorks part with editable features and dimensions. That
-result predates package v9. The August 13 v9 regression now passes 609 offline
+result predates package v10. The August 13 v10 regression now passes 609 offline
 tests, all six frontend behavior suites, a production frontend build, the 7/7
 golden release matrix, and all 292 STEP/native-plan capability cases. Four
 installed-API compile, comparator, and tamper checks also passed separately. A fresh package

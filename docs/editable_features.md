@@ -226,6 +226,10 @@ only creates those controls but no longer edits them fails the release gate.
 The compile-only package gate invokes the same C# mutation parser, range rules,
 integer checks, signed-coordinate rules, and dependent linear-pattern checks
 used immediately before native modification, without opening SolidWorks.
+Mutation-document version 2 also embeds the expected geometry from the
+transactional CadQuery rebuild. After SolidWorks mutates, saves, and reopens the
+part, the runner compares body count, volume, area, bounds, and center of mass
+before publishing the edited file.
 
 Run `prompt2cad-release-matrix` for the compact deterministic whole-pipeline
 gate and `prompt2cad-solidworks-smoke` for the broader CadQuery build and

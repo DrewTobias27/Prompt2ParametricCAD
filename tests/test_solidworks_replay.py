@@ -8,6 +8,7 @@ import pytest
 
 from prompt2cad.editable_model import build_editable_model_document
 from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.solidworks_export import model_path_to_replay_plan
 from prompt2cad.solidworks_export import materialize_stable_feature_ids
 from prompt2cad.solidworks_export import save_plan
@@ -159,6 +160,12 @@ def replay_plan(model_data: dict | None = None):
         document,
         expected_geometry=geometry_metrics(part),
     )
+
+
+def edited_geometry(model_data: dict, updates: dict[str, float]) -> dict:
+    document = model_data_to_editable_document(model_data)
+    part, _ = rebuild_with_parameter_updates(document, updates)
+    return geometry_metrics(part)
 
 
 def expected_geometry() -> dict:
@@ -1850,7 +1857,13 @@ def test_export_reports_runner_failure_and_requires_sldprt(tmp_path: Path):
 def test_editability_verification_reopens_and_mutates_bound_parameters(
     tmp_path: Path,
 ):
-    plan = replay_plan()
+    model_data = native_model_data()
+    plan = replay_plan(model_data)
+    changes = {
+        "base.sketch.width": 90,
+        "boss.feature.distance": 12,
+    }
+    expected_edited_geometry = edited_geometry(model_data, changes)
     source_path = tmp_path / "source.SLDPRT"
     output_path = tmp_path / "mutated.SLDPRT"
     result_path = tmp_path / "editability-result.json"
@@ -1883,10 +1896,8 @@ def test_editability_verification_reopens_and_mutates_bound_parameters(
         plan,
         source_path,
         output_path,
-        {
-            "base.sketch.width": 90,
-            "boss.feature.distance": 12,
-        },
+        changes,
+        expected_geometry=expected_edited_geometry,
         result_output_path=result_path,
         runner=fake_runner,
     )
@@ -1894,7 +1905,8 @@ def test_editability_verification_reopens_and_mutates_bound_parameters(
     assert exported == output_path.resolve()
     assert captured["mutations"] == {
         "format": "prompt2cad.solidworks-mutations",
-        "version": 1,
+        "version": 2,
+        "expected_geometry": expected_edited_geometry,
         "mutations": [
             {
                 "parameter_id": "base.sketch.width",
@@ -1976,6 +1988,10 @@ def test_editability_verification_preserves_signed_placement_side(
         source_path,
         output_path,
         {"boss.placement.inst001.x": -20},
+        expected_geometry=edited_geometry(
+            model_data,
+            {"boss.placement.inst001.x": -20},
+        ),
         runner=fake_runner,
     )
 
@@ -2167,8 +2183,34 @@ def test_editability_preflight_validates_countersink_dimensions_together(
             "mounting_hole.feature.diameter": 13,
             "mounting_hole.feature.countersink_diameter": 16,
         },
+        expected_geometry=edited_geometry(
+            model_data,
+            {
+                "mounting_hole.feature.diameter": 13,
+                "mounting_hole.feature.countersink_diameter": 16,
+            },
+        ),
         runner=fake_runner,
     )
+
+
+def test_editability_verification_requires_an_edited_geometry_oracle(
+    tmp_path: Path,
+):
+    plan = replay_plan()
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+
+    with pytest.raises(
+        SolidWorksExecutionError,
+        match="requires expected edited CadQuery geometry",
+    ):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            tmp_path / "mutated.SLDPRT",
+            {"base.sketch.width": 90},
+        )
 
 
 @pytest.mark.parametrize(

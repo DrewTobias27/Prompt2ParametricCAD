@@ -18,7 +18,7 @@ from prompt2cad.solidworks_verification import geometry_metrics
 
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
-SOLIDWORKS_PACKAGE_VERSION = 9
+SOLIDWORKS_PACKAGE_VERSION = 10
 SOLIDWORKS_PACKAGE_PAYLOAD_FILES = (
     "Build-SolidWorks-Part.cmd",
     "Build-SolidWorks-Part.ps1",

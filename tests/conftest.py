@@ -70,6 +70,7 @@ def native_result_factory() -> Callable[..., dict]:
                     "source_geometry_verification_passed": (
                         plan.expected_geometry is not None
                     ),
+                    "edited_geometry_verification_passed": True,
                     "mutation_count": len(mutated_parameter_ids),
                     "mutated_parameter_ids": mutated_parameter_ids,
                 }

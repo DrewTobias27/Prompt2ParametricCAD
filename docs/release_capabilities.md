@@ -142,6 +142,9 @@ compares body count, volume, surface area, every absolute bounding-box limit,
 and center of mass against CadQuery. This catches equal-size geometry built in
 the wrong location and materially different shapes that happen to share a
 volume or envelope.
+The same comparison is mandatory after a native edit. Mutation documents carry
+a separately rebuilt edited-geometry oracle, and a mismatched staged edit is
+deleted instead of published.
 
 Polyline vertices plus explicit-sketch start, end, and arc-through coordinates
 are exposed through stable native dimensions when nonzero. Zero coordinates use

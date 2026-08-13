@@ -72,6 +72,10 @@ def validate_native_editability_result(
         raise RuntimeError(
             f"{context} did not verify source geometry against CadQuery"
         )
+    if native_result.get("edited_geometry_verification_passed") is not True:
+        raise RuntimeError(
+            f"{context} did not verify edited geometry against CadQuery"
+        )
 
     summary = _validate_native_contract_counts(
         plan,
@@ -86,6 +90,7 @@ def validate_native_editability_result(
             "source_geometry_verification_passed": (
                 plan.expected_geometry is not None
             ),
+            "edited_geometry_verification_passed": True,
         }
     )
     return summary

@@ -39,6 +39,9 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "mutations")]
         public ParameterMutation[] Mutations { get; set; }
+
+        [DataMember(Name = "expected_geometry")]
+        public NativeGeometryResult ExpectedGeometry { get; set; }
     }
 
     [DataContract]
@@ -617,6 +620,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "source_geometry_verification_passed")]
         public bool SourceGeometryVerificationPassed { get; set; }
 
+        [DataMember(Name = "edited_geometry_verification_passed")]
+        public bool EditedGeometryVerificationPassed { get; set; }
+
         [DataMember(Name = "declared_parameter_count")]
         public int DeclaredParameterCount { get; set; }
 
@@ -764,7 +770,11 @@ namespace Prompt2Cad.SolidWorks
             ReplayPlan plan = ReadPlan(planPath);
             ValidateReplayPlan(plan);
             RequireExecutableGeometryOracle(plan);
-            ParameterMutation[] mutations = ReadValidatedMutations(mutationPath);
+            NativeGeometryResult expectedEditedGeometry;
+            ParameterMutation[] mutations = ReadValidatedMutations(
+                mutationPath,
+                out expectedEditedGeometry
+            );
             Dictionary<string, NativeParameterBinding> bindings;
             Dictionary<string, double> nativeValues;
             PrepareParameterMutations(
@@ -1093,7 +1103,11 @@ namespace Prompt2Cad.SolidWorks
             ReplayPlan plan = ReadPlan(planPath);
             ValidateReplayPlan(plan);
             RequireExecutableGeometryOracle(plan);
-            ParameterMutation[] mutations = ReadValidatedMutations(mutationPath);
+            NativeGeometryResult expectedEditedGeometry;
+            ParameterMutation[] mutations = ReadValidatedMutations(
+                mutationPath,
+                out expectedEditedGeometry
+            );
 
             string resolvedSource = Path.GetFullPath(sourcePath);
             string resolvedOutput = PrepareNewOutputPath(outputPath);
@@ -1202,6 +1216,11 @@ namespace Prompt2Cad.SolidWorks
                 );
                 RequireHealthyModel(reopenedHealth, "after reopening");
                 NativeGeometryResult afterGeometry = MeasureNativeGeometry(part);
+                RequireExpectedGeometryMatch(
+                    expectedEditedGeometry,
+                    afterGeometry,
+                    "edited native part"
+                );
                 PersistentReferenceResult[] publishedReferences =
                     VerifyPersistentReferenceIds(
                         model,
@@ -1231,6 +1250,7 @@ namespace Prompt2Cad.SolidWorks
                         Reopened = true,
                         SourceGeometryVerificationPassed =
                             plan.ExpectedGeometry != null,
+                        EditedGeometryVerificationPassed = true,
                         DeclaredParameterCount =
                             verification.DeclaredParameterCount,
                         VerifiedParameterCount =
@@ -1868,13 +1888,15 @@ namespace Prompt2Cad.SolidWorks
             }
         }
 
-        private static ParameterMutation[] ReadValidatedMutations(string path)
+        private static ParameterMutation[] ReadValidatedMutations(
+            string path,
+            out NativeGeometryResult expectedGeometry)
         {
             MutationDocument document = ReadMutations(path);
             if (document == null || !String.Equals(
                 document.Format,
                 "prompt2cad.solidworks-mutations",
-                StringComparison.Ordinal) || document.Version != 1)
+                StringComparison.Ordinal) || document.Version != 2)
             {
                 throw new InvalidOperationException(
                     "Unsupported SOLIDWORKS mutation document."
@@ -1888,6 +1910,12 @@ namespace Prompt2Cad.SolidWorks
                     "The mutation document contains no parameter changes."
                 );
             }
+            ValidateGeometryRecord(
+                document.ExpectedGeometry,
+                "Expected edited geometry",
+                false
+            );
+            expectedGeometry = document.ExpectedGeometry;
             return mutations;
         }
 
