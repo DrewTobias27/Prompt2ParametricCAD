@@ -37,6 +37,10 @@ exercise both binding strategies, every binding unit, signed placement
 controls, all three pattern families, circular count/angle, and both
 linear-pattern count/spacing directions. Creation coverage alone cannot satisfy
 the release gate.
+Pattern-count changes are explicitly labeled as topology-changing: the gate
+requires all source-plan persistent references to survive while geometry is
+checked against the rebuilt edited model. New instances require a regenerated
+plan before later automated features can address them by stable ID.
 
 The August 2026 native audit passed the original 286 STEP round trips and all
 286 native SolidWorks cases after four generalized fixes found by the matrix:

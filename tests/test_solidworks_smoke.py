@@ -327,6 +327,74 @@ def test_native_smoke_editability_rebuilds_and_compares_mutated_geometry(
     assert editability["published_references"]["passed"] is True
 
 
+def test_native_smoke_pattern_count_edit_preserves_source_reference_contract(
+    tmp_path: Path,
+    native_result_factory,
+):
+    fixture = smoke_fixture_paths(["solidworks_smoke_circular_pattern"])
+    model_data = load_model(fixture[0])
+    source_metrics = geometry_metrics(build_model(model_data))
+    mutations = EDITABILITY_SCENARIOS[fixture[0].stem]
+    document = model_data_to_editable_document(model_data)
+    edited_part, _ = rebuild_with_parameter_updates(document, mutations)
+    edited_metrics = geometry_metrics(edited_part)
+
+    def fake_native_exporter(plan, output_path, **kwargs):
+        output_path.write_bytes(b"native-part")
+        kwargs["result_output_path"].write_text(
+            json.dumps(
+                native_result_factory(
+                    plan,
+                    geometry=source_metrics,
+                    published_references=persistent_reference_records(plan),
+                )
+            ),
+            encoding="utf-8",
+        )
+        return output_path
+
+    def fake_editability_verifier(
+        plan,
+        source_path,
+        output_path,
+        requested_mutations,
+        **kwargs,
+    ):
+        assert requested_mutations == mutations
+        assert kwargs["expected_geometry"] == edited_metrics
+        output_path.write_bytes(b"mutated-native-part")
+        kwargs["result_output_path"].write_text(
+            json.dumps(
+                native_result_factory(
+                    plan,
+                    editability=True,
+                    mutated_parameter_ids=requested_mutations,
+                    after_geometry=edited_metrics,
+                    published_references=persistent_reference_records(plan),
+                )
+            ),
+            encoding="utf-8",
+        )
+        return output_path
+
+    report = run_smoke_suite(
+        fixture,
+        tmp_path,
+        execute_native=True,
+        verify_editability=True,
+        native_exporter=fake_native_exporter,
+        editability_verifier=fake_editability_verifier,
+    )
+
+    assert report["failed"] == 0
+    editability = report["results"][0]["editability"]
+    assert editability["native_contract"]["topology_changed"] is True
+    assert editability["native_contract"][
+        "topology_changing_parameter_ids"
+    ] == ["radial_posts.pattern.count"]
+    assert editability["published_references"]["passed"] is True
+
+
 def test_persistent_reference_check_rejects_a_missing_semantic_entity():
     fixture = smoke_fixture_paths(["solidworks_smoke_patterned_plate"])[0]
     from prompt2cad.solidworks_export import model_path_to_replay_plan
@@ -394,6 +462,20 @@ def test_native_contract_rejects_missing_helpers_and_unhealthy_sketches(
         validate_native_editability_result(
             plan,
             wrong_mutation_identity,
+            expected_mutation_ids=[mutation_id],
+            context="test edit",
+        )
+
+    wrong_topology_state = native_result_factory(
+        plan,
+        editability=True,
+        mutated_parameter_ids=[mutation_id],
+    )
+    wrong_topology_state["topology_changed"] = True
+    with pytest.raises(RuntimeError, match="wrong topology-change state"):
+        validate_native_editability_result(
+            plan,
+            wrong_topology_state,
             expected_mutation_ids=[mutation_id],
             context="test edit",
         )

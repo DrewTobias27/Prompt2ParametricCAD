@@ -64,6 +64,13 @@ def native_result_factory() -> Callable[..., dict]:
             },
         }
         if editability:
+            topology_ids = sorted(
+                binding["parameter_id"]
+                for binding in parameter_bindings
+                if binding["parameter_id"] in mutated_parameter_ids
+                and binding.get("owner_kind") == "pattern"
+                and binding.get("unit") == "count"
+            )
             report.update(
                 {
                     "reopened": True,
@@ -73,6 +80,8 @@ def native_result_factory() -> Callable[..., dict]:
                     "edited_geometry_verification_passed": True,
                     "mutation_count": len(mutated_parameter_ids),
                     "mutated_parameter_ids": mutated_parameter_ids,
+                    "topology_changed": bool(topology_ids),
+                    "topology_changing_parameter_ids": topology_ids,
                 }
             )
         else:

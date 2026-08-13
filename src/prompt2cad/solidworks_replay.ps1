@@ -120,12 +120,19 @@ try {
         }
         $mutationContractValidated = $false
         $mutationCount = 0
+        $topologyChanged = $false
+        $topologyChangingParameterIds = @()
         if ($MutationPath) {
-            $mutationCount = (
+            $mutationCheck = (
                 [Prompt2Cad.SolidWorks.NativeReplayRunner]::ValidateMutationFile(
                     [System.IO.Path]::GetFullPath($PlanPath),
                     [System.IO.Path]::GetFullPath($MutationPath)
                 )
+            )
+            $mutationCount = $mutationCheck.MutationCount
+            $topologyChanged = $mutationCheck.TopologyChanged
+            $topologyChangingParameterIds = @(
+                $mutationCheck.TopologyChangingParameterIds
             )
             $mutationContractValidated = $true
         }
@@ -137,6 +144,8 @@ try {
             geometry_contract_validated = $geometryContractValidated
             mutation_contract_validated = $mutationContractValidated
             mutation_count = $mutationCount
+            topology_changed = $topologyChanged
+            topology_changing_parameter_ids = $topologyChangingParameterIds
         } | ConvertTo-Json -Compress
         exit 0
     }

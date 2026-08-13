@@ -314,10 +314,6 @@ def run_release_case(
             }
 
             if verify_native_editability:
-                edited_plan = build_solidworks_replay_plan(
-                    edited_document,
-                    expected_geometry=edited_metrics,
-                )
                 edited_path = (
                     native_directory / f"{case.name}.mutated.SLDPRT"
                 )
@@ -351,9 +347,12 @@ def run_release_case(
                         edit_result.get("after_geometry", {}),
                     ),
                     "published_references": validate_published_references(
-                        edited_plan,
+                        plan,
                         edit_result,
-                        context=f"{case.name} native edit",
+                        context=(
+                            f"{case.name} native edit source-reference "
+                            "preservation"
+                        ),
                     ),
                 }
             result["checks"][stage] = native_check

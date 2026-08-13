@@ -57,6 +57,13 @@ namespace Prompt2Cad.SolidWorks
         public string Unit { get; set; }
     }
 
+    public sealed class MutationPreflightResult
+    {
+        public int MutationCount { get; set; }
+        public bool TopologyChanged { get; set; }
+        public string[] TopologyChangingParameterIds { get; set; }
+    }
+
     [DataContract]
     public sealed class ReplayStep
     {
@@ -614,6 +621,12 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "mutated_parameter_ids")]
         public string[] MutatedParameterIds { get; set; }
 
+        [DataMember(Name = "topology_changed")]
+        public bool TopologyChanged { get; set; }
+
+        [DataMember(Name = "topology_changing_parameter_ids")]
+        public string[] TopologyChangingParameterIds { get; set; }
+
         [DataMember(Name = "reopened")]
         public bool Reopened { get; set; }
 
@@ -763,7 +776,7 @@ namespace Prompt2Cad.SolidWorks
             );
         }
 
-        public static int ValidateMutationFile(
+        public static MutationPreflightResult ValidateMutationFile(
             string planPath,
             string mutationPath)
         {
@@ -783,7 +796,16 @@ namespace Prompt2Cad.SolidWorks
                 out bindings,
                 out nativeValues
             );
-            return mutations.Length;
+            string[] topologyIds = TopologyChangingMutationIds(
+                plan,
+                mutations
+            );
+            return new MutationPreflightResult
+            {
+                MutationCount = mutations.Length,
+                TopologyChanged = topologyIds.Length > 0,
+                TopologyChangingParameterIds = topologyIds,
+            };
         }
 
         public static string Execute(
@@ -1108,6 +1130,8 @@ namespace Prompt2Cad.SolidWorks
                 mutationPath,
                 out expectedEditedGeometry
             );
+            string[] topologyChangingParameterIds =
+                TopologyChangingMutationIds(plan, mutations);
 
             string resolvedSource = Path.GetFullPath(sourcePath);
             string resolvedOutput = PrepareNewOutputPath(outputPath);
@@ -1247,6 +1271,10 @@ namespace Prompt2Cad.SolidWorks
                             .Select(item => item.ParameterId)
                             .OrderBy(item => item, StringComparer.Ordinal)
                             .ToArray(),
+                        TopologyChanged =
+                            topologyChangingParameterIds.Length > 0,
+                        TopologyChangingParameterIds =
+                            topologyChangingParameterIds,
                         Reopened = true,
                         SourceGeometryVerificationPassed =
                             plan.ExpectedGeometry != null,
@@ -5850,6 +5878,34 @@ namespace Prompt2Cad.SolidWorks
                 );
             }
             ValidateNativeMutationSet(plan, nativeValues);
+        }
+
+        private static string[] TopologyChangingMutationIds(
+            ReplayPlan plan,
+            ParameterMutation[] mutations)
+        {
+            var requested = new HashSet<string>(
+                mutations.Select(item => item.ParameterId),
+                StringComparer.Ordinal
+            );
+            return plan.Features
+                .SelectMany(step =>
+                    step.ParameterBindings ?? new NativeParameterBinding[0])
+                .Where(binding =>
+                    requested.Contains(binding.ParameterId) &&
+                    String.Equals(
+                        binding.OwnerKind,
+                        "pattern",
+                        StringComparison.Ordinal
+                    ) &&
+                    String.Equals(
+                        binding.Unit,
+                        "count",
+                        StringComparison.OrdinalIgnoreCase
+                    ))
+                .Select(binding => binding.ParameterId)
+                .OrderBy(item => item, StringComparer.Ordinal)
+                .ToArray();
         }
 
         private static void ValidateNativeMutationSet(

@@ -53,7 +53,7 @@ EDITABILITY_SCENARIOS = {
         "base.feature.distance": 10,
         "radial_posts.sketch.diameter": 14,
         "radial_posts.feature.distance": 10,
-        "radial_posts.pattern.count": 5,
+        "radial_posts.pattern.count": 7,
         "radial_posts.pattern.total_angle": 300,
         "fourth_post_hole.sketch.diameter": 5,
     },
@@ -299,7 +299,7 @@ def run_smoke_suite(
                     native_metrics,
                 )
                 if verify_editability and mutations is not None:
-                    expected_part, edited_document = rebuild_with_parameter_updates(
+                    expected_part, _ = rebuild_with_parameter_updates(
                         source_document,
                         mutations,
                     )
@@ -323,12 +323,9 @@ def run_smoke_suite(
                         context="editability reopen",
                     )
                     editability_reference_summary = validate_published_references(
-                        build_solidworks_replay_plan(
-                            edited_document,
-                            expected_geometry=expected_edited_metrics,
-                        ),
+                        plan,
                         editability_result,
-                        context="editability reopen",
+                        context="editability source-reference preservation",
                     )
                     result["editability"] = {
                         "mutations": mutations,

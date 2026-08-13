@@ -4,6 +4,7 @@ import math
 from collections.abc import Collection
 
 from prompt2cad.solidworks_replay import SolidWorksReplayPlan
+from prompt2cad.solidworks_replay import topology_changing_mutation_ids
 
 
 def validate_native_build_result(
@@ -65,6 +66,15 @@ def validate_native_editability_result(
         raise RuntimeError(
             f"{context} mutated parameter identities do not match the request"
         )
+    expected_topology_ids = list(
+        topology_changing_mutation_ids(plan, expected_ids)
+    )
+    if native_result.get("topology_changed") is not bool(expected_topology_ids):
+        raise RuntimeError(f"{context} reported the wrong topology-change state")
+    if native_result.get("topology_changing_parameter_ids") != expected_topology_ids:
+        raise RuntimeError(
+            f"{context} topology-changing parameter identities do not match"
+        )
     if (
         plan.expected_geometry is not None
         and native_result.get("source_geometry_verification_passed") is not True
@@ -87,6 +97,8 @@ def validate_native_editability_result(
             "reopened": True,
             "mutation_count": len(expected_ids),
             "mutated_parameter_ids": expected_ids,
+            "topology_changed": bool(expected_topology_ids),
+            "topology_changing_parameter_ids": expected_topology_ids,
             "source_geometry_verification_passed": (
                 plan.expected_geometry is not None
             ),

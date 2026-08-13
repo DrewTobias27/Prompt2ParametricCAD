@@ -2016,11 +2016,47 @@ def test_native_mutation_preflight_needs_no_solidworks_files():
             "base.sketch.width",
             "boss.placement.inst001.x",
         ],
+        "topology_changed": False,
+        "topology_changing_parameter_ids": [],
         "native_values": {
             "base.sketch.width": 90.0,
             "boss.placement.inst001.x": 20.0,
         },
     }
+
+
+def test_native_mutation_preflight_reports_pattern_count_topology_changes():
+    model_data = native_model_data()
+    model_data["operations"] = model_data["operations"][:2]
+    model_data["operations"][1] = {
+        "type": "cut",
+        "id": "holes",
+        "target": "base.top",
+        "profile": "circle",
+        "positions": [[20, 0], [0, 20], [-20, 0], [0, -20]],
+        "pattern": {
+            "type": "circular",
+            "seed_position": [20, 0],
+            "center": [0, 0],
+            "count": 4,
+            "total_angle_degrees": 360,
+        },
+        "diameter": 6,
+        "depth": "through",
+    }
+
+    result = validate_solidworks_mutations(
+        replay_plan(model_data),
+        {
+            "holes.pattern.count": 5,
+            "holes.pattern.total_angle": 300,
+        },
+    )
+
+    assert result["topology_changed"] is True
+    assert result["topology_changing_parameter_ids"] == [
+        "holes.pattern.count"
+    ]
 
 
 @pytest.mark.parametrize("unsafe_value", [0, 12])

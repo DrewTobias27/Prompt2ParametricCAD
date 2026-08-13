@@ -9,6 +9,7 @@ Windows PowerShell/COM runner only after every feature has been accepted.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from hashlib import sha1
@@ -600,14 +601,38 @@ def validate_solidworks_mutations(
         for parameter_id, value in mutations.items()
     }
     _validate_native_mutation_set(plan, bindings, native_mutations)
+    topology_parameter_ids = topology_changing_mutation_ids(
+        plan,
+        mutations,
+    )
     return {
         "mutation_count": len(mutations),
         "parameter_ids": sorted(mutations),
+        "topology_changed": bool(topology_parameter_ids),
+        "topology_changing_parameter_ids": list(topology_parameter_ids),
         "native_values": {
             parameter_id: native_mutations[parameter_id]
             for parameter_id in sorted(native_mutations)
         },
     }
+
+
+def topology_changing_mutation_ids(
+    plan: SolidWorksReplayPlan,
+    parameter_ids: Collection[str],
+) -> tuple[str, ...]:
+    """Return edits that can add or remove native pattern instances."""
+    requested = set(parameter_ids)
+    return tuple(
+        sorted(
+            binding["parameter_id"]
+            for feature in plan.features
+            for binding in feature.parameter_bindings
+            if binding["parameter_id"] in requested
+            and binding.get("owner_kind") == "pattern"
+            and binding.get("unit") == "count"
+        )
+    )
 
 
 def verify_solidworks_editability(

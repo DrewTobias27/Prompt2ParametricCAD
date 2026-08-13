@@ -958,15 +958,11 @@ def audit_capability_case(
         )
 
         stage = "parameter_repair"
-        edited_part, edited_document = rebuild_with_parameter_updates(
+        edited_part, _ = rebuild_with_parameter_updates(
             document,
             case.mutations,
         )
         edited_metrics = shape_metrics(edited_part)
-        edited_plan = build_solidworks_replay_plan(
-            edited_document,
-            expected_geometry=geometry_metrics(edited_part),
-        )
 
         step_result = None
         if step_directory is not None:
@@ -1046,9 +1042,12 @@ def audit_capability_case(
                     context=f"{case.name} native edit",
                 )
                 edited_references = validate_published_references(
-                    edited_plan,
+                    plan,
                     edit_result,
-                    context=f"{case.name} native edit",
+                    context=(
+                        f"{case.name} native edit source-reference "
+                        "preservation"
+                    ),
                 )
                 edited_comparison = compare_geometry_metrics(
                     geometry_metrics(edited_part),

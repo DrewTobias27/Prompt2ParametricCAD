@@ -633,6 +633,10 @@ def test_compile_only_mutation_probe_accepts_pattern_controls(tmp_path: Path):
     output = json.loads(result.stdout.strip().splitlines()[-1])
     assert output["mutation_contract_validated"] is True
     assert output["mutation_count"] == 2
+    assert output["topology_changed"] is True
+    assert output["topology_changing_parameter_ids"] == [
+        "radial_posts.pattern.count"
+    ]
 
 
 @pytest.mark.skipif(

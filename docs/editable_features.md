@@ -231,6 +231,12 @@ transactional CadQuery rebuild. After SolidWorks mutates, saves, and reopens the
 part, the runner compares body count, volume, area, bounds, and center of mass
 before publishing the edited file.
 
+Pattern-count edits are reported as topology-changing. The native feature count
+remains editable, and every pre-existing persistent face reference must still
+resolve after the rebuild. Newly added pattern instances cannot have IDs in the
+older source plan; regenerate the package from the edited model before another
+automated feature targets those new instances.
+
 Run `prompt2cad-release-matrix` for the compact deterministic whole-pipeline
 gate and `prompt2cad-solidworks-smoke` for the broader CadQuery build and
 native-plan phase.
