@@ -27,6 +27,7 @@ from prompt2cad.solidworks_package import solidworks_package_static_payload
 from prompt2cad.solidworks_replay import SolidWorksReplayPlan
 from prompt2cad.solidworks_replay import SOLIDWORKS_MUTATION_FORMAT
 from prompt2cad.solidworks_replay import SOLIDWORKS_MUTATION_VERSION
+from prompt2cad.solidworks_replay import build_solidworks_mutation_document
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_verification import compare_geometry_metrics
@@ -302,18 +303,11 @@ def propose_solidworks_package_mutation(package_root: Path) -> dict:
             except Exception as error:
                 rejected.append(f"{parameter_id}: {error}")
                 continue
-            return {
-                "format": SOLIDWORKS_MUTATION_FORMAT,
-                "version": SOLIDWORKS_MUTATION_VERSION,
-                "expected_geometry": edited_geometry,
-                "mutations": [
-                    {
-                        "parameter_id": parameter_id,
-                        "value": value,
-                        "unit": binding["unit"],
-                    }
-                ],
-            }
+            return build_solidworks_mutation_document(
+                verified.plan,
+                mutation,
+                expected_geometry=edited_geometry,
+            )
 
     detail = rejected[-1] if rejected else "no numeric native bindings"
     raise RuntimeError(

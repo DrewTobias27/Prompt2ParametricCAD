@@ -17,6 +17,7 @@ from prompt2cad.solidworks_replay import SOLIDWORKS_REPLAY_VERSION
 from prompt2cad.solidworks_replay import SOLIDWORKS_PARITY_MATRIX
 from prompt2cad.solidworks_replay import SolidWorksExecutionError
 from prompt2cad.solidworks_replay import SolidWorksReplayError
+from prompt2cad.solidworks_replay import build_solidworks_mutation_document
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
 from prompt2cad.solidworks_replay import validate_solidworks_mutations
@@ -2057,6 +2058,49 @@ def test_native_mutation_preflight_reports_pattern_count_topology_changes():
     assert result["topology_changing_parameter_ids"] == [
         "holes.pattern.count"
     ]
+
+
+def test_mutation_document_preserves_count_type_and_geometry_oracle():
+    model_data = native_model_data()
+    model_data["operations"] = model_data["operations"][:2]
+    model_data["operations"][1] = {
+        "type": "cut",
+        "id": "holes",
+        "target": "base.top",
+        "profile": "circle",
+        "positions": [[20, 0], [0, 20], [-20, 0], [0, -20]],
+        "pattern": {
+            "type": "circular",
+            "seed_position": [20, 0],
+            "center": [0, 0],
+            "count": 4,
+            "total_angle_degrees": 360,
+        },
+        "diameter": 6,
+        "depth": "through",
+    }
+    mutations = {
+        "holes.pattern.count": 5,
+        "holes.pattern.total_angle": 300,
+    }
+    expected_geometry = edited_geometry(model_data, mutations)
+
+    document = build_solidworks_mutation_document(
+        replay_plan(model_data),
+        mutations,
+        expected_geometry=expected_geometry,
+    )
+
+    assert document["format"] == "prompt2cad.solidworks-mutations"
+    assert document["version"] == 2
+    assert document["expected_geometry"] == expected_geometry
+    records = {
+        record["parameter_id"]: record for record in document["mutations"]
+    }
+    assert records["holes.pattern.count"]["value"] == 5
+    assert isinstance(records["holes.pattern.count"]["value"], int)
+    assert records["holes.pattern.total_angle"]["value"] == 300.0
+    assert isinstance(records["holes.pattern.total_angle"]["value"], float)
 
 
 @pytest.mark.parametrize("unsafe_value", [0, 12])

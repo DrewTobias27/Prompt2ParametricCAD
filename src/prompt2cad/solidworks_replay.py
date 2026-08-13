@@ -575,7 +575,7 @@ def export_solidworks_part(
 
 def validate_solidworks_mutations(
     plan: SolidWorksReplayPlan,
-    mutations: dict[str, float],
+    mutations: dict[str, float | int],
 ) -> dict:
     """Validate one native edit transaction without launching SolidWorks."""
     if not mutations:
@@ -617,6 +617,51 @@ def validate_solidworks_mutations(
     }
 
 
+def build_solidworks_mutation_document(
+    plan: SolidWorksReplayPlan,
+    mutations: dict[str, float | int],
+    *,
+    expected_geometry: dict,
+) -> dict:
+    """Build the single canonical native-edit transaction document.
+
+    Both direct edit execution and downloaded-package verification consume
+    this protocol. Keeping its validation and serialization here prevents the
+    two entry points from drifting as new native controls are added.
+    """
+    validate_solidworks_mutations(plan, mutations)
+    normalized_geometry = _normalize_expected_geometry(expected_geometry)
+    if normalized_geometry is None:  # Defensive; the public type is non-optional.
+        raise SolidWorksExecutionError(
+            "SOLIDWORKS mutation document requires expected edited geometry"
+        )
+    bindings = {
+        binding["parameter_id"]: binding
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    }
+    records = []
+    for parameter_id, value in sorted(mutations.items()):
+        binding = bindings[parameter_id]
+        numeric_value = float(value)
+        serialized_value: float | int = numeric_value
+        if binding.get("integer_only"):
+            serialized_value = int(numeric_value)
+        records.append(
+            {
+                "parameter_id": parameter_id,
+                "value": serialized_value,
+                "unit": binding["unit"],
+            }
+        )
+    return {
+        "format": SOLIDWORKS_MUTATION_FORMAT,
+        "version": SOLIDWORKS_MUTATION_VERSION,
+        "expected_geometry": normalized_geometry,
+        "mutations": records,
+    }
+
+
 def topology_changing_mutation_ids(
     plan: SolidWorksReplayPlan,
     parameter_ids: Collection[str],
@@ -639,7 +684,7 @@ def verify_solidworks_editability(
     plan: SolidWorksReplayPlan,
     source_path: Path,
     output_path: Path,
-    mutations: dict[str, float],
+    mutations: dict[str, float | int],
     *,
     expected_geometry: dict | None = None,
     visible: bool = False,
@@ -673,31 +718,20 @@ def verify_solidworks_editability(
         raise SolidWorksExecutionError(
             f"Refusing to overwrite existing SOLIDWORKS output: {output_path}"
         )
+    # Preserve actionable edit diagnostics even when a caller also omitted
+    # the edited-geometry oracle. The canonical document builder repeats this
+    # inexpensive check so every entry point remains safe on its own.
     validate_solidworks_mutations(plan, mutations)
     if expected_geometry is None:
         raise SolidWorksExecutionError(
             "SOLIDWORKS editability verification requires expected edited "
             "CadQuery geometry"
         )
-    normalized_edited_geometry = _normalize_expected_geometry(expected_geometry)
-    bindings = {
-        binding["parameter_id"]: binding
-        for feature in plan.features
-        for binding in feature.parameter_bindings
-    }
-    mutation_document = {
-        "format": SOLIDWORKS_MUTATION_FORMAT,
-        "version": SOLIDWORKS_MUTATION_VERSION,
-        "expected_geometry": normalized_edited_geometry,
-        "mutations": [
-            {
-                "parameter_id": parameter_id,
-                "value": float(value),
-                "unit": bindings[parameter_id]["unit"],
-            }
-            for parameter_id, value in sorted(mutations.items())
-        ],
-    }
+    mutation_document = build_solidworks_mutation_document(
+        plan,
+        mutations,
+        expected_geometry=expected_geometry,
+    )
 
     replay_script = Path(__file__).with_name("solidworks_replay.ps1")
     replay_engine = Path(__file__).with_name("solidworks_replay_runner.cs")
