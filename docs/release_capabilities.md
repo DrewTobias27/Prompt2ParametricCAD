@@ -28,9 +28,9 @@ Every case must pass these deterministic gates:
 3. complete SolidWorks replay-plan lowering with no dropped operations;
 4. transactional parameter mutation and CadQuery rebuild;
 5. STEP export/re-import with matching body count, volume, and XYZ spans;
-6. when native execution is enabled, SolidWorks creation, geometry comparison,
-   persistent-reference verification, save/reopen, parameter mutation, rebuild,
-   second save/reopen, and a second geometry comparison.
+6. when native execution is enabled, SolidWorks creation, first save/reopen,
+   native history/helper/geometry/reference verification, parameter mutation,
+   rebuild, second save/reopen, and a second geometry comparison.
 
 The August 2026 native audit passed the original 286 STEP round trips and all
 286 native SolidWorks cases after four generalized fixes found by the matrix:
@@ -124,8 +124,9 @@ only whether an initial file can be saved.
 ## Native editability boundary
 
 SolidWorks output contains ordered native sketches, boss/cut/revolve features,
-patterns, Hole Wizard countersinks, chamfers, fillets, and persistent semantic
-references. Standard widths, heights, diameters, depths, distances, revolve
+patterns, Hole Wizard countersinks, chamfers, fillets, persistent semantic face
+references, and explicitly named pattern/support helpers. Standard widths,
+heights, diameters, depths, distances, revolve
 angles, pattern controls, and non-centered rectangle/circle placements have
 named automated mutation bindings. Centered placement is held by a coincident
 relation rather than a zero-valued driving dimension.

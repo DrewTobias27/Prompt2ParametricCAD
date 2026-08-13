@@ -5,6 +5,209 @@ import math
 from prompt2cad.solidworks_replay import SolidWorksReplayPlan
 
 
+def validate_native_build_result(
+    plan: SolidWorksReplayPlan,
+    native_result: dict,
+    *,
+    context: str,
+) -> dict:
+    """Require a complete, current native-build verification report."""
+    _require_success_result(native_result, context=context)
+    if native_result.get("verification_passed") is not True:
+        raise RuntimeError(f"{context} did not pass saved-history verification")
+    if native_result.get("reopened") is not True:
+        raise RuntimeError(f"{context} did not reopen the saved native part")
+
+    expected_features = [feature.feature_name for feature in plan.features]
+    actual_features = native_result.get("native_features")
+    if actual_features != expected_features:
+        raise RuntimeError(
+            f"{context} native feature order does not match the replay plan"
+        )
+    if native_result.get("feature_count") != len(expected_features):
+        raise RuntimeError(f"{context} reported the wrong native feature count")
+
+    summary = _validate_native_contract_counts(
+        plan,
+        native_result,
+        context=context,
+    )
+    summary["verification_passed"] = True
+    return summary
+
+
+def validate_native_editability_result(
+    plan: SolidWorksReplayPlan,
+    native_result: dict,
+    *,
+    expected_mutation_count: int,
+    context: str,
+) -> dict:
+    """Require a complete save/reopen report after native parameter edits."""
+    _require_success_result(native_result, context=context)
+    if native_result.get("reopened") is not True:
+        raise RuntimeError(f"{context} did not reopen the saved native part")
+    if native_result.get("mutation_count") != expected_mutation_count:
+        raise RuntimeError(f"{context} did not apply every requested mutation")
+
+    summary = _validate_native_contract_counts(
+        plan,
+        native_result,
+        context=context,
+    )
+    summary.update(
+        {
+            "reopened": True,
+            "mutation_count": expected_mutation_count,
+        }
+    )
+    return summary
+
+
+def _require_success_result(native_result: dict, *, context: str) -> None:
+    if not isinstance(native_result, dict):
+        raise RuntimeError(f"{context} did not return a JSON object")
+    if native_result.get("status") != "success":
+        raise RuntimeError(f"{context} did not report success")
+
+
+def _validate_native_contract_counts(
+    plan: SolidWorksReplayPlan,
+    native_result: dict,
+    *,
+    context: str,
+) -> dict:
+    expected_parameter_count = sum(
+        len(feature.parameter_bindings) for feature in plan.features
+    )
+    expected_dimension_count = sum(
+        binding.get("binding_kind") == "named_dimension"
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    )
+    expected_helper_names = _expected_native_helper_names(plan)
+
+    _require_exact_count(
+        native_result,
+        "declared_parameter_count",
+        expected_parameter_count,
+        context=context,
+    )
+    _require_exact_count(
+        native_result,
+        "verified_parameter_count",
+        expected_parameter_count,
+        context=context,
+    )
+    if "verified_dimension_count" in native_result:
+        _require_exact_count(
+            native_result,
+            "verified_dimension_count",
+            expected_dimension_count,
+            context=context,
+        )
+    _require_exact_count(
+        native_result,
+        "declared_helper_count",
+        len(expected_helper_names),
+        context=context,
+    )
+    _require_exact_count(
+        native_result,
+        "verified_helper_count",
+        len(expected_helper_names),
+        context=context,
+    )
+    _validate_native_health(plan, native_result.get("health"), context=context)
+    return {
+        "parameter_count": expected_parameter_count,
+        "dimension_count": expected_dimension_count,
+        "helper_count": len(expected_helper_names),
+        "health_passed": True,
+    }
+
+
+def _require_exact_count(
+    report: dict,
+    field_name: str,
+    expected: int,
+    *,
+    context: str,
+) -> None:
+    if report.get(field_name) != expected:
+        raise RuntimeError(
+            f"{context} reported {field_name}={report.get(field_name)!r}; "
+            f"expected {expected}"
+        )
+
+
+def _expected_native_helper_names(plan: SolidWorksReplayPlan) -> tuple[str, ...]:
+    names: list[str] = []
+    for feature in plan.features:
+        if feature.support.get("kind") == "offset_plane":
+            names.append(feature.support["name"])
+        pattern = feature.pattern
+        if pattern is None:
+            continue
+        names.append(pattern["seed_feature_name"])
+        if pattern["kind"] in {"circular_pattern", "linear_pattern"}:
+            names.append(pattern["reference_sketch_name"])
+        if pattern["kind"] == "circular_pattern":
+            names.append(pattern["axis_name"])
+        elif pattern["kind"] == "mirror_pattern":
+            names.append(pattern["placement_sketch_name"])
+    return tuple(names)
+
+
+def _validate_native_health(
+    plan: SolidWorksReplayPlan,
+    health: object,
+    *,
+    context: str,
+) -> None:
+    if not isinstance(health, dict):
+        raise RuntimeError(f"{context} did not report native feature health")
+    if health.get("feature_error_count") != 0:
+        raise RuntimeError(f"{context} reports native feature errors")
+
+    expected_feature_names = [feature.feature_name for feature in plan.features]
+    feature_records = health.get("features")
+    if not isinstance(feature_records, list):
+        raise RuntimeError(f"{context} did not report native feature records")
+    actual_feature_names = [record.get("feature_name") for record in feature_records]
+    if actual_feature_names != expected_feature_names:
+        raise RuntimeError(f"{context} health report does not cover every feature")
+    invalid_features = [
+        record.get("feature_name")
+        for record in feature_records
+        if record.get("error_code") not in {0, None}
+        and record.get("is_warning") is not True
+    ]
+    if invalid_features:
+        raise RuntimeError(
+            f"{context} has unhealthy native features: {invalid_features}"
+        )
+
+    expected_sketch_names = [
+        feature.sketch_name for feature in plan.features if feature.sketch_name
+    ]
+    sketch_records = health.get("sketches")
+    if not isinstance(sketch_records, list):
+        raise RuntimeError(f"{context} did not report native sketch records")
+    actual_sketch_names = [record.get("sketch_name") for record in sketch_records]
+    if actual_sketch_names != expected_sketch_names:
+        raise RuntimeError(f"{context} health report does not cover every sketch")
+    invalid_sketches = [
+        record.get("sketch_name")
+        for record in sketch_records
+        if record.get("is_valid") is not True
+    ]
+    if invalid_sketches:
+        raise RuntimeError(
+            f"{context} has invalid native sketches: {invalid_sketches}"
+        )
+
+
 def validate_published_references(
     plan: SolidWorksReplayPlan,
     native_result: dict,

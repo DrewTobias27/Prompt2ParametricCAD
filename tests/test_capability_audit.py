@@ -141,6 +141,7 @@ def test_representative_step_round_trips(tmp_path: Path):
 def test_native_audit_mode_verifies_replay_and_edited_reopen(
     tmp_path: Path,
     monkeypatch,
+    native_result_factory,
 ):
     case = next(
         case
@@ -176,10 +177,11 @@ def test_native_audit_mode_verifies_replay_and_edited_reopen(
         output_path.write_bytes(b"native-part")
         kwargs["result_output_path"].write_text(
             json.dumps(
-                {
-                    "geometry": original_geometry,
-                    "published_references": reference_records(plan),
-                }
+                native_result_factory(
+                    plan,
+                    geometry=original_geometry,
+                    published_references=reference_records(plan),
+                )
             ),
             encoding="utf-8",
         )
@@ -190,12 +192,13 @@ def test_native_audit_mode_verifies_replay_and_edited_reopen(
         output_path.write_bytes(b"edited-native-part")
         kwargs["result_output_path"].write_text(
             json.dumps(
-                {
-                    "reopened": True,
-                    "mutation_count": len(mutations),
-                    "after_geometry": edited_geometry,
-                    "published_references": reference_records(plan),
-                }
+                native_result_factory(
+                    plan,
+                    editability=True,
+                    mutation_count=len(mutations),
+                    after_geometry=edited_geometry,
+                    published_references=reference_records(plan),
+                )
             ),
             encoding="utf-8",
         )
@@ -215,6 +218,7 @@ def test_native_audit_mode_verifies_replay_and_edited_reopen(
     )
 
     assert result["status"] == "pass"
+    assert result["solidworks_native"]["native_contract"]["health_passed"] is True
     assert result["solidworks_native"]["editability"]["reopened"] is True
 
 

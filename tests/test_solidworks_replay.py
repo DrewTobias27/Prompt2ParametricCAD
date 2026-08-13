@@ -1444,7 +1444,8 @@ def test_native_runner_reports_feature_errors_and_sketch_constraint_status():
     assert "GetErrorCode2(out isWarning)" in runner_source
     assert "GetConstrainedStatus()" in runner_source
     assert 'return "under_defined"' in runner_source
-    assert "FeatureErrorCount > 0" in runner_source
+    assert 'RequireHealthyModel(health, "before saving")' in runner_source
+    assert 'RequireHealthyModel(health, "after reopening")' in runner_source
 
 
 def test_native_runner_completes_remaining_sketch_degrees_of_freedom():
@@ -1586,6 +1587,33 @@ def test_native_replay_tracks_the_saved_document_title_for_cleanup():
         "application.CloseDoc(modelTitle);", refresh_position
     )
     assert save_position < refresh_position < close_position
+
+
+def test_native_build_reopens_before_publishing_the_verified_part():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    save_position = runner_source.index("int saveStatus = model.SaveAs3(")
+    reopen_position = runner_source.index(
+        "model = OpenNativePart(application, stagedOutput);",
+        save_position,
+    )
+    verify_position = runner_source.index(
+        "parameterVerification = VerifyReplay(model, part, plan);",
+        reopen_position,
+    )
+    publish_position = runner_source.index(
+        "PublishStagedOutput(stagedOutput, resolvedOutput);",
+        verify_position,
+    )
+
+    assert save_position < reopen_position < verify_position < publish_position
+    assert 'DataMember(Name = "reopened")' in runner_source
+    assert "Reopened = true" in runner_source
 
 
 def test_native_runner_stages_verified_outputs_before_publication():

@@ -30,6 +30,8 @@ from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_verification import compare_geometry_metrics
 from prompt2cad.solidworks_verification import geometry_metrics
+from prompt2cad.solidworks_verification import validate_native_build_result
+from prompt2cad.solidworks_verification import validate_native_editability_result
 from prompt2cad.solidworks_verification import validate_published_references
 
 
@@ -990,6 +992,11 @@ def audit_capability_case(
             replay_result = json.loads(
                 native_result_path.read_text(encoding="utf-8")
             )
+            replay_contract = validate_native_build_result(
+                plan,
+                replay_result,
+                context=f"{case.name} native replay",
+            )
             reference_summary = validate_published_references(
                 plan,
                 replay_result,
@@ -1002,6 +1009,7 @@ def audit_capability_case(
             native_result = {
                 "path": str(native_path),
                 "result_path": str(native_result_path),
+                "native_contract": replay_contract,
                 "geometry_comparison": geometry_comparison,
                 "published_references": reference_summary,
                 "editability": None,
@@ -1024,14 +1032,12 @@ def audit_capability_case(
                 edit_result = json.loads(
                     edit_result_path.read_text(encoding="utf-8")
                 )
-                if not edit_result.get("reopened"):
-                    raise RuntimeError(
-                        "Native edit verification did not reopen the saved part"
-                    )
-                if edit_result.get("mutation_count") != len(case.mutations):
-                    raise RuntimeError(
-                        "Native edit verification did not apply every mutation"
-                    )
+                edit_contract = validate_native_editability_result(
+                    plan,
+                    edit_result,
+                    expected_mutation_count=len(case.mutations),
+                    context=f"{case.name} native edit",
+                )
                 edited_references = validate_published_references(
                     edited_plan,
                     edit_result,
@@ -1044,6 +1050,7 @@ def audit_capability_case(
                 native_result["editability"] = {
                     "path": str(mutated_path),
                     "result_path": str(edit_result_path),
+                    "native_contract": edit_contract,
                     "geometry_comparison": edited_comparison,
                     "published_references": edited_references,
                     "reopened": True,

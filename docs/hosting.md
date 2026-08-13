@@ -55,8 +55,9 @@ and optionally double-click `Check-SolidWorks-Setup.cmd` first. That preflight
 checks the package, 64-bit PowerShell, SolidWorks registration and API files,
 compiles the replay engine, and validates the replay-plan contract without
 creating a part. Then run
-`Build-SolidWorks-Part.cmd`; it writes both the native part and a JSON
-verification report.
+`Build-SolidWorks-Part.cmd`; package v7 stages the native part, closes and
+reopens it, verifies the saved history and helpers, and only then writes the
+final part plus a JSON verification report.
 
 ## Public-release gate
 

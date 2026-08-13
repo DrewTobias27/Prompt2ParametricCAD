@@ -21,6 +21,8 @@ from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_replay import verify_solidworks_editability
 from prompt2cad.solidworks_verification import compare_geometry_metrics
 from prompt2cad.solidworks_verification import geometry_metrics
+from prompt2cad.solidworks_verification import validate_native_build_result
+from prompt2cad.solidworks_verification import validate_native_editability_result
 from prompt2cad.solidworks_verification import validate_published_references
 
 
@@ -199,6 +201,12 @@ def run_smoke_suite(
                 native_result = json.loads(
                     native_result_path.read_text(encoding="utf-8")
                 )
+                native_contract = validate_native_build_result(
+                    plan,
+                    native_result,
+                    context="native replay",
+                )
+                result["native_contract"] = native_contract
                 native_reference_summary = validate_published_references(
                     plan,
                     native_result,
@@ -228,14 +236,12 @@ def run_smoke_suite(
                     editability_result = json.loads(
                         editability_result_path.read_text(encoding="utf-8")
                     )
-                    if not editability_result.get("reopened"):
-                        raise RuntimeError(
-                            "Native editability verifier did not reopen the saved part"
-                        )
-                    if editability_result.get("mutation_count") != len(mutations):
-                        raise RuntimeError(
-                            "Native editability verifier did not apply every mutation"
-                        )
+                    editability_contract = validate_native_editability_result(
+                        plan,
+                        editability_result,
+                        expected_mutation_count=len(mutations),
+                        context="editability reopen",
+                    )
                     editability_reference_summary = validate_published_references(
                         plan,
                         editability_result,
@@ -250,6 +256,7 @@ def run_smoke_suite(
                             editability_result.get("after_geometry", {}),
                         ),
                         "health": editability_result.get("health"),
+                        "native_contract": editability_contract,
                         "published_references": editability_reference_summary,
                         "reopened": True,
                     }

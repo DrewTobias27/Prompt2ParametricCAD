@@ -29,6 +29,8 @@ from prompt2cad.solidworks_replay import verify_solidworks_editability
 from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_verification import compare_geometry_metrics
 from prompt2cad.solidworks_verification import geometry_metrics
+from prompt2cad.solidworks_verification import validate_native_build_result
+from prompt2cad.solidworks_verification import validate_native_editability_result
 from prompt2cad.solidworks_verification import validate_published_references
 from prompt2cad.training_data import DEFAULT_INTENT_EXAMPLES_DIR
 from prompt2cad.training_data import load_intent_examples
@@ -291,6 +293,11 @@ def run_release_case(
             native_check = {
                 "passed": True,
                 "artifact": str(native_path),
+                "native_contract": validate_native_build_result(
+                    plan,
+                    native_result,
+                    context=f"{case.name} native replay",
+                ),
                 "geometry_comparison": compare_geometry_metrics(
                     source_metrics,
                     native_result.get("geometry", {}),
@@ -322,18 +329,16 @@ def run_release_case(
                 edit_result = json.loads(
                     edit_result_path.read_text(encoding="utf-8")
                 )
-                if edit_result.get("reopened") is not True:
-                    raise RuntimeError(
-                        "Native edit verification did not reopen the saved part"
-                    )
-                if edit_result.get("mutation_count") != len(case.mutations):
-                    raise RuntimeError(
-                        "Native edit verification did not apply every mutation"
-                    )
                 native_check["editability"] = {
                     "passed": True,
                     "artifact": str(edited_path),
                     "reopened": True,
+                    "native_contract": validate_native_editability_result(
+                        plan,
+                        edit_result,
+                        expected_mutation_count=len(case.mutations),
+                        context=f"{case.name} native edit",
+                    ),
                     "geometry_comparison": compare_geometry_metrics(
                         edited_metrics,
                         edit_result.get("after_geometry", {}),

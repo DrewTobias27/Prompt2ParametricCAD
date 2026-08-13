@@ -531,6 +531,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "verification_passed")]
         public bool VerificationPassed { get; set; }
 
+        [DataMember(Name = "reopened")]
+        public bool Reopened { get; set; }
+
         [DataMember(Name = "verified_dimension_count")]
         public int VerifiedDimensionCount { get; set; }
 
@@ -884,34 +887,7 @@ namespace Prompt2Cad.SolidWorks
                     VerifyReplay(model, part, plan);
                 Trace("Checking native feature and sketch health");
                 NativeHealthResult health = InspectNativeHealth(model, plan);
-                if (health.FeatureErrorCount > 0)
-                {
-                    string failedFeatures = String.Join(
-                        ", ",
-                        health.Features
-                            .Where(item => item.ErrorCode != 0 && !item.IsWarning)
-                            .Select(item =>
-                                item.FeatureName + " (code " + item.ErrorCode + ")")
-                    );
-                    throw new InvalidOperationException(
-                        "SOLIDWORKS reports rebuild errors in: " + failedFeatures + "."
-                    );
-                }
-                SketchHealthResult[] invalidSketches = health.Sketches
-                    .Where(item => !item.IsValid)
-                    .ToArray();
-                if (invalidSketches.Length > 0)
-                {
-                    throw new InvalidOperationException(
-                        "SOLIDWORKS reports invalid sketch constraints in: " +
-                        String.Join(
-                            ", ",
-                            invalidSketches.Select(item =>
-                                item.SketchName + " (" +
-                                item.ConstraintStatus + ")")
-                        ) + "."
-                    );
-                }
+                RequireHealthyModel(health, "before saving");
                 Trace("Saving native part");
                 int saveStatus = model.SaveAs3(
                     stagedOutput,
@@ -928,6 +904,20 @@ namespace Prompt2Cad.SolidWorks
                 modelTitle = model.GetTitle();
                 IDictionary<string, byte[]> persistentReferenceIds =
                     CapturePersistentReferenceIds(model, part, plan);
+
+                Trace("Closing and reopening the staged native part");
+                application.CloseDoc(modelTitle);
+                ReleaseComObject(model);
+                model = null;
+                modelTitle = null;
+
+                model = OpenNativePart(application, stagedOutput);
+                modelTitle = model.GetTitle();
+                part = (PartDoc)model;
+                Trace("Verifying reopened feature history and dimensions");
+                parameterVerification = VerifyReplay(model, part, plan);
+                health = InspectNativeHealth(model, plan);
+                RequireHealthyModel(health, "after reopening");
                 PersistentReferenceResult[] publishedReferences =
                     VerifyPersistentReferenceIds(
                         model,
@@ -952,6 +942,7 @@ namespace Prompt2Cad.SolidWorks
                         NativeFeatures = createdNames.ToArray(),
                         FeatureCount = createdNames.Count,
                         VerificationPassed = true,
+                        Reopened = true,
                         VerifiedDimensionCount =
                             parameterVerification.VerifiedDimensionCount,
                         DeclaredParameterCount =

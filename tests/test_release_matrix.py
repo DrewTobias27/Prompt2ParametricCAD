@@ -60,6 +60,7 @@ def test_release_matrix_rejects_unknown_cases(tmp_path: Path):
 
 def test_release_matrix_native_mode_checks_create_edit_and_reopen(
     tmp_path: Path,
+    native_result_factory,
 ):
     case_name = "rectangular_plate_corner_holes"
 
@@ -90,10 +91,11 @@ def test_release_matrix_native_mode_checks_create_edit_and_reopen(
         output_path.write_bytes(b"native-part")
         kwargs["result_output_path"].write_text(
             json.dumps(
-                {
-                    "geometry": geometry_metrics(build_model(model_data)),
-                    "published_references": reference_records(plan),
-                }
+                native_result_factory(
+                    plan,
+                    geometry=geometry_metrics(build_model(model_data)),
+                    published_references=reference_records(plan),
+                )
             ),
             encoding="utf-8",
         )
@@ -119,12 +121,13 @@ def test_release_matrix_native_mode_checks_create_edit_and_reopen(
         output_path.write_bytes(b"edited-native-part")
         kwargs["result_output_path"].write_text(
             json.dumps(
-                {
-                    "reopened": True,
-                    "mutation_count": len(mutations),
-                    "after_geometry": geometry_metrics(edited_part),
-                    "published_references": reference_records(edited_plan),
-                }
+                native_result_factory(
+                    plan,
+                    editability=True,
+                    mutation_count=len(mutations),
+                    after_geometry=geometry_metrics(edited_part),
+                    published_references=reference_records(edited_plan),
+                )
             ),
             encoding="utf-8",
         )
@@ -143,6 +146,8 @@ def test_release_matrix_native_mode_checks_create_edit_and_reopen(
     assert report["pipeline"][-1] == "solidworks_native"
     native = report["results"][0]["checks"]["solidworks_native"]
     assert native["geometry_comparison"]["passed"] is True
+    assert native["native_contract"]["health_passed"] is True
     assert native["published_references"]["passed"] is True
     assert native["editability"]["passed"] is True
     assert native["editability"]["reopened"] is True
+    assert native["editability"]["native_contract"]["health_passed"] is True

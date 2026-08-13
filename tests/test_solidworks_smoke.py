@@ -15,6 +15,8 @@ from prompt2cad.solidworks_smoke import run_smoke_suite
 from prompt2cad.solidworks_smoke import smoke_fixture_paths
 from prompt2cad.solidworks_verification import compare_geometry_metrics
 from prompt2cad.solidworks_verification import geometry_metrics
+from prompt2cad.solidworks_verification import validate_native_build_result
+from prompt2cad.solidworks_verification import validate_native_editability_result
 from prompt2cad.solidworks_verification import validate_published_references
 
 
@@ -171,7 +173,10 @@ def test_revolve_axis_endpoints_are_retained_derived_geometry():
     )
 
 
-def test_native_smoke_execution_uses_the_validated_plan(tmp_path: Path):
+def test_native_smoke_execution_uses_the_validated_plan(
+    tmp_path: Path,
+    native_result_factory,
+):
     fixture = smoke_fixture_paths(["solidworks_smoke_patterned_plate"])
     captured = []
     expected_geometry = geometry_metrics(build_model(load_model(fixture[0])))
@@ -182,10 +187,11 @@ def test_native_smoke_execution_uses_the_validated_plan(tmp_path: Path):
         result_path = kwargs["result_output_path"]
         result_path.write_text(
             json.dumps(
-                {
-                    "geometry": expected_geometry,
-                    "published_references": persistent_reference_records(plan),
-                }
+                native_result_factory(
+                    plan,
+                    geometry=expected_geometry,
+                    published_references=persistent_reference_records(plan),
+                )
             ),
             encoding="utf-8",
         )
@@ -209,6 +215,7 @@ def test_native_smoke_execution_uses_the_validated_plan(tmp_path: Path):
 
 def test_native_smoke_editability_rebuilds_and_compares_mutated_geometry(
     tmp_path: Path,
+    native_result_factory,
 ):
     fixture = smoke_fixture_paths(["solidworks_smoke_patterned_plate"])
     captured = {"exports": 0, "edits": 0}
@@ -220,10 +227,11 @@ def test_native_smoke_editability_rebuilds_and_compares_mutated_geometry(
         model_data = load_model(fixture[0])
         result_path.write_text(
             json.dumps(
-                {
-                    "geometry": geometry_metrics(build_model(model_data)),
-                    "published_references": persistent_reference_records(plan),
-                }
+                native_result_factory(
+                    plan,
+                    geometry=geometry_metrics(build_model(model_data)),
+                    published_references=persistent_reference_records(plan),
+                )
             ),
             encoding="utf-8",
         )
@@ -250,14 +258,13 @@ def test_native_smoke_editability_rebuilds_and_compares_mutated_geometry(
         output_path.write_bytes(b"mutated-native-part")
         kwargs["result_output_path"].write_text(
             json.dumps(
-                {
-                    "status": "success",
-                    "mutation_count": 3,
-                    "reopened": True,
-                    "after_geometry": geometry_metrics(build_model(model_data)),
-                    "health": {"feature_error_count": 0},
-                    "published_references": persistent_reference_records(plan),
-                }
+                native_result_factory(
+                    plan,
+                    editability=True,
+                    mutation_count=3,
+                    after_geometry=geometry_metrics(build_model(model_data)),
+                    published_references=persistent_reference_records(plan),
+                )
             ),
             encoding="utf-8",
         )
@@ -277,7 +284,8 @@ def test_native_smoke_editability_rebuilds_and_compares_mutated_geometry(
     editability = report["results"][0]["editability"]
     assert editability["reopened"] is True
     assert editability["geometry_comparison"]["passed"] is True
-    assert editability["health"] == {"feature_error_count": 0}
+    assert editability["health"]["feature_error_count"] == 0
+    assert editability["native_contract"]["health_passed"] is True
     assert editability["published_references"]["passed"] is True
 
 
@@ -293,6 +301,39 @@ def test_persistent_reference_check_rejects_a_missing_semantic_entity():
             plan,
             {"published_references": incomplete},
             context="test",
+        )
+
+
+def test_native_contract_rejects_missing_helpers_and_unhealthy_sketches(
+    native_result_factory,
+):
+    from prompt2cad.solidworks_export import model_path_to_replay_plan
+
+    fixture = smoke_fixture_paths(["solidworks_smoke_circular_pattern"])[0]
+    plan = model_path_to_replay_plan(fixture)
+    missing_helper = native_result_factory(plan)
+    missing_helper["verified_helper_count"] -= 1
+
+    with pytest.raises(RuntimeError, match="verified_helper_count"):
+        validate_native_build_result(plan, missing_helper, context="test")
+
+    not_reopened = native_result_factory(plan)
+    not_reopened["reopened"] = False
+    with pytest.raises(RuntimeError, match="did not reopen"):
+        validate_native_build_result(plan, not_reopened, context="test")
+
+    unhealthy = native_result_factory(
+        plan,
+        editability=True,
+        mutation_count=1,
+    )
+    unhealthy["health"]["sketches"][0]["is_valid"] = False
+    with pytest.raises(RuntimeError, match="invalid native sketches"):
+        validate_native_editability_result(
+            plan,
+            unhealthy,
+            expected_mutation_count=1,
+            context="test edit",
         )
 
 

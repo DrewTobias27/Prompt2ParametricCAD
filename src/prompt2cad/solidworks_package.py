@@ -17,7 +17,7 @@ from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
-SOLIDWORKS_PACKAGE_VERSION = 6
+SOLIDWORKS_PACKAGE_VERSION = 7
 _FIXED_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 
@@ -316,6 +316,7 @@ def _launcher_script(native_filename: str) -> str:
         Write-Host "  Part:   $OutputPath"
         Write-Host "  Report: $resultPath"
         Write-Host "  Features: $($result.feature_count)"
+        Write-Host "  Saved file reopened: $($result.reopened)"
         Write-Host "  Verified parameters: $($result.verified_parameter_count)"
         Write-Host "  Verified helpers: $($result.verified_helper_count)"
         Write-Host "  Persistent references: $($result.published_references.Count)"

@@ -22,7 +22,7 @@ and represented as a dependency graph for validated editing and native replay.
 - Feature graph with stable IDs, parents, children, sketches, faces, and edges
 - Versioned editable-model document with named parameters and validated rebuilds
 - Verified native SolidWorks replay with fully defined sketches, editable
-  dimensions, patterns, persistent semantic references, and ordered features
+  dimensions, patterns, persistent semantic face references, and ordered features
 - Generated 292-case STEP/SolidWorks composition and mutation audit
 - Native-plan parity across all 49 checked-in models and intent examples
 - Seven-case golden prompt-to-intent-to-STEP-to-SolidWorks release matrix
@@ -212,12 +212,14 @@ comparison, parameter mutation, rebuild, save/reopen, and reference checks.
 The native replay planner covers every operation in the STEP builder:
 rectangle, circle, polygon, polyline, and line/arc sketches; blind/through
 extrusions and cuts; full or partial revolves; circular, linear, and mirrored
-patterns; countersinks; chamfers; and fillets. It preserves semantic face and
-edge targets, persistent native reference IDs, local placement frames, and
-deterministic feature names rather than importing a featureless STEP body. The
-runner verifies declared parameters, fully defined sketches, feature health,
-body count, volume, surface area, absolute bounds, center of mass, and
-persistent-reference resolution. Planning, serialization, and automation are
+patterns; countersinks; chamfers; and fillets. It preserves semantic face
+targets, canonical edge-selection recipes, persistent native face IDs, local
+placement frames, and deterministic feature and helper names rather than
+importing a featureless STEP body. The runner saves to a staged file, closes and
+reopens it, then verifies declared parameters, hidden helper objects, fully
+defined sketches, feature health, body count, volume, surface area, absolute
+bounds, center of mass, and persistent-reference resolution. Planning,
+serialization, and automation are
 regression-tested without opening SolidWorks; each installed SolidWorks version
 still requires a native smoke test before release use.
 The hosted application packages the source model, editable-model document,
