@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
+using System.Security.Cryptography;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 
@@ -538,6 +539,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "output_path")]
         public string OutputPath { get; set; }
 
+        [DataMember(Name = "output_sha256")]
+        public string OutputSha256 { get; set; }
+
         [DataMember(Name = "native_features")]
         public string[] NativeFeatures { get; set; }
 
@@ -612,8 +616,14 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "source_path")]
         public string SourcePath { get; set; }
 
+        [DataMember(Name = "source_sha256")]
+        public string SourceSha256 { get; set; }
+
         [DataMember(Name = "output_path")]
         public string OutputPath { get; set; }
+
+        [DataMember(Name = "output_sha256")]
+        public string OutputSha256 { get; set; }
 
         [DataMember(Name = "mutation_count")]
         public int MutationCount { get; set; }
@@ -1043,6 +1053,7 @@ namespace Prompt2Cad.SolidWorks
                     {
                         Status = "success",
                         OutputPath = resolvedOutput,
+                        OutputSha256 = Sha256File(resolvedOutput),
                         NativeFeatures = createdNames.ToArray(),
                         FeatureCount = createdNames.Count,
                         VerificationPassed = true,
@@ -1165,6 +1176,7 @@ namespace Prompt2Cad.SolidWorks
             bool startedApplication = false;
             ModelDoc2 model = null;
             string modelTitle = null;
+            string sourceSha256 = null;
             try
             {
                 Type applicationType = Type.GetTypeFromProgID(
@@ -1193,6 +1205,7 @@ namespace Prompt2Cad.SolidWorks
                 }
 
                 RequireSourcePartClosed(application, resolvedSource);
+                sourceSha256 = Sha256File(resolvedSource);
                 model = OpenNativePart(application, resolvedSource);
                 modelTitle = model.GetTitle();
                 PartDoc part = (PartDoc)model;
@@ -1274,6 +1287,15 @@ namespace Prompt2Cad.SolidWorks
                 ReleaseComObject(model);
                 model = null;
                 modelTitle = null;
+                if (!String.Equals(
+                    sourceSha256,
+                    Sha256File(resolvedSource),
+                    StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "The source SOLIDWORKS part changed during edit verification."
+                    );
+                }
                 PublishStagedOutput(stagedOutput, resolvedOutput);
                 stagedOutput = null;
 
@@ -1282,7 +1304,9 @@ namespace Prompt2Cad.SolidWorks
                     {
                         Status = "success",
                         SourcePath = resolvedSource,
+                        SourceSha256 = sourceSha256,
                         OutputPath = resolvedOutput,
+                        OutputSha256 = Sha256File(resolvedOutput),
                         MutationCount = mutations.Length,
                         MutatedParameterIds = mutations
                             .Select(item => item.ParameterId)
@@ -7172,6 +7196,24 @@ namespace Prompt2Cad.SolidWorks
                 tracePath,
                 DateTime.UtcNow.ToString("O") + " " + message + System.Environment.NewLine
             );
+        }
+
+        private static string Sha256File(string path)
+        {
+            using (SHA256 algorithm = SHA256.Create())
+            using (FileStream stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read
+            ))
+            {
+                return String.Concat(
+                    algorithm.ComputeHash(stream).Select(
+                        value => value.ToString("x2", CultureInfo.InvariantCulture)
+                    )
+                );
+            }
         }
 
         private static void InitializeTrace(string outputPath, string operation)

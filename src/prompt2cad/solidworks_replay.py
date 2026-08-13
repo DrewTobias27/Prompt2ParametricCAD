@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Collection, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from hashlib import sha1
+from hashlib import sha1, sha256
 import json
 import math
 from pathlib import Path
@@ -913,6 +913,12 @@ def _validate_native_edit_receipt(
             raise RuntimeError(
                 f"{context} receipt identifies a different source part"
             )
+        validate_native_artifact_hash(
+            receipt,
+            expected_source_path,
+            field_name="source_sha256",
+            context=f"{context} source",
+        )
         validate_native_editability_result(
             plan,
             receipt,
@@ -986,6 +992,15 @@ def _parse_native_receipt(
         raise SolidWorksExecutionError(
             f"{context} receipt identifies a different output part"
         )
+    try:
+        validate_native_artifact_hash(
+            receipt,
+            output_path,
+            field_name="output_sha256",
+            context=f"{context} output",
+        )
+    except RuntimeError as error:
+        raise SolidWorksExecutionError(str(error)) from error
     missing_proofs = [
         field_name
         for field_name in required_fields
@@ -997,6 +1012,35 @@ def _parse_native_receipt(
             + ", ".join(missing_proofs)
         )
     return receipt
+
+
+def validate_native_artifact_hash(
+    native_result: dict,
+    artifact_path: Path,
+    *,
+    field_name: str,
+    context: str,
+) -> str:
+    """Bind a native verification receipt to the exact CAD artifact bytes."""
+    reported_hash = native_result.get(field_name)
+    if not isinstance(reported_hash, str) or re.fullmatch(
+        r"[0-9a-fA-F]{64}",
+        reported_hash,
+    ) is None:
+        raise RuntimeError(f"{context} receipt has no valid SHA-256 digest")
+    artifact_path = artifact_path.resolve()
+    if not artifact_path.is_file():
+        raise RuntimeError(f"{context} artifact is missing: {artifact_path}")
+    digest = sha256()
+    with artifact_path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    actual_hash = digest.hexdigest()
+    if reported_hash.casefold() != actual_hash:
+        raise RuntimeError(
+            f"{context} SHA-256 digest does not match its verification receipt"
+        )
+    return actual_hash
 
 
 def _write_json_atomically(path: Path, value: dict) -> None:

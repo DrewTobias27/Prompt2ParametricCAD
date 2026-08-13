@@ -120,7 +120,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     files = package_files(package.content)
 
     assert package.filename.endswith("-solidworks.zip")
-    assert "-v11-solidworks.zip" in package.filename
+    assert "-v12-solidworks.zip" in package.filename
     assert set(files) == {
         "Build-SolidWorks-Part.cmd",
         "Build-SolidWorks-Part.ps1",
@@ -209,7 +209,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"P2P_SOLIDWORKS_ROOT" in readme
     assert b"interop version it selected" in readme
     assert b"solidworks-replay-plan.json" in launcher
-    assert b"SolidWorks package version 11" in launcher
+    assert b"SolidWorks package version 12" in launcher
     assert b"Saved file reopened" in launcher
     assert b"CadQuery geometry matched" in launcher
     assert b"Get-FileHash" in launcher
@@ -339,6 +339,7 @@ def complete_native_receipt(plan: dict, output_path: Path) -> dict:
     return {
         "status": "success",
         "output_path": str(output_path.resolve()),
+        "output_sha256": sha256(b"P2PCAD").hexdigest(),
         "native_features": [feature["feature_name"] for feature in features],
         "feature_count": len(features),
         "verification_passed": True,
@@ -483,7 +484,7 @@ def test_launcher_rejects_an_incompatible_package_version(tmp_path: Path):
     )
 
     assert result.returncode != 0
-    assert "SolidWorks package version 11" in result.stdout + result.stderr
+    assert "SolidWorks package version 12" in result.stdout + result.stderr
 
 
 @pytest.mark.skipif(
@@ -537,6 +538,47 @@ def test_launcher_accepts_only_a_complete_native_receipt(
         Path(f"{output_path}.result.json").read_text(encoding="utf-8-sig")
     )
     assert saved_receipt == receipt
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to use installed API registration",
+)
+@pytest.mark.solidworks_compile
+def test_launcher_rejects_receipt_for_different_native_bytes(tmp_path: Path):
+    package = create_solidworks_package(fixture_model_data(), "Hash failure")
+    extract_package(package.content, tmp_path)
+    plan = json.loads(
+        (tmp_path / "solidworks-replay-plan.json").read_text(encoding="utf-8")
+    )
+    output_path = tmp_path / "hash-failure.SLDPRT"
+    result_path = Path(f"{output_path}.result.json")
+    receipt = complete_native_receipt(plan, output_path)
+    receipt["output_sha256"] = "0" * 64
+    install_fake_package_runner(tmp_path, receipt)
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "Build-SolidWorks-Part.ps1"),
+            "-OutputPath",
+            str(output_path),
+            "-SkipIntegrityCheck",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "output SHA-256 digest" in result.stdout + result.stderr
+    assert not output_path.exists()
+    assert not result_path.exists()
 
 
 @pytest.mark.skipif(

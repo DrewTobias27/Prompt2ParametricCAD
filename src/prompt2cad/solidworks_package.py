@@ -18,7 +18,7 @@ from prompt2cad.solidworks_verification import geometry_metrics
 
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
-SOLIDWORKS_PACKAGE_VERSION = 11
+SOLIDWORKS_PACKAGE_VERSION = 12
 SOLIDWORKS_PACKAGE_PAYLOAD_FILES = (
     "Build-SolidWorks-Part.cmd",
     "Build-SolidWorks-Part.ps1",
@@ -434,6 +434,16 @@ def _launcher_script(native_filename: str) -> str:
             if ($reportedOutputPath -ne $OutputPath) {{
                 throw "SolidWorks verification receipt identifies a different output part."
             }}
+            $reportedOutputHash = [string]$result.output_sha256
+            if ($reportedOutputHash -notmatch '^[0-9a-fA-F]{{64}}$') {{
+                throw "SolidWorks verification receipt has no valid output SHA-256 digest."
+            }}
+            $actualOutputHash = (
+                Get-FileHash -LiteralPath $OutputPath -Algorithm SHA256
+            ).Hash.ToLowerInvariant()
+            if ($reportedOutputHash.ToLowerInvariant() -ne $actualOutputHash) {{
+                throw "SolidWorks output SHA-256 digest does not match its verification receipt."
+            }}
 
             if ([int]$result.feature_count -ne $expectedFeatureNames.Count) {{
                 throw "Verified feature count does not match the replay plan."
@@ -672,7 +682,9 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
         body's count, volume, surface area, envelope, and center of mass with
         the source CadQuery result; rebuilds; and publishes the SLDPRT from a
         temporary staged file only after those checks pass. The JSON report
-        records the verified native result. If any stage fails, the staged file
+        records the verified native result and the SHA-256 digest of the exact
+        SLDPRT bytes; the launcher independently recomputes that digest before
+        accepting the result. If any stage fails, the staged file
         is removed, the window identifies the failing condition, and a
         `<part>.SLDPRT.replay.log` file retains the completed stage history for
         troubleshooting. Successful runs remove this diagnostic log. Failed

@@ -29,6 +29,7 @@ from prompt2cad.solidworks_replay import SOLIDWORKS_MUTATION_FORMAT
 from prompt2cad.solidworks_replay import SOLIDWORKS_MUTATION_VERSION
 from prompt2cad.solidworks_replay import build_solidworks_mutation_document
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
+from prompt2cad.solidworks_replay import validate_native_artifact_hash
 from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_verification import compare_geometry_metrics
 from prompt2cad.solidworks_verification import geometry_metrics
@@ -225,6 +226,12 @@ def verify_solidworks_package_result(
         )
 
     context = "downloaded SolidWorks package"
+    native_output_sha256 = validate_native_artifact_hash(
+        native_result,
+        native_output,
+        field_name="output_sha256",
+        context=f"{context} output",
+    )
     contract = validate_native_build_result(
         verified.plan,
         native_result,
@@ -249,6 +256,7 @@ def verify_solidworks_package_result(
         "verification_scope": "package_and_native_result",
         "native_output": str(native_output),
         "native_output_size_bytes": native_output.stat().st_size,
+        "native_output_sha256": native_output_sha256,
         "native_contract": contract,
         "persistent_references": references,
         "geometry_comparison": comparison,
@@ -356,6 +364,18 @@ def verify_solidworks_package_editability_result(
         )
 
     context = "downloaded SolidWorks package edit"
+    source_sha256 = validate_native_artifact_hash(
+        native_result,
+        source_path,
+        field_name="source_sha256",
+        context=f"{context} source",
+    )
+    output_sha256 = validate_native_artifact_hash(
+        native_result,
+        output_path,
+        field_name="output_sha256",
+        context=f"{context} output",
+    )
     contract = validate_native_editability_result(
         verified.plan,
         native_result,
@@ -388,6 +408,8 @@ def verify_solidworks_package_editability_result(
         "verification_scope": "package_native_editability",
         "source_native_output": str(source_path),
         "edited_native_output": str(output_path),
+        "source_native_sha256": source_sha256,
+        "edited_native_sha256": output_sha256,
         "mutations": mutations,
         "native_contract": contract,
         "persistent_references": references,

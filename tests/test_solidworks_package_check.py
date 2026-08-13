@@ -106,6 +106,7 @@ def test_downloaded_package_result_proves_native_contract_and_geometry(
     result = native_result_factory(
         verified.plan,
         output_path=str(output_path),
+        output_sha256=sha256(output_path.read_bytes()).hexdigest(),
         geometry=geometry_metrics(build_model(verified.model_data)),
         published_references=persistent_reference_records(verified.plan),
     )
@@ -117,6 +118,29 @@ def test_downloaded_package_result_proves_native_contract_and_geometry(
     assert summary["native_contract"]["verification_passed"] is True
     assert summary["persistent_references"]["passed"] is True
     assert summary["geometry_comparison"]["passed"] is True
+
+
+def test_downloaded_package_result_rejects_different_native_bytes(
+    tmp_path: Path,
+    native_result_factory,
+):
+    archive_path = write_package_zip(tmp_path)
+    extracted = tmp_path / "verified-package"
+    verified = extract_verified_solidworks_package(archive_path, extracted)
+    output_path = tmp_path / "downloaded-package.SLDPRT"
+    output_path.write_bytes(b"synthetic native part")
+    result_path = Path(f"{output_path}.result.json")
+    result = native_result_factory(
+        verified.plan,
+        output_path=str(output_path),
+        output_sha256="0" * 64,
+        geometry=geometry_metrics(build_model(verified.model_data)),
+        published_references=persistent_reference_records(verified.plan),
+    )
+    result_path.write_text(json.dumps(result), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="SHA-256 digest"):
+        verify_solidworks_package_result(extracted, result_path)
 
 
 def test_package_checker_rejects_payload_hash_mismatch(tmp_path: Path):
@@ -260,6 +284,7 @@ def test_package_result_must_point_to_its_own_nonempty_sldprt(
     result = native_result_factory(
         verified.plan,
         output_path=str(output_path),
+        output_sha256=sha256(output_path.read_bytes()).hexdigest(),
         geometry=geometry_metrics(build_model(verified.model_data)),
         published_references=persistent_reference_records(verified.plan),
     )
@@ -282,6 +307,7 @@ def test_package_result_rejects_wrong_exact_parameter_identity(
     result = native_result_factory(
         verified.plan,
         output_path=str(output_path),
+        output_sha256=sha256(output_path.read_bytes()).hexdigest(),
         geometry=geometry_metrics(build_model(verified.model_data)),
         published_references=persistent_reference_records(verified.plan),
     )
@@ -372,7 +398,9 @@ def test_package_edit_result_proves_second_save_reopen_and_geometry(
         mutated_parameter_ids=mutations,
         mutated_parameters=mutations,
         source_path=str(source_path),
+        source_sha256=sha256(source_path.read_bytes()).hexdigest(),
         output_path=str(output_path),
+        output_sha256=sha256(output_path.read_bytes()).hexdigest(),
         before_geometry=geometry_metrics(build_model(verified.model_data)),
         after_geometry=geometry_metrics(edited_part),
         published_references=persistent_reference_records(verified.plan),
@@ -429,7 +457,9 @@ def test_package_edit_result_rejects_wrong_mutation_identity(
         editability=True,
         mutated_parameter_ids=["wrong.parameter"],
         source_path=str(source_path),
+        source_sha256=sha256(source_path.read_bytes()).hexdigest(),
         output_path=str(output_path),
+        output_sha256=sha256(output_path.read_bytes()).hexdigest(),
         before_geometry=geometry_metrics(build_model(verified.model_data)),
         after_geometry=geometry_metrics(edited_part),
         published_references=persistent_reference_records(verified.plan),
@@ -474,7 +504,9 @@ def test_package_edit_rejects_a_tampered_edited_geometry_oracle(
                 mutated_parameter_ids=mutations,
                 mutated_parameters=mutations,
                 source_path=str(source_path),
+                source_sha256=sha256(source_path.read_bytes()).hexdigest(),
                 output_path=str(output_path),
+                output_sha256=sha256(output_path.read_bytes()).hexdigest(),
                 before_geometry=geometry_metrics(build_model(verified.model_data)),
                 after_geometry=geometry_metrics(edited_part),
                 published_references=persistent_reference_records(verified.plan),

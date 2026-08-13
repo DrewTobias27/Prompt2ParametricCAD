@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from hashlib import sha256
 import json
 from pathlib import Path
 import subprocess
@@ -268,9 +269,16 @@ def native_contract_receipt(plan) -> dict:
 
 
 def native_build_receipt(plan, output_path: Path, **extra) -> dict:
+    output_hash = extra.pop(
+        "output_sha256",
+        sha256(output_path.read_bytes()).hexdigest()
+        if output_path.is_file()
+        else "0" * 64,
+    )
     return {
         "status": "success",
         "output_path": str(output_path.resolve()),
+        "output_sha256": output_hash,
         "reopened": True,
         "verification_passed": True,
         "geometry_verification_passed": True,
@@ -310,7 +318,9 @@ def native_edit_receipt(
     return {
         "status": "success",
         "source_path": str(source_path.resolve()),
+        "source_sha256": sha256(source_path.read_bytes()).hexdigest(),
         "output_path": str(output_path.resolve()),
+        "output_sha256": sha256(output_path.read_bytes()).hexdigest(),
         "reopened": True,
         "source_geometry_verification_passed": True,
         "source_history_verification_passed": True,
@@ -2097,6 +2107,7 @@ def test_export_removes_unverified_output_and_new_receipt(tmp_path: Path):
         receipt = native_build_receipt(
             plan,
             tmp_path / "different.SLDPRT",
+            output_sha256=sha256(actual_output.read_bytes()).hexdigest(),
         )
         return subprocess.CompletedProcess(
             command,
@@ -2171,6 +2182,35 @@ def test_export_rejects_incomplete_native_contract(
             output_path,
             result_output_path=result_path,
             runner=incomplete_contract_runner,
+        )
+
+    assert not output_path.exists()
+    assert not result_path.exists()
+
+
+def test_export_rejects_receipt_for_different_native_bytes(tmp_path: Path):
+    plan = replay_plan()
+    output_path = tmp_path / "part.SLDPRT"
+    result_path = tmp_path / "part.result.json"
+
+    def tampered_artifact_runner(command, **kwargs):
+        actual_output = Path(command[command.index("-OutputPath") + 1])
+        actual_output.write_bytes(b"verified-native-part")
+        receipt = native_build_receipt(plan, actual_output)
+        actual_output.write_bytes(b"tampered-native-part")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(receipt),
+            stderr="",
+        )
+
+    with pytest.raises(SolidWorksExecutionError, match="SHA-256 digest"):
+        export_solidworks_part(
+            plan,
+            output_path,
+            result_output_path=result_path,
+            runner=tampered_artifact_runner,
         )
 
     assert not output_path.exists()
@@ -2359,6 +2399,51 @@ def test_editability_removes_output_without_complete_proof(tmp_path: Path):
         )
 
     assert not output_path.exists()
+
+
+def test_editability_rejects_receipt_for_different_source_bytes(
+    tmp_path: Path,
+):
+    model_data = native_model_data()
+    plan = replay_plan(model_data)
+    changes = {"base.sketch.width": 90}
+    source_path = tmp_path / "source.SLDPRT"
+    output_path = tmp_path / "mutated.SLDPRT"
+    result_path = tmp_path / "mutated.result.json"
+    source_path.write_bytes(b"source-native-part")
+
+    def mismatched_source_runner(command, **kwargs):
+        actual_output = Path(command[command.index("-OutputPath") + 1])
+        actual_output.write_bytes(b"mutated-native-part")
+        receipt = native_edit_receipt(
+            plan,
+            actual_output,
+            source_path=source_path,
+            mutations=changes,
+            after_geometry=edited_geometry(model_data, changes),
+        )
+        receipt["source_sha256"] = "0" * 64
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(receipt),
+            stderr="",
+        )
+
+    with pytest.raises(SolidWorksExecutionError, match="SHA-256 digest"):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            output_path,
+            changes,
+            expected_geometry=edited_geometry(model_data, changes),
+            result_output_path=result_path,
+            runner=mismatched_source_runner,
+        )
+
+    assert source_path.read_bytes() == b"source-native-part"
+    assert not output_path.exists()
+    assert not result_path.exists()
 
 
 @pytest.mark.parametrize(

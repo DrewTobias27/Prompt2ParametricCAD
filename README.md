@@ -235,11 +235,13 @@ machine-readable verification report. No API credential is included.
 Every executable native replay path carries source CadQuery body, volume,
 surface-area, bounding-box, and center-of-mass metrics. The runner refuses to
 publish a native part if its reopened geometry does not match that oracle.
-Package v11 applies the same rule to native edits: a mutation carries the
+Package v12 applies the same rule to native edits: a mutation carries the
 geometry from a validated CadQuery rebuild, and the runner refuses to publish
 the edited `SLDPRT` unless its reopened result matches. Its receipt records the
 exact parameter values read back from the reopened model and their units, not
-only the requested IDs.
+only the requested IDs. Build and edit receipts also carry SHA-256 digests for
+the exact SLDPRT files they verified, and package checks recompute those digests
+before accepting the evidence.
 `Check-SolidWorks-Setup.cmd` performs the integrity, installation, API,
 replay-engine compilation, and replay-plan consistency checks without opening
 or creating a part, and reports the selected API root and interop version when
@@ -279,7 +281,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 ```
 
 Before a public release, add
-`-DownloadedPackagePath "C:\path\to\fresh-v11-solidworks.zip"` to prove that the
+`-DownloadedPackagePath "C:\path\to\fresh-v12-solidworks.zip"` to prove that the
 exact ZIP served by the deployed site reproduces its source model, replay plan,
 native feature identities, persistent references, and final geometry, then
 survives a validated parameter edit and second save/reopen. The gate keeps a
