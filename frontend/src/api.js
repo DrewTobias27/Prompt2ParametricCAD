@@ -66,6 +66,10 @@ async function postDownload(path, payload, fallbackFilename) {
         response,
         "X-Prompt2CAD-Relation-Controls",
       ),
+      derivedGeometryCount: numericHeader(
+        response,
+        "X-Prompt2CAD-Derived-Geometry",
+      ),
       unsupportedCount: numericHeader(
         response,
         "X-Prompt2CAD-Unsupported-Parameters",

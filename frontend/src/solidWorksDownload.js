@@ -3,6 +3,7 @@ export function formatSolidWorksDownloadStatus(editability) {
     numericParameterCount,
     namedBindingCount,
     relationControlledCount,
+    derivedGeometryCount,
     unsupportedCount,
   } = editability || {};
   const hasCoverage = [
@@ -17,9 +18,20 @@ export function formatSolidWorksDownloadStatus(editability) {
   }
 
   const controlledCount = namedBindingCount + relationControlledCount;
-  const coverageSummary = unsupportedCount === 0
-    ? `${controlledCount} of ${numericParameterCount} editable values have native controls.`
-    : `${controlledCount} of ${numericParameterCount} editable values have native controls; ${unsupportedCount} ${unsupportedCount === 1 ? "value requires" : "values require"} manual SolidWorks editing.`;
+  const coverageDetails = [
+    `${controlledCount} of ${numericParameterCount} source values have automated native controls`,
+  ];
+  if (Number.isFinite(derivedGeometryCount) && derivedGeometryCount > 0) {
+    coverageDetails.push(
+      `${derivedGeometryCount} ${derivedGeometryCount === 1 ? "is" : "are"} retained as derived native reference geometry`,
+    );
+  }
+  if (unsupportedCount > 0) {
+    coverageDetails.push(
+      `${unsupportedCount} ${unsupportedCount === 1 ? "requires" : "require"} manual SolidWorks editing`,
+    );
+  }
+  const coverageSummary = `${coverageDetails.join("; ")}.`;
 
   return `Package downloaded. ${coverageSummary} Extract it on a Windows computer with SolidWorks.`;
 }
