@@ -2834,6 +2834,27 @@ def test_native_runner_reopens_and_reverifies_mutated_parts():
     assert "RequireHealthyModel(reopenedHealth" in edit_section
 
 
+def test_native_runner_rejects_wrong_or_noneditable_open_documents():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+    open_section = runner_source[
+        runner_source.index("private static ModelDoc2 OpenNativePart") :
+        runner_source.index("private static void RequireSourcePartClosed")
+    ]
+
+    assert "string openedPath = model.GetPathName();" in open_section
+    assert "Path.GetFullPath(openedPath)" in open_section
+    assert "model.IsOpenedReadOnly()" in open_section
+    assert "model.IsOpenedViewOnly()" in open_section
+    assert open_section.index("application.CloseDoc(model.GetTitle());") < (
+        open_section.index("throw new InvalidOperationException(rejection);")
+    )
+
+
 def test_plan_file_helpers_are_deterministic(tmp_path: Path):
     model_path = tmp_path / "model.json"
     model_path.write_text(json.dumps(native_model_data()), encoding="utf-8")

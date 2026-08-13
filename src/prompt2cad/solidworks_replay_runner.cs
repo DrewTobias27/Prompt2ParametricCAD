@@ -1433,10 +1433,11 @@ namespace Prompt2Cad.SolidWorks
             SldWorks application,
             string path)
         {
+            string resolvedPath = Path.GetFullPath(path);
             int errors = 0;
             int warnings = 0;
             ModelDoc2 model = application.OpenDoc6(
-                path,
+                resolvedPath,
                 (int)swDocumentTypes_e.swDocPART,
                 (int)swOpenDocOptions_e.swOpenDocOptions_Silent,
                 "",
@@ -1446,9 +1447,43 @@ namespace Prompt2Cad.SolidWorks
             if (model == null)
             {
                 throw new InvalidOperationException(
-                    "SOLIDWORKS could not open '" + path +
+                    "SOLIDWORKS could not open '" + resolvedPath +
                     "' (error " + errors + ", warning " + warnings + ")."
                 );
+            }
+            string openedPath = model.GetPathName();
+            string rejection = null;
+            if (String.IsNullOrWhiteSpace(openedPath) || !String.Equals(
+                Path.GetFullPath(openedPath),
+                resolvedPath,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                rejection = "SOLIDWORKS opened a different document instead " +
+                    "of '" + resolvedPath + "'.";
+            }
+            else if (model.IsOpenedReadOnly())
+            {
+                rejection = "SOLIDWORKS opened '" + resolvedPath +
+                    "' read-only. Close other copies or remove the file lock " +
+                    "before retrying.";
+            }
+            else if (model.IsOpenedViewOnly())
+            {
+                rejection = "SOLIDWORKS opened '" + resolvedPath +
+                    "' in view-only mode. Open it as a fully resolved part " +
+                    "before retrying.";
+            }
+            if (rejection != null)
+            {
+                try
+                {
+                    application.CloseDoc(model.GetTitle());
+                }
+                catch
+                {
+                }
+                ReleaseComObject(model);
+                throw new InvalidOperationException(rejection);
             }
             return model;
         }

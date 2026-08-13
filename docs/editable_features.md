@@ -129,7 +129,9 @@ Native edits are preflighted as one transaction before the runner changes the
 open document. After opening the closed source part, the runner first verifies
 its CadQuery geometry oracle, complete named feature/helper/parameter history,
 sketch health, and persistent references. Only then can parameter mutation
-begin. The preflight rejects non-finite or nonpositive dimensions,
+begin. Every native open must also resolve to the exact requested path as a
+writable, fully resolved part; read-only, view-only, or mismatched documents
+are closed and rejected. The preflight rejects non-finite or nonpositive dimensions,
 fractional pattern counts, invalid angle ranges, unsafe coordinate sign
 crossings, collapsed linear patterns, and countersinks whose seat diameter is
 not larger than the through-hole diameter.
