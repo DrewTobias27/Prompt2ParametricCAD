@@ -12,9 +12,14 @@ from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.solidworks_export import model_path_to_replay_plan
 from prompt2cad.solidworks_export import materialize_stable_feature_ids
 from prompt2cad.solidworks_export import save_plan
+from prompt2cad.schema import FEATURE_PATTERN_SCHEMA
+from prompt2cad.schema import OPERATION_SCHEMAS
 from prompt2cad.solidworks_replay import SOLIDWORKS_REPLAY_FORMAT
 from prompt2cad.solidworks_replay import SOLIDWORKS_REPLAY_VERSION
 from prompt2cad.solidworks_replay import SOLIDWORKS_PARITY_MATRIX
+from prompt2cad.solidworks_replay import SUPPORTED_OPERATION_TYPES
+from prompt2cad.solidworks_replay import SUPPORTED_PATTERN_TYPES
+from prompt2cad.solidworks_replay import SUPPORTED_PROFILE_TYPES
 from prompt2cad.solidworks_replay import SolidWorksExecutionError
 from prompt2cad.solidworks_replay import SolidWorksReplayError
 from prompt2cad.solidworks_replay import build_solidworks_mutation_document
@@ -1295,17 +1300,28 @@ def test_replay_maps_topology_aware_edge_treatments(
 
 
 def test_solidworks_parity_matrix_covers_every_step_operation_type():
-    assert set(SOLIDWORKS_PARITY_MATRIX) == {
-        "extrude",
-        "add_extrude",
-        "cut",
-        "revolve",
-        "add_revolve",
-        "cut_revolve",
-        "countersink",
-        "chamfer",
-        "fillet",
+    schema_operation_types = {
+        schema["properties"]["type"]["enum"][0]
+        for schema in OPERATION_SCHEMAS
     }
+    schema_profile_types = {
+        schema["properties"]["profile"]["enum"][0]
+        for schema in OPERATION_SCHEMAS
+        if "profile" in schema["properties"]
+    }
+
+    assert set(SOLIDWORKS_PARITY_MATRIX) == schema_operation_types
+    assert SUPPORTED_OPERATION_TYPES == schema_operation_types
+    assert SUPPORTED_PROFILE_TYPES == schema_profile_types
+
+
+def test_solidworks_pattern_parity_covers_every_step_pattern_type():
+    schema_pattern_types = {
+        schema["properties"]["type"]["enum"][0]
+        for schema in FEATURE_PATTERN_SCHEMA["anyOf"]
+    }
+
+    assert SUPPORTED_PATTERN_TYPES == schema_pattern_types
 
 
 def test_native_polygon_uses_the_same_positive_x_phase_as_cadquery():

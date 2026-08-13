@@ -48,6 +48,11 @@ SUPPORTED_PROFILE_TYPES = {
     "polyline",
     "sketch",
 }
+SUPPORTED_PATTERN_TYPES = {
+    "circular",
+    "linear",
+    "mirror",
+}
 
 SOLIDWORKS_PARITY_MATRIX = {
     "extrude": "native_boss_extrude",
