@@ -35,6 +35,12 @@ def native_parameter_coverage(
         for feature in plan.features
         for binding in feature.parameter_bindings
     }
+    restricted_bindings = {
+        binding["parameter_id"]: binding
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+        if binding.get("mutation_mode") == "absolute_same_side"
+    }
     bound_source_ids = source_parameter_ids & binding_ids
     relation_controlled_ids = {
         parameter_id
@@ -54,6 +60,20 @@ def native_parameter_coverage(
             ),
         }
         for parameter_id in sorted(unsupported_ids)
+    ]
+    restricted_parameter_ids = sorted(
+        source_parameter_ids & set(restricted_bindings)
+    )
+    restricted_parameters = [
+        {
+            "parameter_id": parameter_id,
+            "reason": (
+                "The native distance control can change this coordinate on "
+                "its current side of the sketch origin. Crossing or landing "
+                "on the origin requires regenerating the SolidWorks package."
+            ),
+        }
+        for parameter_id in restricted_parameter_ids
     ]
     controlled_count = len(bound_source_ids) + len(relation_controlled_ids)
     return {
@@ -77,6 +97,8 @@ def native_parameter_coverage(
         ),
         "unsupported_parameter_ids": sorted(unsupported_ids),
         "unsupported_parameters": unsupported_parameters,
+        "restricted_parameter_ids": restricted_parameter_ids,
+        "restricted_parameters": restricted_parameters,
         "native_only_parameter_ids": sorted(binding_ids - source_parameter_ids),
     }
 

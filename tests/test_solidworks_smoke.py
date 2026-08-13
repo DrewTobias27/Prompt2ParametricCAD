@@ -10,11 +10,11 @@ from prompt2cad.loader import load_model
 from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_smoke import SMOKE_FIXTURE_NAMES
 from prompt2cad.solidworks_smoke import EDITABILITY_SCENARIOS
-from prompt2cad.solidworks_smoke import compare_geometry_metrics
-from prompt2cad.solidworks_smoke import geometry_metrics
 from prompt2cad.solidworks_smoke import run_smoke_suite
 from prompt2cad.solidworks_smoke import smoke_fixture_paths
-from prompt2cad.solidworks_smoke import validate_published_references
+from prompt2cad.solidworks_verification import compare_geometry_metrics
+from prompt2cad.solidworks_verification import geometry_metrics
+from prompt2cad.solidworks_verification import validate_published_references
 
 
 def persistent_reference_records(plan) -> list[dict]:
@@ -107,6 +107,8 @@ def test_parameter_coverage_binds_nonzero_freeform_coordinates():
     assert "hex_boss.placement.inst001.y" not in (
         coverage["unsupported_parameter_ids"]
     )
+    assert "base.sketch.point002.x" in coverage["restricted_parameter_ids"]
+    assert coverage["restricted_parameters"]
     assert coverage["control_coverage_ratio"] > coverage["coverage_ratio"]
 
 

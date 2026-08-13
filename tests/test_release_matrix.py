@@ -9,7 +9,7 @@ from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.editable_model import model_data_to_editable_document
 from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.interpreter import build_model
-from prompt2cad.solidworks_smoke import geometry_metrics
+from prompt2cad.solidworks_verification import geometry_metrics
 
 
 def test_release_matrix_case_names_are_unique_and_cover_high_risk_families():

@@ -181,8 +181,11 @@ now use stable named native dimensions when their values are nonzero. Zero
 coordinates use native horizontal/vertical relations, and three-point arc
 centers and radii remain derived to avoid over-constraining the sketch. The
 audit distinguishes named edit bindings, relation-controlled zero coordinates,
-and unsupported parameters. Polygon side count remains fixed topology rather
-than an automated mutation binding.
+side-limited coordinate bindings, and unsupported parameters. A nonzero native
+coordinate can change magnitude on its current side of the sketch origin;
+crossing or landing on the origin requires regenerating the replay package so
+SolidWorks can rebuild the appropriate relation and direction. Polygon side
+count remains fixed topology rather than an automated mutation binding.
 
 Native Hole Wizard position sketches now expose the same stable X/Y placement
 controls as profile sketches. Only actual source hole points are selected for

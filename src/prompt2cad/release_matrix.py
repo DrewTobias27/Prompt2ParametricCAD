@@ -26,9 +26,9 @@ from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
 from prompt2cad.solidworks_replay import verify_solidworks_editability
 from prompt2cad.solidworks_editability import native_parameter_coverage
-from prompt2cad.solidworks_smoke import compare_geometry_metrics
-from prompt2cad.solidworks_smoke import geometry_metrics
-from prompt2cad.solidworks_smoke import validate_published_references
+from prompt2cad.solidworks_verification import compare_geometry_metrics
+from prompt2cad.solidworks_verification import geometry_metrics
+from prompt2cad.solidworks_verification import validate_published_references
 from prompt2cad.training_data import DEFAULT_INTENT_EXAMPLES_DIR
 from prompt2cad.training_data import load_intent_examples
 

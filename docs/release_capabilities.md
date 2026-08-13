@@ -135,8 +135,11 @@ are exposed through stable native dimensions when nonzero. Zero coordinates use
 native horizontal/vertical relations. Three-point arc centers and radii are
 derived from those source points so the sketch is not over-constrained. The
 audit reports named mutation bindings, relation-controlled zero coordinates,
-and genuinely unsupported parameters separately instead of treating every
-missing zero dimension as a feature gap. Polygon side count remains fixed at
+side-limited coordinate bindings, and genuinely unsupported parameters
+separately instead of treating every missing zero dimension as a feature gap.
+A nonzero coordinate may be edited on its current side of the origin; moving
+it across or onto the origin requires regenerating the package so the sketch
+relation and direction are rebuilt safely. Polygon side count remains fixed at
 native sketch creation and is reported as unsupported topology.
 
 Hole Wizard countersink position points use the same named X/Y placement

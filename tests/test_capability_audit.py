@@ -12,7 +12,7 @@ from prompt2cad.capability_audit import run_capability_audit
 from prompt2cad.editable_model import model_data_to_editable_document
 from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.interpreter import build_model
-from prompt2cad.solidworks_smoke import geometry_metrics
+from prompt2cad.solidworks_verification import geometry_metrics
 
 
 REPRESENTATIVE_CASE_NAMES = (

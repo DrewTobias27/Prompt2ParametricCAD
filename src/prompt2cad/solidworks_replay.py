@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from hashlib import sha1
 import json
+import math
 from pathlib import Path
 import re
 import subprocess
@@ -497,6 +498,12 @@ def verify_solidworks_editability(
         raise SolidWorksExecutionError(
             "Unknown native parameter IDs: " + ", ".join(unknown)
         )
+    for parameter_id, value in mutations.items():
+        _validate_native_mutation(
+            parameter_id,
+            float(value),
+            bindings[parameter_id],
+        )
     mutation_document = {
         "format": "prompt2cad.solidworks-mutations",
         "version": 1,
@@ -796,6 +803,7 @@ def _native_coordinate_controls(
                     ),
                     fallback_name=f"{fallback_stem}_{axis_name}",
                     value=abs(value),
+                    signed_source_value=value,
                 )
             )
         controls.append(
@@ -912,6 +920,7 @@ def _native_placement_controls(
                     ),
                     fallback_name=f"placement_inst{index:03d}_{axis_name}",
                     value=abs(value),
+                    signed_source_value=value,
                 )
             )
         controls.append(
@@ -1259,7 +1268,7 @@ def _dimension_binding(
     owner_kind: str,
     owner_name: str,
 ) -> dict:
-    return {
+    binding = {
         "parameter_id": dimension["parameter_id"],
         "native_name": dimension["native_name"],
         "binding_kind": "named_dimension",
@@ -1269,6 +1278,39 @@ def _dimension_binding(
         "value": float(dimension["value_mm"]),
         "unit": dimension["unit"],
     }
+    if "mutation_mode" in dimension:
+        binding["mutation_mode"] = dimension["mutation_mode"]
+        binding["source_value"] = float(dimension["source_value"])
+    return binding
+
+
+def _validate_native_mutation(
+    parameter_id: str,
+    value: float,
+    binding: dict,
+) -> None:
+    """Reject edits a native control cannot represent without rebuilding.
+
+    SOLIDWORKS point-to-point dimensions store a positive distance. The side
+    of the origin comes from the sketch topology created during replay, so a
+    sign crossing cannot be represented by changing that dimension alone.
+    """
+    if not math.isfinite(value):
+        raise SolidWorksExecutionError(
+            f"Native parameter '{parameter_id}' requires a finite value"
+        )
+
+    if binding.get("mutation_mode") != "absolute_same_side":
+        return
+
+    source_value = float(binding["source_value"])
+    if abs(value) <= 1e-12 or source_value * value <= 0:
+        raise SolidWorksExecutionError(
+            f"Native coordinate parameter '{parameter_id}' cannot cross or "
+            "land on the sketch origin during an in-place SolidWorks edit. "
+            "Regenerate the SolidWorks package from the updated CAD model "
+            "to change sides safely."
+        )
 
 
 def _feature_property_binding(
@@ -1770,6 +1812,7 @@ def _dimension(
     fallback_name: str,
     value: float,
     unit: str = "mm",
+    signed_source_value: float | None = None,
 ) -> dict:
     parameter = next(
         (
@@ -1780,12 +1823,16 @@ def _dimension(
         None,
     )
     source_parameter_id = parameter.id if parameter is not None else parameter_id
-    return {
+    dimension = {
         "parameter_id": source_parameter_id,
         "native_name": _dimension_name(source_parameter_id, fallback_name),
         "value_mm": value,
         "unit": unit,
     }
+    if signed_source_value is not None:
+        dimension["mutation_mode"] = "absolute_same_side"
+        dimension["source_value"] = float(signed_source_value)
+    return dimension
 
 
 def _unique_feature_name(feature_id: str, used_names: set[str]) -> str:

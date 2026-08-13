@@ -407,6 +407,12 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "unit")]
         public string Unit { get; set; }
+
+        [DataMember(Name = "mutation_mode", EmitDefaultValue = false)]
+        public string MutationMode { get; set; }
+
+        [DataMember(Name = "source_value", EmitDefaultValue = false)]
+        public double? SourceValue { get; set; }
     }
 
     [DataContract]
@@ -4883,19 +4889,24 @@ namespace Prompt2Cad.SolidWorks
                     );
                 }
 
+                double nativeValue = ResolveNativeMutationValue(
+                    binding,
+                    mutation.Value
+                );
+
                 if (String.Equals(
                     binding.BindingKind,
                     "named_dimension",
                     StringComparison.Ordinal))
                 {
-                    SetNamedDimension(model, binding, mutation.Value);
+                    SetNamedDimension(model, binding, nativeValue);
                 }
                 else if (String.Equals(
                     binding.BindingKind,
                     "feature_property",
                     StringComparison.Ordinal))
                 {
-                    SetFeatureProperty(model, binding, mutation.Value);
+                    SetFeatureProperty(model, binding, nativeValue);
                 }
                 else
                 {
@@ -4905,8 +4916,53 @@ namespace Prompt2Cad.SolidWorks
                         binding.BindingKind + "'."
                     );
                 }
-                binding.Value = mutation.Value;
+                binding.Value = nativeValue;
+                if (String.Equals(
+                    binding.MutationMode,
+                    "absolute_same_side",
+                    StringComparison.Ordinal))
+                {
+                    binding.SourceValue = mutation.Value;
+                }
             }
+        }
+
+        private static double ResolveNativeMutationValue(
+            NativeParameterBinding binding,
+            double requestedValue)
+        {
+            if (Double.IsNaN(requestedValue) || Double.IsInfinity(requestedValue))
+            {
+                throw new InvalidOperationException(
+                    "Parameter '" + binding.ParameterId +
+                    "' requires a finite mutation value."
+                );
+            }
+            if (!String.Equals(
+                binding.MutationMode,
+                "absolute_same_side",
+                StringComparison.Ordinal))
+            {
+                return requestedValue;
+            }
+            if (!binding.SourceValue.HasValue ||
+                Math.Abs(binding.SourceValue.Value) <= 1e-12)
+            {
+                throw new InvalidOperationException(
+                    "Parameter '" + binding.ParameterId +
+                    "' is missing its signed source value."
+                );
+            }
+            if (Math.Abs(requestedValue) <= 1e-12 ||
+                binding.SourceValue.Value * requestedValue <= 0.0)
+            {
+                throw new InvalidOperationException(
+                    "Parameter '" + binding.ParameterId +
+                    "' cannot cross or land on the sketch origin during an " +
+                    "in-place edit. Regenerate the part to change sides."
+                );
+            }
+            return Math.Abs(requestedValue);
         }
 
         private static void SetNamedDimension(

@@ -15,8 +15,8 @@ from prompt2cad.interpreter import build_model
 from prompt2cad.solidworks_package import create_solidworks_package
 from prompt2cad.solidworks_package import SOLIDWORKS_PACKAGE_FORMAT
 from prompt2cad.solidworks_package import SOLIDWORKS_PACKAGE_VERSION
-from prompt2cad.solidworks_smoke import compare_geometry_metrics
-from prompt2cad.solidworks_smoke import geometry_metrics
+from prompt2cad.solidworks_verification import compare_geometry_metrics
+from prompt2cad.solidworks_verification import geometry_metrics
 
 
 PROJECT_ROOT = Path(__file__).parents[1]
@@ -138,6 +138,13 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert manifest["editability"]["unsupported_parameters"] == (
         editability_coverage["unsupported_parameters"]
     )
+    assert manifest["editability"]["restricted_count"] == 0
+    assert manifest["editability"]["restricted_parameter_ids"] == (
+        editability_coverage["restricted_parameter_ids"]
+    )
+    assert manifest["editability"]["restricted_parameters"] == (
+        editability_coverage["restricted_parameters"]
+    )
     assert replay_plan["source_build_order"] == ["base", "boss"]
     assert editable_model["native_replay"]["exporter_implemented"] is True
     readme = files["README.txt"]
@@ -147,6 +154,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"Build-SolidWorks-Part.cmd" in readme
     assert b"Editability summary" in readme
     assert b"editability-coverage.json" in readme
+    assert b"limited to their current origin side" in readme
     assert b"solidworks-replay-plan.json" in launcher
     assert b"SolidWorks package version 4" in launcher
     assert b"Get-FileHash" in launcher

@@ -468,13 +468,26 @@ def test_replay_plan_maps_stable_profile_placement_controls():
         "native_name": "P2P_boss_placement_inst001_x",
         "value_mm": 12.0,
         "unit": "mm",
+        "mutation_mode": "absolute_same_side",
+        "source_value": -12.0,
     }
     assert control["y_dimension"] == {
         "parameter_id": "boss.placement.inst001.y",
         "native_name": "P2P_boss_placement_inst001_y",
         "value_mm": 7.0,
         "unit": "mm",
+        "mutation_mode": "absolute_same_side",
+        "source_value": 7.0,
     }
+
+    bindings = {
+        binding["parameter_id"]: binding
+        for binding in boss.parameter_bindings
+    }
+    assert bindings["boss.placement.inst001.x"]["mutation_mode"] == (
+        "absolute_same_side"
+    )
+    assert bindings["boss.placement.inst001.x"]["source_value"] == -12.0
 
 
 def test_centered_profile_uses_relations_without_zero_dimensions():
@@ -1686,6 +1699,76 @@ def test_editability_verification_rejects_unknown_or_destructive_inputs(
             source_path,
             source_path,
             {"base.sketch.width": 90},
+        )
+
+
+def test_editability_verification_preserves_signed_placement_side(
+    tmp_path: Path,
+):
+    model_data = native_model_data()
+    model_data["operations"][1]["positions"] = [[-12, 7]]
+    plan = replay_plan(model_data)
+    source_path = tmp_path / "source.SLDPRT"
+    output_path = tmp_path / "mutated.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+    captured: dict = {}
+
+    def fake_runner(command, **kwargs):
+        mutation_path = Path(command[command.index("-MutationPath") + 1])
+        captured["mutations"] = json.loads(
+            mutation_path.read_text(encoding="utf-8")
+        )
+        Path(command[command.index("-OutputPath") + 1]).write_bytes(
+            b"mutated-native-part"
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="{}", stderr="")
+
+    verify_solidworks_editability(
+        plan,
+        source_path,
+        output_path,
+        {"boss.placement.inst001.x": -20},
+        runner=fake_runner,
+    )
+
+    assert captured["mutations"]["mutations"][0]["value"] == -20.0
+
+
+@pytest.mark.parametrize("unsafe_value", [0, 12])
+def test_editability_verification_rejects_placement_side_crossing(
+    tmp_path: Path,
+    unsafe_value: float,
+):
+    model_data = native_model_data()
+    model_data["operations"][1]["positions"] = [[-12, 7]]
+    plan = replay_plan(model_data)
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+
+    def unexpected_runner(*args, **kwargs):
+        raise AssertionError("unsafe mutation must fail before SOLIDWORKS starts")
+
+    with pytest.raises(SolidWorksExecutionError, match="cannot cross or land"):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            tmp_path / "mutated.SLDPRT",
+            {"boss.placement.inst001.x": unsafe_value},
+            runner=unexpected_runner,
+        )
+
+
+def test_editability_verification_rejects_nonfinite_values(tmp_path: Path):
+    plan = replay_plan()
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+
+    with pytest.raises(SolidWorksExecutionError, match="requires a finite value"):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            tmp_path / "mutated.SLDPRT",
+            {"base.sketch.width": float("nan")},
         )
 
 

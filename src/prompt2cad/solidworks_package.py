@@ -119,6 +119,15 @@ def create_solidworks_package(
             "unsupported_parameters": editability_coverage[
                 "unsupported_parameters"
             ],
+            "restricted_count": len(
+                editability_coverage["restricted_parameter_ids"]
+            ),
+            "restricted_parameter_ids": editability_coverage[
+                "restricted_parameter_ids"
+            ],
+            "restricted_parameters": editability_coverage[
+                "restricted_parameters"
+            ],
         },
         "files": [
             {
@@ -344,6 +353,9 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
     unsupported_count = len(
         editability_coverage["unsupported_parameter_ids"]
     )
+    restricted_count = len(
+        editability_coverage["restricted_parameter_ids"]
+    )
     return dedent(
         f"""
         Prompt2ParametricCAD SolidWorks Package
@@ -365,11 +377,14 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
         - Named automated edit bindings: {named_count}
         - Zero coordinates held by sketch relations: {relation_count}
         - Parameters without automated mutation bindings: {unsupported_count}
+        - Coordinate controls limited to their current origin side: {restricted_count}
 
         Every operation is replayed as native SolidWorks history. The counts
         above describe what the included verification runner can change by
         stable parameter ID; they do not prevent normal manual feature-tree
         editing. See editability-coverage.json for the exact parameter IDs.
+        A side-limited coordinate remains editable in its current direction;
+        regenerate the package to move it across or onto the sketch origin.
 
         Build the editable part
         -----------------------
