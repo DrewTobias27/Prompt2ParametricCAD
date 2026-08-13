@@ -25,7 +25,7 @@ from prompt2cad.pattern_geometry import pattern_positions
 
 
 SOLIDWORKS_REPLAY_FORMAT = "prompt2cad.solidworks-replay-plan"
-SOLIDWORKS_REPLAY_VERSION = 9
+SOLIDWORKS_REPLAY_VERSION = 10
 SUPPORTED_OPERATION_TYPES = {
     "extrude",
     "add_extrude",
@@ -164,6 +164,7 @@ class SolidWorksReplayPlan:
                 "step_operation_parity": SOLIDWORKS_PARITY_MATRIX,
                 "arbitrary_sketch_placement": True,
                 "native_freeform_coordinate_bindings": True,
+                "canonical_revolve_axis_metadata": True,
                 "generated_stable_feature_ids": True,
                 "persistent_entity_reference_contract": True,
             },
@@ -1558,6 +1559,8 @@ def _native_feature_control(feature: EditableFeatureDefinition) -> dict:
 
     if operation_type in {"revolve", "add_revolve", "cut_revolve"}:
         angle = float(operation["angle"])
+        axis_start = [float(value) for value in operation["axis_start"][:2]]
+        axis_end = [float(value) for value in operation["axis_end"][:2]]
         return {
             "kind": (
                 "cut_revolve"
@@ -1565,8 +1568,9 @@ def _native_feature_control(feature: EditableFeatureDefinition) -> dict:
                 else "boss_revolve"
             ),
             "angle_deg": angle,
-            "axis_start_mm": [float(value) for value in operation["axis_start"][:2]],
-            "axis_end_mm": [float(value) for value in operation["axis_end"][:2]],
+            "axis_start_mm": axis_start,
+            "axis_end_mm": axis_end,
+            "canonical_axis": _canonical_revolve_axis(axis_start, axis_end),
             "merge_result": operation_type == "add_revolve",
             "driving_dimension": _dimension(
                 feature,
@@ -1598,6 +1602,69 @@ def _native_feature_control(feature: EditableFeatureDefinition) -> dict:
             value=depth_value,
         ),
     }
+
+
+def _canonical_revolve_axis(
+    axis_start: list[float],
+    axis_end: list[float],
+) -> dict:
+    """Represent an endpoint-defined 2D line without endpoint ambiguity.
+
+    A revolve consumes an infinite axis line, so translating or reversing its
+    two source endpoints must not change the semantic axis. The closest point
+    to the sketch origin plus a sign-normalized unit direction is canonical;
+    source endpoints remain in the plan for the proven native runner.
+    """
+    if len(axis_start) != 2 or len(axis_end) != 2:
+        raise SolidWorksReplayError(
+            "native revolve axis must contain two 2D points"
+        )
+    values = [*axis_start, *axis_end]
+    if not all(math.isfinite(value) for value in values):
+        raise SolidWorksReplayError(
+            "native revolve axis coordinates must be finite"
+        )
+
+    delta_x = axis_end[0] - axis_start[0]
+    delta_y = axis_end[1] - axis_start[1]
+    source_span = math.hypot(delta_x, delta_y)
+    if source_span <= 1e-12:
+        raise SolidWorksReplayError(
+            "native revolve axis start and end cannot coincide"
+        )
+
+    direction_x = delta_x / source_span
+    direction_y = delta_y / source_span
+    if direction_x < -1e-12 or (
+        abs(direction_x) <= 1e-12 and direction_y < 0
+    ):
+        direction_x *= -1.0
+        direction_y *= -1.0
+
+    normal_x = -direction_y
+    normal_y = direction_x
+    signed_offset = axis_start[0] * normal_x + axis_start[1] * normal_y
+    anchor = [normal_x * signed_offset, normal_y * signed_offset]
+    direction_angle = math.degrees(math.atan2(direction_y, direction_x))
+    return {
+        "kind": "canonical_line_2d",
+        "anchor_mm": [_clean_zero(value) for value in anchor],
+        "direction": [
+            _clean_zero(direction_x),
+            _clean_zero(direction_y),
+        ],
+        "normal": [_clean_zero(normal_x), _clean_zero(normal_y)],
+        "signed_offset_mm": _clean_zero(signed_offset),
+        "direction_angle_deg": _clean_zero(direction_angle),
+        "source_span_mm": source_span,
+        "automated_mutation": False,
+        "edit_strategy": "edit_native_construction_line_or_regenerate",
+    }
+
+
+def _clean_zero(value: float) -> float:
+    """Avoid serializing negative zero in canonical geometry metadata."""
+    return 0.0 if abs(value) <= 1e-12 else value
 
 
 def _named_face_support(
