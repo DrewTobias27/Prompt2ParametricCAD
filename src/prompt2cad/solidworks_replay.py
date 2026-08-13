@@ -549,41 +549,17 @@ def export_solidworks_part(
         if template_path is not None:
             command.extend(["-TemplatePath", str(template_path.resolve())])
 
-        try:
-            completed = runner(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-        except OSError as error:
-            raise SolidWorksExecutionError(
-                f"SOLIDWORKS replay process could not start: {error}"
-            ) from error
-
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip()
-        raise SolidWorksExecutionError(
-            "SOLIDWORKS replay failed"
-            + (f": {detail}" if detail else " without diagnostic output")
-        )
-    if not output_path.is_file():
-        raise SolidWorksExecutionError(
-            f"SOLIDWORKS reported success but did not create {output_path}"
-        )
-
-    if result_output_path is not None:
-        try:
-            result = json.loads(completed.stdout.strip())
-        except json.JSONDecodeError as error:
-            raise SolidWorksExecutionError(
-                "SOLIDWORKS returned an unreadable native replay result"
-            ) from error
-        result_output_path = result_output_path.resolve()
-        result_output_path.parent.mkdir(parents=True, exist_ok=True)
-        result_output_path.write_text(
-            json.dumps(result, indent=2) + "\n",
-            encoding="utf-8",
+        _run_solidworks_transaction(
+            command,
+            output_path,
+            result_output_path=result_output_path,
+            context="SOLIDWORKS replay",
+            required_receipt_fields=(
+                "reopened",
+                "verification_passed",
+                "geometry_verification_passed",
+            ),
+            runner=runner,
         )
 
     return output_path
@@ -792,6 +768,45 @@ def verify_solidworks_editability(
         if visible:
             command.append("-Visible")
 
+        _run_solidworks_transaction(
+            command,
+            output_path,
+            result_output_path=result_output_path,
+            context="SOLIDWORKS editability verification",
+            required_receipt_fields=(
+                "reopened",
+                "source_geometry_verification_passed",
+                "edited_geometry_verification_passed",
+            ),
+            runner=runner,
+        )
+
+    return output_path
+
+
+def _run_solidworks_transaction(
+    command: list[str],
+    output_path: Path,
+    *,
+    result_output_path: Path | None,
+    context: str,
+    required_receipt_fields: tuple[str, ...],
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> dict:
+    """Require one coherent native output and verification receipt.
+
+    The C# engine stages and verifies its SLDPRT before publication. This
+    boundary independently rejects process success without a valid receipt,
+    removes artifacts created by a failed invocation, and clears stale
+    receipts before a retry so an old success cannot be mistaken for a new
+    one.
+    """
+    prepared_result_path = _prepare_native_result_path(
+        result_output_path,
+        output_path=output_path,
+    )
+    transaction_verified = False
+    try:
         try:
             completed = runner(
                 command,
@@ -799,36 +814,125 @@ def verify_solidworks_editability(
                 capture_output=True,
                 text=True,
             )
-        except FileNotFoundError as error:
+        except OSError as error:
             raise SolidWorksExecutionError(
-                "SOLIDWORKS editability process could not start"
+                f"{context} process could not start: {error}"
             ) from error
+
         if completed.returncode != 0:
-            message = completed.stderr.strip() or completed.stdout.strip()
+            detail = completed.stderr.strip() or completed.stdout.strip()
             raise SolidWorksExecutionError(
-                "SOLIDWORKS editability verification failed"
-                + (f": {message}" if message else "")
+                f"{context} failed"
+                + (f": {detail}" if detail else " without diagnostic output")
             )
         if not output_path.is_file():
             raise SolidWorksExecutionError(
-                "SOLIDWORKS reported a successful edit but created no output part"
+                f"{context} reported success but did not create {output_path}"
             )
 
-        if result_output_path is not None:
-            try:
-                result = json.loads(completed.stdout.strip())
-            except json.JSONDecodeError as error:
-                raise SolidWorksExecutionError(
-                    "SOLIDWORKS returned an unreadable editability result"
-                ) from error
-            result_output_path = result_output_path.resolve()
-            result_output_path.parent.mkdir(parents=True, exist_ok=True)
-            result_output_path.write_text(
-                json.dumps(result, indent=2) + "\n",
-                encoding="utf-8",
-            )
+        receipt = _parse_native_receipt(
+            completed.stdout,
+            output_path=output_path,
+            context=context,
+            required_fields=required_receipt_fields,
+        )
+        if prepared_result_path is not None:
+            _write_json_atomically(prepared_result_path, receipt)
+        transaction_verified = True
+        return receipt
+    finally:
+        if not transaction_verified:
+            _try_remove_generated_file(output_path)
+            _try_remove_generated_file(prepared_result_path)
 
-    return output_path
+
+def _prepare_native_result_path(
+    result_output_path: Path | None,
+    *,
+    output_path: Path,
+) -> Path | None:
+    if result_output_path is None:
+        return None
+    resolved_result = result_output_path.resolve()
+    if resolved_result == output_path:
+        raise SolidWorksExecutionError(
+            "SOLIDWORKS result JSON must use a different path from the SLDPRT"
+        )
+    if resolved_result.exists() and not resolved_result.is_file():
+        raise SolidWorksExecutionError(
+            f"SOLIDWORKS result path is not a file: {resolved_result}"
+        )
+    resolved_result.parent.mkdir(parents=True, exist_ok=True)
+    _try_remove_generated_file(resolved_result)
+    return resolved_result
+
+
+def _parse_native_receipt(
+    raw_result: str,
+    *,
+    output_path: Path,
+    context: str,
+    required_fields: tuple[str, ...],
+) -> dict:
+    try:
+        receipt = json.loads(raw_result.strip())
+    except (json.JSONDecodeError, AttributeError) as error:
+        raise SolidWorksExecutionError(
+            f"{context} returned an unreadable verification receipt"
+        ) from error
+    if not isinstance(receipt, dict) or receipt.get("status") != "success":
+        raise SolidWorksExecutionError(
+            f"{context} did not return a successful verification receipt"
+        )
+    reported_output = receipt.get("output_path")
+    if not isinstance(reported_output, str) or not reported_output.strip():
+        raise SolidWorksExecutionError(
+            f"{context} receipt did not identify its output part"
+        )
+    if Path(reported_output).resolve() != output_path:
+        raise SolidWorksExecutionError(
+            f"{context} receipt identifies a different output part"
+        )
+    missing_proofs = [
+        field_name
+        for field_name in required_fields
+        if receipt.get(field_name) is not True
+    ]
+    if missing_proofs:
+        raise SolidWorksExecutionError(
+            f"{context} receipt is missing required proof: "
+            + ", ".join(missing_proofs)
+        )
+    return receipt
+
+
+def _write_json_atomically(path: Path, value: dict) -> None:
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            stream.write(json.dumps(value, indent=2) + "\n")
+            temporary_path = Path(stream.name)
+        temporary_path.replace(path)
+        temporary_path = None
+    finally:
+        _try_remove_generated_file(temporary_path)
+
+
+def _try_remove_generated_file(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        if path.is_file():
+            path.unlink()
+    except OSError:
+        pass
 
 
 def _require_geometry_oracle_for_execution(plan: SolidWorksReplayPlan) -> None:

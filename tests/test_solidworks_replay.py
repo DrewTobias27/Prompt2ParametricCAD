@@ -185,6 +185,28 @@ def expected_geometry() -> dict:
     }
 
 
+def native_build_receipt(output_path: Path, **extra) -> dict:
+    return {
+        "status": "success",
+        "output_path": str(output_path.resolve()),
+        "reopened": True,
+        "verification_passed": True,
+        "geometry_verification_passed": True,
+        **extra,
+    }
+
+
+def native_edit_receipt(output_path: Path, **extra) -> dict:
+    return {
+        "status": "success",
+        "output_path": str(output_path.resolve()),
+        "reopened": True,
+        "source_geometry_verification_passed": True,
+        "edited_geometry_verification_passed": True,
+        **extra,
+    }
+
+
 def test_replay_plan_carries_a_validated_geometry_oracle_when_requested():
     document = model_data_to_editable_document(native_model_data())
     source_geometry = expected_geometry()
@@ -1806,7 +1828,12 @@ def test_export_invokes_packaged_runner_with_validated_plan(tmp_path: Path):
         captured["plan"] = json.loads(plan_path.read_text(encoding="utf-8"))
         actual_output = Path(command[command.index("-OutputPath") + 1])
         actual_output.write_bytes(b"native-part-placeholder")
-        return subprocess.CompletedProcess(command, 0, stdout="success", stderr="")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(native_build_receipt(actual_output)),
+            stderr="",
+        )
 
     exported = export_solidworks_part(
         plan,
@@ -1893,6 +1920,47 @@ def test_export_reports_runner_failure_and_requires_sldprt(tmp_path: Path):
         )
 
 
+def test_export_removes_unverified_output_and_stale_receipt(tmp_path: Path):
+    plan = replay_plan()
+    output_path = tmp_path / "part.SLDPRT"
+    result_path = tmp_path / "part.result.json"
+    result_path.write_text('{"status": "old-success"}', encoding="utf-8")
+
+    def wrong_receipt_runner(command, **kwargs):
+        actual_output = Path(command[command.index("-OutputPath") + 1])
+        actual_output.write_bytes(b"unverified-native-part")
+        receipt = native_build_receipt(tmp_path / "different.SLDPRT")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(receipt),
+            stderr="",
+        )
+
+    with pytest.raises(SolidWorksExecutionError, match="different output part"):
+        export_solidworks_part(
+            plan,
+            output_path,
+            result_output_path=result_path,
+            runner=wrong_receipt_runner,
+        )
+
+    assert not output_path.exists()
+    assert not result_path.exists()
+
+
+def test_export_rejects_one_path_for_part_and_receipt(tmp_path: Path):
+    output_path = tmp_path / "part.SLDPRT"
+
+    with pytest.raises(SolidWorksExecutionError, match="different path"):
+        export_solidworks_part(
+            replay_plan(),
+            output_path,
+            result_output_path=output_path,
+            runner=lambda *_args, **_kwargs: pytest.fail("runner was invoked"),
+        )
+
+
 def test_editability_verification_reopens_and_mutates_bound_parameters(
     tmp_path: Path,
 ):
@@ -1921,13 +1989,7 @@ def test_editability_verification_reopens_and_mutates_bound_parameters(
         return subprocess.CompletedProcess(
             command,
             0,
-            stdout=json.dumps(
-                {
-                    "status": "success",
-                    "mutation_count": 2,
-                    "reopened": True,
-                }
-            ),
+            stdout=json.dumps(native_edit_receipt(actual_output, mutation_count=2)),
             stderr="",
         )
 
@@ -2001,6 +2063,41 @@ def test_editability_verification_rejects_unknown_or_destructive_inputs(
     assert existing_output.read_bytes() == b"do-not-overwrite"
 
 
+def test_editability_removes_output_without_complete_proof(tmp_path: Path):
+    model_data = native_model_data()
+    plan = replay_plan(model_data)
+    source_path = tmp_path / "source.SLDPRT"
+    output_path = tmp_path / "mutated.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+
+    def incomplete_receipt_runner(command, **kwargs):
+        actual_output = Path(command[command.index("-OutputPath") + 1])
+        actual_output.write_bytes(b"unverified-mutated-part")
+        receipt = native_edit_receipt(actual_output)
+        receipt["edited_geometry_verification_passed"] = False
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(receipt),
+            stderr="",
+        )
+
+    with pytest.raises(SolidWorksExecutionError, match="missing required proof"):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            output_path,
+            {"base.sketch.width": 90},
+            expected_geometry=edited_geometry(
+                model_data,
+                {"base.sketch.width": 90},
+            ),
+            runner=incomplete_receipt_runner,
+        )
+
+    assert not output_path.exists()
+
+
 def test_editability_verification_preserves_signed_placement_side(
     tmp_path: Path,
 ):
@@ -2017,10 +2114,14 @@ def test_editability_verification_preserves_signed_placement_side(
         captured["mutations"] = json.loads(
             mutation_path.read_text(encoding="utf-8")
         )
-        Path(command[command.index("-OutputPath") + 1]).write_bytes(
-            b"mutated-native-part"
+        actual_output = Path(command[command.index("-OutputPath") + 1])
+        actual_output.write_bytes(b"mutated-native-part")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(native_edit_receipt(actual_output)),
+            stderr="",
         )
-        return subprocess.CompletedProcess(command, 0, stdout="{}", stderr="")
 
     verify_solidworks_editability(
         plan,
@@ -2288,10 +2389,14 @@ def test_editability_preflight_validates_countersink_dimensions_together(
         )
 
     def fake_runner(command, **kwargs):
-        Path(command[command.index("-OutputPath") + 1]).write_bytes(
-            b"mutated-native-part"
+        actual_output = Path(command[command.index("-OutputPath") + 1])
+        actual_output.write_bytes(b"mutated-native-part")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(native_edit_receipt(actual_output)),
+            stderr="",
         )
-        return subprocess.CompletedProcess(command, 0, stdout="{}", stderr="")
 
     verify_solidworks_editability(
         plan,

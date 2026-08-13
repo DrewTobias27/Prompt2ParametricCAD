@@ -216,6 +216,10 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"SolidWorks setup is ready" in launcher
     assert b"SolidWorks API root:" in launcher
     assert b"Interop version:" in launcher
+    assert b"Refusing to overwrite existing SolidWorks part" in launcher
+    assert b"Remove-Item -LiteralPath $resultPath -Force" in launcher
+    assert b"complete verified-build receipt" in launcher
+    assert b"receipt identifies a different output part" in launcher
     assert b"$LASTEXITCODE" not in files["Build-SolidWorks-Part.ps1"]
 
     replay_script = files["solidworks_replay.ps1"]

@@ -330,6 +330,14 @@ def _launcher_script(native_filename: str) -> str:
             return
         }}
 
+        if (Test-Path -LiteralPath $OutputPath) {{
+            throw "Refusing to overwrite existing SolidWorks part: $OutputPath"
+        }}
+        $resultPath = "$OutputPath.result.json"
+        if (Test-Path -LiteralPath $resultPath) {{
+            Remove-Item -LiteralPath $resultPath -Force
+        }}
+
         Write-Stage "Building editable SolidWorks part"
         $resultText = (& (Join-Path $PSScriptRoot "solidworks_replay.ps1") @arguments |
             Out-String).Trim()
@@ -339,11 +347,18 @@ def _launcher_script(native_filename: str) -> str:
         catch {{
             throw "SolidWorks returned an unreadable build result: $resultText"
         }}
-        if ($result.status -ne "success") {{
-            throw "SolidWorks did not report a successful build."
+        if ($result.status -ne "success" -or -not $result.reopened -or
+            -not $result.verification_passed -or
+            -not $result.geometry_verification_passed) {{
+            throw "SolidWorks did not return a complete verified-build receipt."
+        }}
+        $reportedOutputPath = [System.IO.Path]::GetFullPath(
+            [string]$result.output_path
+        )
+        if ($reportedOutputPath -ne $OutputPath) {{
+            throw "SolidWorks verification receipt identifies a different output part."
         }}
 
-        $resultPath = "$OutputPath.result.json"
         $result | ConvertTo-Json -Depth 20 |
             Set-Content -LiteralPath $resultPath -Encoding UTF8
         Write-Host ""
