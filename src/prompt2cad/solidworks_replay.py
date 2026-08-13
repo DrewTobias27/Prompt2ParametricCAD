@@ -372,6 +372,10 @@ def export_solidworks_part(
     output_path = output_path.resolve()
     if output_path.suffix.lower() != ".sldprt":
         raise SolidWorksExecutionError("SOLIDWORKS output must use the .SLDPRT suffix")
+    if output_path.exists():
+        raise SolidWorksExecutionError(
+            f"Refusing to overwrite existing SOLIDWORKS output: {output_path}"
+        )
 
     replay_script = Path(__file__).with_name("solidworks_replay.ps1")
     replay_engine = Path(__file__).with_name("solidworks_replay_runner.cs")
@@ -482,6 +486,10 @@ def verify_solidworks_editability(
     if source_path == output_path:
         raise SolidWorksExecutionError(
             "Editability verification must save to a separate output part"
+        )
+    if output_path.exists():
+        raise SolidWorksExecutionError(
+            f"Refusing to overwrite existing SOLIDWORKS output: {output_path}"
         )
     if not mutations:
         raise SolidWorksExecutionError(

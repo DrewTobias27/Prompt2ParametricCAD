@@ -394,6 +394,9 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
         3. Double-click Build-SolidWorks-Part.cmd.
         4. Keep the window open while SolidWorks creates and verifies the part.
 
+        The runner will not overwrite an existing SLDPRT. Move or rename the
+        prior output before rebuilding the package.
+
         PowerShell alternative
         ----------------------
         Open PowerShell in the extracted folder and run:
@@ -411,8 +414,9 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
         required 64-bit SolidWorks API is available. It then creates named,
         constrained sketches and ordered native features; verifies parameters,
         geometry, feature health, and semantic face/edge references; rebuilds;
-        and saves the SLDPRT file. The JSON report records the verified native
-        result. If any stage fails, the window identifies the failing condition
-        and no successful native export should be assumed.
+        and publishes the SLDPRT from a temporary staged file only after those
+        checks pass. The JSON report records the verified native result. If any
+        stage fails, the staged file is removed, the window identifies the
+        failing condition, and no successful native export should be assumed.
         """
     ).lstrip()

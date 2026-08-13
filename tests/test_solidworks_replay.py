@@ -1514,6 +1514,22 @@ def test_native_replay_tracks_the_saved_document_title_for_cleanup():
     assert save_position < refresh_position < close_position
 
 
+def test_native_runner_stages_verified_outputs_before_publication():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+
+    assert "PrepareNewOutputPath(outputPath)" in runner_source
+    assert "CreateStagedOutputPath(resolvedOutput)" in runner_source
+    assert "PublishStagedOutput(stagedOutput, resolvedOutput)" in runner_source
+    assert "TryDeleteFile(stagedOutput)" in runner_source
+    assert "Refusing to overwrite existing SOLIDWORKS output" in runner_source
+    assert "File.Move(stagedOutput, resolvedOutput)" in runner_source
+
+
 def test_native_runner_dimensions_rectangles_in_their_local_feature_frame():
     runner_source = (
         Path(__file__).parents[1]
@@ -1582,6 +1598,12 @@ def test_export_reports_runner_failure_and_requires_sldprt(tmp_path: Path):
 
     with pytest.raises(SolidWorksExecutionError, match=".SLDPRT suffix"):
         export_solidworks_part(plan, tmp_path / "part.step")
+
+    existing_output = tmp_path / "existing.SLDPRT"
+    existing_output.write_bytes(b"do-not-overwrite")
+    with pytest.raises(SolidWorksExecutionError, match="Refusing to overwrite"):
+        export_solidworks_part(plan, existing_output)
+    assert existing_output.read_bytes() == b"do-not-overwrite"
 
     def failing_runner(command, **kwargs):
         return subprocess.CompletedProcess(
@@ -1706,6 +1728,16 @@ def test_editability_verification_rejects_unknown_or_destructive_inputs(
             source_path,
             {"base.sketch.width": 90},
         )
+    existing_output = tmp_path / "existing.SLDPRT"
+    existing_output.write_bytes(b"do-not-overwrite")
+    with pytest.raises(SolidWorksExecutionError, match="Refusing to overwrite"):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            existing_output,
+            {"base.sketch.width": 90},
+        )
+    assert existing_output.read_bytes() == b"do-not-overwrite"
 
 
 def test_editability_verification_preserves_signed_placement_side(
@@ -1965,7 +1997,8 @@ def test_native_runner_reopens_and_reverifies_mutated_parts():
 
     assert "VerifyEditablePart(" in runner_source
     assert "ApplyParameterMutations(model, plan, mutations)" in runner_source
-    assert "model = OpenNativePart(application, resolvedOutput);" in runner_source
+    assert "model = OpenNativePart(application, stagedOutput);" in runner_source
+    assert "PublishStagedOutput(stagedOutput, resolvedOutput);" in runner_source
     assert 'Reopened = true' in runner_source
     assert "VerifyReplay(" in runner_source
     assert "RequireHealthyModel(reopenedHealth" in runner_source

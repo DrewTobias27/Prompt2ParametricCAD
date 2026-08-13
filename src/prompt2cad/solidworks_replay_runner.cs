@@ -673,6 +673,9 @@ namespace Prompt2Cad.SolidWorks
                 throw new InvalidOperationException("The replay plan has no features.");
             }
 
+            string resolvedOutput = PrepareNewOutputPath(outputPath);
+            string stagedOutput = CreateStagedOutputPath(resolvedOutput);
+
             SldWorks application = null;
             bool startedApplication = false;
             ModelDoc2 model = null;
@@ -853,23 +856,16 @@ namespace Prompt2Cad.SolidWorks
                         ) + "."
                     );
                 }
-                string resolvedOutput = Path.GetFullPath(outputPath);
-                string outputDirectory = Path.GetDirectoryName(resolvedOutput);
-                if (!String.IsNullOrWhiteSpace(outputDirectory))
-                {
-                    Directory.CreateDirectory(outputDirectory);
-                }
-
                 Trace("Saving native part");
                 int saveStatus = model.SaveAs3(
-                    resolvedOutput,
+                    stagedOutput,
                     (int)swSaveAsVersion_e.swSaveAsCurrentVersion,
                     (int)swSaveAsOptions_e.swSaveAsOptions_Silent
                 );
-                if (saveStatus != 0 || !File.Exists(resolvedOutput))
+                if (saveStatus != 0 || !File.Exists(stagedOutput))
                 {
                     throw new InvalidOperationException(
-                        "SOLIDWORKS failed to save '" + resolvedOutput +
+                        "SOLIDWORKS failed to save staged output '" + stagedOutput +
                         "' (status " + saveStatus + ")."
                     );
                 }
@@ -886,6 +882,12 @@ namespace Prompt2Cad.SolidWorks
 
                 Trace("Replay complete");
                 NativeGeometryResult geometry = MeasureNativeGeometry(part);
+                application.CloseDoc(modelTitle);
+                ReleaseComObject(model);
+                model = null;
+                modelTitle = null;
+                PublishStagedOutput(stagedOutput, resolvedOutput);
+                stagedOutput = null;
                 string resultJson = WriteJson(
                     new ReplayResult
                     {
@@ -955,6 +957,7 @@ namespace Prompt2Cad.SolidWorks
 
                 ReleaseComObject(model);
                 ReleaseComObject(application);
+                TryDeleteFile(stagedOutput);
             }
         }
 
@@ -992,7 +995,17 @@ namespace Prompt2Cad.SolidWorks
             }
 
             string resolvedSource = Path.GetFullPath(sourcePath);
-            string resolvedOutput = Path.GetFullPath(outputPath);
+            string resolvedOutput = PrepareNewOutputPath(outputPath);
+            if (String.Equals(
+                resolvedSource,
+                resolvedOutput,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Editability verification must save to a separate output part."
+                );
+            }
+            string stagedOutput = CreateStagedOutputPath(resolvedOutput);
             if (!File.Exists(resolvedSource))
             {
                 throw new FileNotFoundException(
@@ -1000,12 +1013,6 @@ namespace Prompt2Cad.SolidWorks
                     resolvedSource
                 );
             }
-            string outputDirectory = Path.GetDirectoryName(resolvedOutput);
-            if (!String.IsNullOrWhiteSpace(outputDirectory))
-            {
-                Directory.CreateDirectory(outputDirectory);
-            }
-
             SldWorks application = null;
             bool startedApplication = false;
             ModelDoc2 model = null;
@@ -1058,15 +1065,15 @@ namespace Prompt2Cad.SolidWorks
                 RequireHealthyModel(beforeSaveHealth, "after mutation");
 
                 int saveStatus = model.SaveAs3(
-                    resolvedOutput,
+                    stagedOutput,
                     (int)swSaveAsVersion_e.swSaveAsCurrentVersion,
                     (int)swSaveAsOptions_e.swSaveAsOptions_Silent
                 );
-                if (saveStatus != 0 || !File.Exists(resolvedOutput))
+                if (saveStatus != 0 || !File.Exists(stagedOutput))
                 {
                     throw new InvalidOperationException(
-                        "SOLIDWORKS failed to save mutated part '" +
-                        resolvedOutput + "' (status " + saveStatus + ")."
+                        "SOLIDWORKS failed to save staged mutated part '" +
+                        stagedOutput + "' (status " + saveStatus + ")."
                     );
                 }
 
@@ -1075,7 +1082,7 @@ namespace Prompt2Cad.SolidWorks
                 model = null;
                 modelTitle = null;
 
-                model = OpenNativePart(application, resolvedOutput);
+                model = OpenNativePart(application, stagedOutput);
                 modelTitle = model.GetTitle();
                 part = (PartDoc)model;
                 ParameterVerificationResult verification = VerifyReplay(
@@ -1096,6 +1103,13 @@ namespace Prompt2Cad.SolidWorks
                         plan,
                         persistentReferenceIds
                     );
+
+                application.CloseDoc(modelTitle);
+                ReleaseComObject(model);
+                model = null;
+                modelTitle = null;
+                PublishStagedOutput(stagedOutput, resolvedOutput);
+                stagedOutput = null;
 
                 return WriteEditabilityJson(
                     new EditabilityResult
@@ -1141,6 +1155,83 @@ namespace Prompt2Cad.SolidWorks
                 }
                 ReleaseComObject(model);
                 ReleaseComObject(application);
+                TryDeleteFile(stagedOutput);
+            }
+        }
+
+        private static string PrepareNewOutputPath(string outputPath)
+        {
+            string resolvedOutput = Path.GetFullPath(outputPath);
+            if (!String.Equals(
+                Path.GetExtension(resolvedOutput),
+                ".SLDPRT",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS output must use the .SLDPRT suffix."
+                );
+            }
+            if (File.Exists(resolvedOutput))
+            {
+                throw new InvalidOperationException(
+                    "Refusing to overwrite existing SOLIDWORKS output '" +
+                    resolvedOutput + "'."
+                );
+            }
+            string outputDirectory = Path.GetDirectoryName(resolvedOutput);
+            if (!String.IsNullOrWhiteSpace(outputDirectory))
+            {
+                Directory.CreateDirectory(outputDirectory);
+            }
+            return resolvedOutput;
+        }
+
+        private static string CreateStagedOutputPath(string resolvedOutput)
+        {
+            string directory = Path.GetDirectoryName(resolvedOutput);
+            string filename = Path.GetFileNameWithoutExtension(resolvedOutput);
+            return Path.Combine(
+                directory,
+                filename + ".prompt2cad-" + Guid.NewGuid().ToString("N") +
+                ".SLDPRT"
+            );
+        }
+
+        private static void PublishStagedOutput(
+            string stagedOutput,
+            string resolvedOutput)
+        {
+            if (!File.Exists(stagedOutput))
+            {
+                throw new InvalidOperationException(
+                    "Verified staged SOLIDWORKS output is missing."
+                );
+            }
+            if (File.Exists(resolvedOutput))
+            {
+                throw new InvalidOperationException(
+                    "Refusing to overwrite existing SOLIDWORKS output '" +
+                    resolvedOutput + "'."
+                );
+            }
+            File.Move(stagedOutput, resolvedOutput);
+        }
+
+        private static void TryDeleteFile(string path)
+        {
+            if (String.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+            catch
+            {
             }
         }
 

@@ -155,6 +155,8 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"Editability summary" in readme
     assert b"editability-coverage.json" in readme
     assert b"limited to their current origin side" in readme
+    assert b"will not overwrite an existing SLDPRT" in readme
+    assert b"temporary staged file" in readme
     assert b"solidworks-replay-plan.json" in launcher
     assert b"SolidWorks package version 4" in launcher
     assert b"Get-FileHash" in launcher
