@@ -11,13 +11,14 @@ import re
 from textwrap import dedent
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.editable_model import build_editable_model_document
 from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
+from prompt2cad.solidworks_verification import geometry_metrics
 
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
-SOLIDWORKS_PACKAGE_VERSION = 8
+SOLIDWORKS_PACKAGE_VERSION = 9
 SOLIDWORKS_PACKAGE_PAYLOAD_FILES = (
     "Build-SolidWorks-Part.cmd",
     "Build-SolidWorks-Part.ps1",
@@ -53,8 +54,12 @@ def create_solidworks_package(
     The actual SLDPRT is still created by the included runner on a Windows
     computer with SolidWorks installed.
     """
-    document = model_data_to_editable_document(model_data)
-    replay_plan = build_solidworks_replay_plan(document)
+    part, document = build_editable_model_document(model_data)
+    expected_geometry = geometry_metrics(part)
+    replay_plan = build_solidworks_replay_plan(
+        document,
+        expected_geometry=expected_geometry,
+    )
     editability_coverage = native_parameter_coverage(
         model_data,
         replay_plan,
@@ -330,6 +335,7 @@ def _launcher_script(native_filename: str) -> str:
         Write-Host "  Report: $resultPath"
         Write-Host "  Features: $($result.feature_count)"
         Write-Host "  Saved file reopened: $($result.reopened)"
+        Write-Host "  CadQuery geometry matched: $($result.geometry_verification_passed)"
         Write-Host "  Verified parameters: $($result.verified_parameter_count)"
         Write-Host "  Verified helpers: $($result.verified_helper_count)"
         Write-Host "  Persistent references: $($result.published_references.Count)"
@@ -447,10 +453,12 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
         that the package files match their recorded SHA-256 hashes and that the
         required 64-bit SolidWorks API is available. It then creates named,
         constrained sketches and ordered native features; verifies parameters,
-        geometry, feature health, and semantic face/edge references; rebuilds;
-        and publishes the SLDPRT from a temporary staged file only after those
-        checks pass. The JSON report records the verified native result. If any
-        stage fails, the staged file is removed, the window identifies the
-        failing condition, and no successful native export should be assumed.
+        feature health, and semantic face/edge references; compares the saved
+        body's count, volume, surface area, envelope, and center of mass with
+        the source CadQuery result; rebuilds; and publishes the SLDPRT from a
+        temporary staged file only after those checks pass. The JSON report
+        records the verified native result. If any stage fails, the staged file
+        is removed, the window identifies the failing condition, and no
+        successful native export should be assumed.
         """
     ).lstrip()

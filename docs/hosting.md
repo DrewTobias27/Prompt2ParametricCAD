@@ -55,9 +55,10 @@ and optionally double-click `Check-SolidWorks-Setup.cmd` first. That preflight
 checks the package, 64-bit PowerShell, SolidWorks registration and API files,
 compiles the replay engine, and validates the replay-plan contract without
 creating a part. Then run
-`Build-SolidWorks-Part.cmd`; package v8 stages the native part, closes and
-reopens it, verifies the saved history, exact parameter/helper identities, and
-localized datum/template resolution, and only then writes the final part plus
+`Build-SolidWorks-Part.cmd`; package v9 stages the native part, closes and
+reopens it, verifies the saved history, exact parameter/helper identities,
+localized datum/template resolution, and body/volume/area/bounds/center against
+the embedded CadQuery geometry oracle, and only then writes the final part plus
 a JSON verification report.
 
 ## Public-release gate
@@ -68,7 +69,7 @@ Before linking the application from a LinkedIn post:
 2. Run its launcher on Windows with the supported SolidWorks version.
 3. Confirm the resulting `SLDPRT` opens, rebuilds, and exposes editable named
    sketches, dimensions, patterns, and ordered features.
-4. Confirm the package-v8 result reports `reopened: true`, exact verified
+4. Confirm the package-v9 result reports `reopened: true`, exact verified
    parameter/helper identities, healthy features/sketches, matching geometry,
    and resolved persistent face references.
 5. Run `prompt2cad-solidworks-smoke --execute --verify-editability` and require
@@ -98,7 +99,7 @@ site and pass that exact ZIP to the same command:
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\scripts\check_solidworks_release.ps1 `
-  -DownloadedPackagePath "C:\Users\you\Downloads\part-v8-solidworks.zip" `
+  -DownloadedPackagePath "C:\Users\you\Downloads\part-v9-solidworks.zip" `
   -Visible
 ```
 
@@ -118,7 +119,7 @@ The public-release gate was exercised on August 10, 2026. The deployed site
 generated and refined a valid multi-feature model, both public download paths
 returned non-empty artifacts, and a package downloaded from the public URL
 created a native SolidWorks part with editable features and dimensions. That
-result predates package v8. The August 13 v8 regression now passes 601 offline
+result predates package v9. The August 13 v9 regression now passes 609 offline
 tests, all six frontend behavior suites, a production frontend build, the 7/7
 golden release matrix, and all 292 STEP/native-plan capability cases. Four
 installed-API compile/tamper checks also passed separately. A fresh package

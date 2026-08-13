@@ -155,6 +155,33 @@ def test_package_checker_rebuilds_plan_instead_of_trusting_manifest_hashes(
         verify_solidworks_package(extracted)
 
 
+def test_package_checker_rejects_a_self_consistent_falsified_geometry_oracle(
+    tmp_path: Path,
+):
+    archive_path = write_package_zip(tmp_path)
+    extracted = tmp_path / "verified-package"
+    extract_verified_solidworks_package(archive_path, extracted)
+    plan_path = extracted / "solidworks-replay-plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan["expected_geometry"]["volume_mm3"] *= 0.5
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+
+    manifest_path = extracted / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    content = plan_path.read_bytes()
+    record = next(
+        item
+        for item in manifest["files"]
+        if item["path"] == "solidworks-replay-plan.json"
+    )
+    record["size_bytes"] = len(content)
+    record["sha256"] = sha256(content).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="replay plan does not match"):
+        verify_solidworks_package(extracted)
+
+
 def test_package_checker_rejects_self_consistent_tampered_replay_engine(
     tmp_path: Path,
 ):

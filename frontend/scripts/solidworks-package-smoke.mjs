@@ -8,7 +8,7 @@ globalThis.fetch = async (url, options) => {
   requests.push({ url, options });
   const responseHeaders = {
     "content-disposition": 'attachment; filename="demo-solidworks.zip"',
-    "x-prompt2cad-package-version": "8",
+    "x-prompt2cad-package-version": "9",
     "x-prompt2cad-numeric-parameters": "15",
     "x-prompt2cad-named-bindings": "9",
     "x-prompt2cad-relation-controls": "2",
@@ -45,7 +45,7 @@ const download = await createSolidWorksPackage(modelData, "demo model");
 assert.equal(download.filename, "demo-solidworks.zip");
 assert.equal(download.blob.type, "application/zip");
 assert.deepEqual(download.editability, {
-  packageVersion: 8,
+  packageVersion: 9,
   numericParameterCount: 15,
   namedBindingCount: 9,
   relationControlledCount: 2,
@@ -62,7 +62,7 @@ assert.deepEqual(JSON.parse(requests[0].options.body), {
 });
 assert.equal(
   formatSolidWorksDownloadStatus(download.editability),
-  "Package v8 downloaded. Of 15 source values: 9 have automated edit bindings; 2 zero coordinates are held by sketch relations; 3 are retained as reference geometry; 1 requires manual SolidWorks editing. 2 coordinate bindings cannot cross the sketch origin without regenerating. Extract it on Windows with SolidWorks.",
+  "Package v9 downloaded. Of 15 source values: 9 have automated edit bindings; 2 zero coordinates are held by sketch relations; 3 are retained as reference geometry; 1 requires manual SolidWorks editing. 2 coordinate bindings cannot cross the sketch origin without regenerating. Extract it on Windows with SolidWorks.",
 );
 assert.equal(
   formatSolidWorksDownloadStatus({

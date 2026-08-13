@@ -35,18 +35,20 @@ Verified against the public deployment on August 10, 2026:
   native create/edit/reopen parity across the same coverage surface.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 13 package-v8 gate passes 601 offline Python tests, all
+- The August 13 package-v9 gate passes 609 offline Python tests, all
   six frontend behavior suites, a production frontend build, all seven golden
   end-to-end cases, and all 292 generated STEP/native-plan capability cases.
-  Four C# compile/plan-tamper checks passed separately. Two exhaustive tests
+  Five C# compile/plan-tamper checks passed separately. Two exhaustive tests
   were run through their dedicated release commands; only the fresh public ZIP
   and installed-SolidWorks create/edit/reopen gate remains pending.
-- Package v8 assigns explicit collision-safe names to pattern/support helpers,
+- Package v9 assigns explicit collision-safe names to pattern/support helpers,
   reports the exact parameter/helper/mutation identities it verifies, resolves
   localized datum planes and part templates, and closes/reopens the staged
   `SLDPRT` before publishing it. The release checker now verifies the exact
   downloaded ZIP, selects and proves a geometry-changing edit, then requires a
   second native save/reopen with matching geometry and persistent references.
+  Each package now carries a CadQuery geometry oracle and refuses to publish a
+  native part whose body count, volume, area, bounds, or center does not match.
 
 ## Recommended visuals
 
@@ -72,7 +74,7 @@ The prepared portfolio renders are stored in the portfolio repository under
   scrollbars, API keys, local paths, or unrelated tabs.
 - Run one known-good prompt and one correction immediately before publishing.
 - Download both the STEP file and SolidWorks package from the public site.
-- Confirm the fresh download is a `v8-solidworks.zip`, run its setup check, then
+- Confirm the fresh download is a `v9-solidworks.zip`, run its setup check, then
   build it on Windows with SolidWorks and confirm the JSON report says the saved
   file reopened and all declared parameters/helpers verified.
 - Run the ten-case native smoke suite with editability verification and capture

@@ -67,6 +67,9 @@ def native_result_factory() -> Callable[..., dict]:
             report.update(
                 {
                     "reopened": True,
+                    "source_geometry_verification_passed": (
+                        plan.expected_geometry is not None
+                    ),
                     "mutation_count": len(mutated_parameter_ids),
                     "mutated_parameter_ids": mutated_parameter_ids,
                 }
@@ -75,6 +78,9 @@ def native_result_factory() -> Callable[..., dict]:
             report.update(
                 {
                     "verification_passed": True,
+                    "geometry_verification_passed": (
+                        plan.expected_geometry is not None
+                    ),
                     "reopened": True,
                     "feature_count": len(plan.features),
                     "native_features": [

@@ -23,6 +23,9 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "features")]
         public ReplayStep[] Features { get; set; }
+
+        [DataMember(Name = "expected_geometry")]
+        public NativeGeometryResult ExpectedGeometry { get; set; }
     }
 
     [DataContract]
@@ -534,6 +537,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "verification_passed")]
         public bool VerificationPassed { get; set; }
 
+        [DataMember(Name = "geometry_verification_passed")]
+        public bool GeometryVerificationPassed { get; set; }
+
         [DataMember(Name = "reopened")]
         public bool Reopened { get; set; }
 
@@ -607,6 +613,9 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "reopened")]
         public bool Reopened { get; set; }
+
+        [DataMember(Name = "source_geometry_verification_passed")]
+        public bool SourceGeometryVerificationPassed { get; set; }
 
         [DataMember(Name = "declared_parameter_count")]
         public int DeclaredParameterCount { get; set; }
@@ -725,7 +734,7 @@ namespace Prompt2Cad.SolidWorks
     {
         private const double MillimetersPerMeter = 1000.0;
         private const string ReplayFormat = "prompt2cad.solidworks-replay-plan";
-        private const int ReplayVersion = 10;
+        private const int ReplayVersion = 11;
         private static string tracePath;
 
         public static int ValidatePlanFile(string planPath)
@@ -946,6 +955,11 @@ namespace Prompt2Cad.SolidWorks
 
                 Trace("Replay complete");
                 NativeGeometryResult geometry = MeasureNativeGeometry(part);
+                RequireExpectedGeometryMatch(
+                    plan.ExpectedGeometry,
+                    geometry,
+                    "reopened native build"
+                );
                 application.CloseDoc(modelTitle);
                 ReleaseComObject(model);
                 model = null;
@@ -960,6 +974,8 @@ namespace Prompt2Cad.SolidWorks
                         NativeFeatures = createdNames.ToArray(),
                         FeatureCount = createdNames.Count,
                         VerificationPassed = true,
+                        GeometryVerificationPassed =
+                            plan.ExpectedGeometry != null,
                         Reopened = true,
                         VerifiedDimensionCount =
                             parameterVerification.VerifiedDimensionCount,
@@ -1116,6 +1132,11 @@ namespace Prompt2Cad.SolidWorks
                 modelTitle = model.GetTitle();
                 PartDoc part = (PartDoc)model;
                 NativeGeometryResult beforeGeometry = MeasureNativeGeometry(part);
+                RequireExpectedGeometryMatch(
+                    plan.ExpectedGeometry,
+                    beforeGeometry,
+                    "source native part"
+                );
                 IDictionary<string, byte[]> persistentReferenceIds =
                     CapturePersistentReferenceIds(model, part, plan);
 
@@ -1191,6 +1212,8 @@ namespace Prompt2Cad.SolidWorks
                             .OrderBy(item => item, StringComparer.Ordinal)
                             .ToArray(),
                         Reopened = true,
+                        SourceGeometryVerificationPassed =
+                            plan.ExpectedGeometry != null,
                         DeclaredParameterCount =
                             verification.DeclaredParameterCount,
                         VerifiedParameterCount =
@@ -1484,6 +1507,11 @@ namespace Prompt2Cad.SolidWorks
                     );
                 }
             }
+            ValidateGeometryRecord(
+                plan.ExpectedGeometry,
+                "Expected geometry",
+                true
+            );
         }
 
         private static void RequireUniqueValue(
@@ -1626,6 +1654,178 @@ namespace Prompt2Cad.SolidWorks
                 throw new InvalidOperationException(
                     "Canonical " + label + " does not match the source endpoints."
                 );
+            }
+        }
+
+        private static void ValidateGeometryRecord(
+            NativeGeometryResult geometry,
+            string label,
+            bool allowMissing)
+        {
+            if (geometry == null)
+            {
+                if (allowMissing)
+                {
+                    return;
+                }
+                throw new InvalidOperationException(label + " is missing.");
+            }
+            if (geometry.SolidBodyCount <= 0)
+            {
+                throw new InvalidOperationException(
+                    label + " must contain at least one solid body."
+                );
+            }
+            RequirePositiveFiniteValue(
+                geometry.VolumeCubicMillimeters,
+                label + " volume"
+            );
+            RequirePositiveFiniteValue(
+                geometry.SurfaceAreaSquareMillimeters,
+                label + " surface area"
+            );
+            RequireFiniteVector(
+                geometry.CenterOfMassMillimeters,
+                3,
+                label + " center of mass"
+            );
+            RequireFiniteVector(
+                geometry.BoundingBoxMillimeters,
+                6,
+                label + " bounding box"
+            );
+            for (int axis = 0; axis < 3; axis++)
+            {
+                if (geometry.BoundingBoxMillimeters[axis + 3] <=
+                    geometry.BoundingBoxMillimeters[axis])
+                {
+                    throw new InvalidOperationException(
+                        label + " bounding box must have positive spans."
+                    );
+                }
+            }
+        }
+
+        private static void RequirePositiveFiniteValue(
+            double value,
+            string label)
+        {
+            RequireFiniteValue(value, label);
+            if (value <= 0.0)
+            {
+                throw new InvalidOperationException(label + " must be positive.");
+            }
+        }
+
+        private static void RequireFiniteVector(
+            double[] values,
+            int expectedLength,
+            string label)
+        {
+            if (values == null || values.Length != expectedLength)
+            {
+                throw new InvalidOperationException(
+                    label + " must contain exactly " + expectedLength +
+                    " values."
+                );
+            }
+            for (int index = 0; index < values.Length; index++)
+            {
+                RequireFiniteValue(values[index], label + " value " + (index + 1));
+            }
+        }
+
+        private static void RequireExpectedGeometryMatch(
+            NativeGeometryResult expected,
+            NativeGeometryResult actual,
+            string context)
+        {
+            if (expected == null)
+            {
+                return;
+            }
+            ValidateGeometryRecord(expected, "Expected geometry", false);
+            ValidateGeometryRecord(actual, "Measured " + context + " geometry", false);
+            if (actual.SolidBodyCount != expected.SolidBodyCount)
+            {
+                throw new InvalidOperationException(
+                    context + " body count does not match the CadQuery source."
+                );
+            }
+
+            double relativeVolumeError = Math.Abs(
+                actual.VolumeCubicMillimeters - expected.VolumeCubicMillimeters
+            ) / Math.Max(expected.VolumeCubicMillimeters, 1.0);
+            if (relativeVolumeError > 0.005)
+            {
+                throw new InvalidOperationException(
+                    context + " volume differs from the CadQuery source by " +
+                    relativeVolumeError.ToString("P2", CultureInfo.InvariantCulture) +
+                    "."
+                );
+            }
+
+            double relativeAreaError = Math.Abs(
+                actual.SurfaceAreaSquareMillimeters -
+                expected.SurfaceAreaSquareMillimeters
+            ) / Math.Max(expected.SurfaceAreaSquareMillimeters, 1.0);
+            if (relativeAreaError > 0.01)
+            {
+                throw new InvalidOperationException(
+                    context + " surface area differs from the CadQuery source by " +
+                    relativeAreaError.ToString("P2", CultureInfo.InvariantCulture) +
+                    "."
+                );
+            }
+
+            double[] expectedSpans = new double[3];
+            for (int axis = 0; axis < 3; axis++)
+            {
+                expectedSpans[axis] =
+                    expected.BoundingBoxMillimeters[axis + 3] -
+                    expected.BoundingBoxMillimeters[axis];
+                double actualSpan =
+                    actual.BoundingBoxMillimeters[axis + 3] -
+                    actual.BoundingBoxMillimeters[axis];
+                double tolerance = Math.Max(
+                    0.5,
+                    Math.Abs(expectedSpans[axis]) * 0.01
+                );
+                if (Math.Abs(actualSpan - expectedSpans[axis]) > tolerance)
+                {
+                    throw new InvalidOperationException(
+                        context + " bounding-box span does not match the " +
+                        "CadQuery source."
+                    );
+                }
+                if (Math.Abs(
+                    actual.CenterOfMassMillimeters[axis] -
+                    expected.CenterOfMassMillimeters[axis]
+                ) > tolerance)
+                {
+                    throw new InvalidOperationException(
+                        context + " center of mass does not match the " +
+                        "CadQuery source."
+                    );
+                }
+            }
+            for (int index = 0; index < 6; index++)
+            {
+                int axis = index % 3;
+                double tolerance = Math.Max(
+                    0.5,
+                    Math.Abs(expectedSpans[axis]) * 0.01
+                );
+                if (Math.Abs(
+                    actual.BoundingBoxMillimeters[index] -
+                    expected.BoundingBoxMillimeters[index]
+                ) > tolerance)
+                {
+                    throw new InvalidOperationException(
+                        context + " bounding-box position does not match the " +
+                        "CadQuery source."
+                    );
+                }
             }
         }
 

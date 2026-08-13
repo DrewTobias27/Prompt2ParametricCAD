@@ -9,6 +9,7 @@ Windows PowerShell/COM runner only after every feature has been accepted.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from hashlib import sha1
 import json
@@ -25,7 +26,7 @@ from prompt2cad.pattern_geometry import pattern_positions
 
 
 SOLIDWORKS_REPLAY_FORMAT = "prompt2cad.solidworks-replay-plan"
-SOLIDWORKS_REPLAY_VERSION = 10
+SOLIDWORKS_REPLAY_VERSION = 11
 SUPPORTED_OPERATION_TYPES = {
     "extrude",
     "add_extrude",
@@ -130,6 +131,7 @@ class SolidWorksReplayPlan:
 
     features: tuple[SolidWorksReplayFeature, ...]
     source_build_order: tuple[str, ...]
+    expected_geometry: dict | None = None
     warnings: tuple[str, ...] = field(default_factory=tuple)
     format_name: str = SOLIDWORKS_REPLAY_FORMAT
     format_version: int = SOLIDWORKS_REPLAY_VERSION
@@ -144,6 +146,7 @@ class SolidWorksReplayPlan:
                 "solidworks_system_length": "m",
             },
             "source_build_order": list(self.source_build_order),
+            "expected_geometry": deepcopy(self.expected_geometry),
             "features": [feature.to_dict() for feature in self.features],
             "warnings": list(self.warnings),
             "capabilities": {
@@ -167,12 +170,15 @@ class SolidWorksReplayPlan:
                 "canonical_revolve_axis_metadata": True,
                 "generated_stable_feature_ids": True,
                 "persistent_entity_reference_contract": True,
+                "native_geometry_oracle": self.expected_geometry is not None,
             },
         }
 
 
 def build_solidworks_replay_plan(
     document: EditableModelDocument,
+    *,
+    expected_geometry: dict | None = None,
 ) -> SolidWorksReplayPlan:
     """Lower a supported editable document into a native replay plan.
 
@@ -233,9 +239,112 @@ def build_solidworks_replay_plan(
     plan = SolidWorksReplayPlan(
         features=tuple(replay_features),
         source_build_order=document.build_order,
+        expected_geometry=_normalize_expected_geometry(expected_geometry),
     )
     _validate_replay_plan_contract(plan)
     return plan
+
+
+def _normalize_expected_geometry(value: dict | None) -> dict | None:
+    """Validate and copy the kernel-independent native geometry oracle."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise SolidWorksReplayError("Expected geometry must be an object")
+
+    required_keys = {
+        "solid_body_count",
+        "volume_mm3",
+        "surface_area_mm2",
+        "center_of_mass_mm",
+        "bounding_box_mm",
+    }
+    if set(value) != required_keys:
+        missing = sorted(required_keys - set(value))
+        unexpected = sorted(set(value) - required_keys)
+        raise SolidWorksReplayError(
+            "Expected geometry has the wrong fields; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+
+    body_count = value["solid_body_count"]
+    if isinstance(body_count, bool) or not isinstance(body_count, int):
+        raise SolidWorksReplayError(
+            "Expected geometry solid_body_count must be an integer"
+        )
+    if body_count <= 0:
+        raise SolidWorksReplayError(
+            "Expected geometry solid_body_count must be positive"
+        )
+
+    volume = _positive_finite_geometry_value(
+        value["volume_mm3"],
+        "volume_mm3",
+    )
+    surface_area = _positive_finite_geometry_value(
+        value["surface_area_mm2"],
+        "surface_area_mm2",
+    )
+    center = _finite_geometry_vector(
+        value["center_of_mass_mm"],
+        length=3,
+        label="center_of_mass_mm",
+    )
+    bounds = _finite_geometry_vector(
+        value["bounding_box_mm"],
+        length=6,
+        label="bounding_box_mm",
+    )
+    if any(bounds[index + 3] <= bounds[index] for index in range(3)):
+        raise SolidWorksReplayError(
+            "Expected geometry bounding_box_mm must have positive spans"
+        )
+
+    return {
+        "solid_body_count": body_count,
+        "volume_mm3": volume,
+        "surface_area_mm2": surface_area,
+        "center_of_mass_mm": center,
+        "bounding_box_mm": bounds,
+    }
+
+
+def _positive_finite_geometry_value(value, label: str) -> float:
+    numeric = _finite_geometry_value(value, label)
+    if numeric <= 0:
+        raise SolidWorksReplayError(
+            f"Expected geometry {label} must be positive"
+        )
+    return numeric
+
+
+def _finite_geometry_vector(value, *, length: int, label: str) -> list[float]:
+    if not isinstance(value, (list, tuple)) or len(value) != length:
+        raise SolidWorksReplayError(
+            f"Expected geometry {label} must contain {length} values"
+        )
+    return [
+        _finite_geometry_value(item, f"{label}[{index}]")
+        for index, item in enumerate(value)
+    ]
+
+
+def _finite_geometry_value(value, label: str) -> float:
+    if isinstance(value, bool):
+        raise SolidWorksReplayError(
+            f"Expected geometry {label} must be numeric"
+        )
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError) as error:
+        raise SolidWorksReplayError(
+            f"Expected geometry {label} must be numeric"
+        ) from error
+    if not math.isfinite(numeric):
+        raise SolidWorksReplayError(
+            f"Expected geometry {label} must be finite"
+        )
+    return numeric
 
 
 def _deduplicate_coplanar_face_references(

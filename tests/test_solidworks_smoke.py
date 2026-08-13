@@ -9,6 +9,7 @@ from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.interpreter import build_model
 from prompt2cad.loader import load_model
 from prompt2cad.solidworks_editability import native_parameter_coverage
+from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_smoke import SMOKE_FIXTURE_NAMES
 from prompt2cad.solidworks_smoke import EDITABILITY_SCENARIOS
 from prompt2cad.solidworks_smoke import run_smoke_suite
@@ -356,6 +357,37 @@ def test_native_contract_rejects_missing_helpers_and_unhealthy_sketches(
         validate_native_editability_result(
             plan,
             wrong_mutation_identity,
+            expected_mutation_ids=[mutation_id],
+            context="test edit",
+        )
+
+
+def test_native_contract_requires_embedded_geometry_oracle_evidence(
+    native_result_factory,
+):
+    fixture = smoke_fixture_paths(["solidworks_smoke_patterned_plate"])[0]
+    model_data = load_model(fixture)
+    plan = build_solidworks_replay_plan(
+        model_data_to_editable_document(model_data),
+        expected_geometry=geometry_metrics(build_model(model_data)),
+    )
+
+    build_result = native_result_factory(plan)
+    build_result["geometry_verification_passed"] = False
+    with pytest.raises(RuntimeError, match="geometry against CadQuery"):
+        validate_native_build_result(plan, build_result, context="test")
+
+    mutation_id = plan.features[0].parameter_bindings[0]["parameter_id"]
+    edit_result = native_result_factory(
+        plan,
+        editability=True,
+        mutated_parameter_ids=[mutation_id],
+    )
+    edit_result["source_geometry_verification_passed"] = False
+    with pytest.raises(RuntimeError, match="source geometry against CadQuery"):
+        validate_native_editability_result(
+            plan,
+            edit_result,
             expected_mutation_ids=[mutation_id],
             context="test edit",
         )

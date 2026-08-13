@@ -15,7 +15,7 @@ import tempfile
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
 from prompt2cad.editable_model import EditableModelDocument
-from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.editable_model import build_editable_model_document
 from prompt2cad.editable_model import rebuild_with_parameter_updates
 from prompt2cad.interpreter import build_model
 from prompt2cad.solidworks_editability import native_parameter_coverage
@@ -126,7 +126,7 @@ def verify_solidworks_package(
     _validate_native_output_names(manifest)
 
     model_data = _load_json(root / "source-model.json", "source model")
-    document = model_data_to_editable_document(model_data)
+    part, document = build_editable_model_document(model_data)
     expected_editable_model = _normalized_json(document.to_dict())
     actual_editable_model = _load_json(
         root / "editable-model.json",
@@ -137,7 +137,10 @@ def verify_solidworks_package(
             "Editable model does not match the packaged source model"
         )
 
-    plan = build_solidworks_replay_plan(document)
+    plan = build_solidworks_replay_plan(
+        document,
+        expected_geometry=geometry_metrics(part),
+    )
     actual_plan = _load_json(
         root / "solidworks-replay-plan.json",
         "SolidWorks replay plan",

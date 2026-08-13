@@ -72,6 +72,7 @@ def test_release_script_keeps_native_execution_explicit():
     assert "prompt2cad.capability_audit" in source
     assert "P2P_RUN_SOLIDWORKS_COMPILE" in source
     assert "test_setup_check_rejects_conflicting_canonical_revolve_axis" in source
+    assert "test_setup_check_rejects_a_malformed_geometry_oracle" in source
     assert "test_setup_check_rejects_duplicate_native_names" in source
     assert "test_setup_check_rejects_unknown_semantic_datum_plane" in source
     assert "--export-steps" in source
@@ -93,7 +94,7 @@ def test_native_release_script_runs_every_focused_live_gate():
     assert "--verify-editability" in source
     assert "prompt2cad.release_matrix" in source
     assert "--verify-native-editability" in source
-    assert "solidworks-release-v8-" in source
+    assert "solidworks-release-v9-" in source
     assert "Refusing to overwrite" in source
     assert "DownloadedPackagePath" in source
     assert "prompt2cad.solidworks_package_check extract" in source

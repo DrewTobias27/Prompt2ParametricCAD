@@ -18,6 +18,13 @@ def validate_native_build_result(
         raise RuntimeError(f"{context} did not pass saved-history verification")
     if native_result.get("reopened") is not True:
         raise RuntimeError(f"{context} did not reopen the saved native part")
+    if (
+        plan.expected_geometry is not None
+        and native_result.get("geometry_verification_passed") is not True
+    ):
+        raise RuntimeError(
+            f"{context} did not verify native geometry against CadQuery"
+        )
 
     expected_features = [feature.feature_name for feature in plan.features]
     actual_features = native_result.get("native_features")
@@ -34,6 +41,9 @@ def validate_native_build_result(
         context=context,
     )
     summary["verification_passed"] = True
+    summary["geometry_verification_passed"] = (
+        plan.expected_geometry is not None
+    )
     return summary
 
 
@@ -55,6 +65,13 @@ def validate_native_editability_result(
         raise RuntimeError(
             f"{context} mutated parameter identities do not match the request"
         )
+    if (
+        plan.expected_geometry is not None
+        and native_result.get("source_geometry_verification_passed") is not True
+    ):
+        raise RuntimeError(
+            f"{context} did not verify source geometry against CadQuery"
+        )
 
     summary = _validate_native_contract_counts(
         plan,
@@ -66,6 +83,9 @@ def validate_native_editability_result(
             "reopened": True,
             "mutation_count": len(expected_ids),
             "mutated_parameter_ids": expected_ids,
+            "source_geometry_verification_passed": (
+                plan.expected_geometry is not None
+            ),
         }
     )
     return summary

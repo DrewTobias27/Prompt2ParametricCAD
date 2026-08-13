@@ -14,6 +14,7 @@ from prompt2cad.solidworks_replay import SOLIDWORKS_REPLAY_FORMAT
 from prompt2cad.solidworks_replay import SOLIDWORKS_REPLAY_VERSION
 from prompt2cad.solidworks_replay import SOLIDWORKS_PARITY_MATRIX
 from prompt2cad.solidworks_replay import SolidWorksExecutionError
+from prompt2cad.solidworks_replay import SolidWorksReplayError
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
 from prompt2cad.solidworks_replay import validate_solidworks_mutations
@@ -152,6 +153,53 @@ def angled_face_pattern_model_data() -> dict:
 def replay_plan(model_data: dict | None = None):
     document = model_data_to_editable_document(model_data or native_model_data())
     return build_solidworks_replay_plan(document)
+
+
+def expected_geometry() -> dict:
+    return {
+        "solid_body_count": 1,
+        "volume_mm3": 32000,
+        "surface_area_mm2": 9600,
+        "center_of_mass_mm": [0, 0, 4],
+        "bounding_box_mm": [-40, -25, 0, 40, 25, 8],
+    }
+
+
+def test_replay_plan_carries_a_validated_geometry_oracle_when_requested():
+    document = model_data_to_editable_document(native_model_data())
+    source_geometry = expected_geometry()
+
+    plan = build_solidworks_replay_plan(
+        document,
+        expected_geometry=source_geometry,
+    )
+    source_geometry["volume_mm3"] = 1
+
+    assert plan.expected_geometry["volume_mm3"] == 32000.0
+    assert plan.to_dict()["expected_geometry"] == plan.expected_geometry
+    assert plan.to_dict()["capabilities"]["native_geometry_oracle"] is True
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("solid_body_count", 0, "solid_body_count must be positive"),
+        ("volume_mm3", float("nan"), "volume_mm3 must be finite"),
+        ("surface_area_mm2", -1, "surface_area_mm2 must be positive"),
+        ("center_of_mass_mm", [0, 0], "must contain 3 values"),
+        ("bounding_box_mm", [0, 0, 0, 0, 1, 1], "positive spans"),
+    ],
+)
+def test_replay_plan_rejects_malformed_geometry_oracles(field, value, message):
+    document = model_data_to_editable_document(native_model_data())
+    malformed = expected_geometry()
+    malformed[field] = value
+
+    with pytest.raises(SolidWorksReplayError, match=message):
+        build_solidworks_replay_plan(
+            document,
+            expected_geometry=malformed,
+        )
 
 
 def published_reference_map(feature) -> dict[str, str]:
@@ -1398,6 +1446,12 @@ def test_native_runner_accepts_the_current_replay_plan_version():
     assert "Saved history is missing helper" in runner_source
     assert 'DataMember(Name = "surface_area_mm2")' in runner_source
     assert 'DataMember(Name = "center_of_mass_mm")' in runner_source
+    assert 'DataMember(Name = "expected_geometry")' in runner_source
+    assert 'DataMember(Name = "geometry_verification_passed")' in runner_source
+    assert "RequireExpectedGeometryMatch(" in runner_source
+    assert runner_source.index('"reopened native build"') < runner_source.index(
+        "PublishStagedOutput(stagedOutput, resolvedOutput)"
+    )
 
 
 def test_native_runner_replays_offset_planes_and_reverse_attachment_depths():

@@ -109,7 +109,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     files = package_files(package.content)
 
     assert package.filename.endswith("-solidworks.zip")
-    assert "-v8-solidworks.zip" in package.filename
+    assert "-v9-solidworks.zip" in package.filename
     assert set(files) == {
         "Build-SolidWorks-Part.cmd",
         "Build-SolidWorks-Part.ps1",
@@ -163,6 +163,23 @@ def test_package_contains_validated_native_replay_and_local_runner():
         editability_coverage["restricted_parameters"]
     )
     assert replay_plan["source_build_order"] == ["base", "boss"]
+    expected_geometry = geometry_metrics(build_model(fixture_model_data()))
+    assert replay_plan["expected_geometry"]["solid_body_count"] == (
+        expected_geometry["solid_body_count"]
+    )
+    assert replay_plan["expected_geometry"]["volume_mm3"] == pytest.approx(
+        expected_geometry["volume_mm3"]
+    )
+    assert replay_plan["expected_geometry"]["surface_area_mm2"] == pytest.approx(
+        expected_geometry["surface_area_mm2"]
+    )
+    assert replay_plan["expected_geometry"]["center_of_mass_mm"] == pytest.approx(
+        expected_geometry["center_of_mass_mm"]
+    )
+    assert replay_plan["expected_geometry"]["bounding_box_mm"] == pytest.approx(
+        expected_geometry["bounding_box_mm"]
+    )
+    assert replay_plan["capabilities"]["native_geometry_oracle"] is True
     assert editable_model["native_replay"]["exporter_implemented"] is True
     readme = files["README.txt"]
     launcher = files["Build-SolidWorks-Part.ps1"]
@@ -177,8 +194,9 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"will not overwrite an existing SLDPRT" in readme
     assert b"temporary staged file" in readme
     assert b"solidworks-replay-plan.json" in launcher
-    assert b"SolidWorks package version 8" in launcher
+    assert b"SolidWorks package version 9" in launcher
     assert b"Saved file reopened" in launcher
+    assert b"CadQuery geometry matched" in launcher
     assert b"Get-FileHash" in launcher
     assert b"Is64BitProcess" in launcher
     assert b"GetTypeFromProgID" in launcher
@@ -316,7 +334,7 @@ def test_launcher_rejects_an_incompatible_package_version(tmp_path: Path):
     )
 
     assert result.returncode != 0
-    assert "SolidWorks package version 8" in result.stdout + result.stderr
+    assert "SolidWorks package version 9" in result.stdout + result.stderr
 
 
 @pytest.mark.skipif(
@@ -397,6 +415,44 @@ def test_setup_check_rejects_conflicting_canonical_revolve_axis(tmp_path: Path):
 
     assert result.returncode != 0
     assert "Canonical axis direction X does not match" in (
+        result.stdout + result.stderr
+    )
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
+)
+def test_setup_check_rejects_a_malformed_geometry_oracle(tmp_path: Path):
+    package = create_solidworks_package(fixture_model_data(), "Oracle validation")
+    extract_package(package.content, tmp_path)
+    plan_path = tmp_path / "solidworks-replay-plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan["expected_geometry"]["volume_mm3"] = 0
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "solidworks_replay.ps1"),
+            "-PlanPath",
+            str(plan_path),
+            "-OutputPath",
+            str(tmp_path / "unused.SLDPRT"),
+            "-CompileOnly",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "Expected geometry volume must be positive" in (
         result.stdout + result.stderr
     )
 
