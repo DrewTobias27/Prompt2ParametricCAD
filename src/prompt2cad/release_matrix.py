@@ -247,7 +247,10 @@ def run_release_case(
         }
 
         stage = "solidworks_replay_plan"
-        plan = build_solidworks_replay_plan(document)
+        plan = build_solidworks_replay_plan(
+            document,
+            expected_geometry=source_metrics,
+        )
         plan_path = output_root / f"{case.name}.solidworks-plan.json"
         plan_path.write_text(
             json.dumps(plan.to_dict(), indent=2) + "\n",
@@ -311,7 +314,10 @@ def run_release_case(
             }
 
             if verify_native_editability:
-                edited_plan = build_solidworks_replay_plan(edited_document)
+                edited_plan = build_solidworks_replay_plan(
+                    edited_document,
+                    expected_geometry=edited_metrics,
+                )
                 edited_path = (
                     native_directory / f"{case.name}.mutated.SLDPRT"
                 )

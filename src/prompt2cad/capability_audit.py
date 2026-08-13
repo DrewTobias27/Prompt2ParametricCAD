@@ -939,7 +939,10 @@ def audit_capability_case(
         original_metrics = shape_metrics(part)
 
         stage = "solidworks_plan"
-        plan = build_solidworks_replay_plan(document)
+        plan = build_solidworks_replay_plan(
+            document,
+            expected_geometry=geometry_metrics(part),
+        )
         if len(plan.features) != len(case.model_data["operations"]):
             raise ValueError("Native plan dropped one or more operations")
         parameter_coverage = native_parameter_coverage(
@@ -960,7 +963,10 @@ def audit_capability_case(
             case.mutations,
         )
         edited_metrics = shape_metrics(edited_part)
-        edited_plan = build_solidworks_replay_plan(edited_document)
+        edited_plan = build_solidworks_replay_plan(
+            edited_document,
+            expected_geometry=geometry_metrics(edited_part),
+        )
 
         step_result = None
         if step_directory is not None:

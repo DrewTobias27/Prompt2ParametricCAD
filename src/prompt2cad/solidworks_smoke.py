@@ -163,7 +163,10 @@ def run_smoke_suite(
             cadquery_metrics = geometry_metrics(part)
             result["cadquery_geometry"] = cadquery_metrics
 
-            plan = build_solidworks_replay_plan(source_document)
+            plan = build_solidworks_replay_plan(
+                source_document,
+                expected_geometry=cadquery_metrics,
+            )
             save_plan(plan, plan_path)
             result["operation_count"] = len(model_data["operations"])
             result["native_feature_count"] = len(plan.features)
@@ -220,7 +223,7 @@ def run_smoke_suite(
                     native_metrics,
                 )
                 if verify_editability and mutations is not None:
-                    expected_part, _ = rebuild_with_parameter_updates(
+                    expected_part, edited_document = rebuild_with_parameter_updates(
                         source_document,
                         mutations,
                     )
@@ -243,7 +246,10 @@ def run_smoke_suite(
                         context="editability reopen",
                     )
                     editability_reference_summary = validate_published_references(
-                        plan,
+                        build_solidworks_replay_plan(
+                            edited_document,
+                            expected_geometry=expected_edited_metrics,
+                        ),
                         editability_result,
                         context="editability reopen",
                     )

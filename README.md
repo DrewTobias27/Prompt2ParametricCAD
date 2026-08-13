@@ -227,6 +227,9 @@ validated replay plan, and local runner into a ZIP. After extraction, run
 `Build-SolidWorks-Part.cmd` on Windows with SolidWorks installed. The launcher
 checks package hashes and local prerequisites before creating the SLDPRT and a
 machine-readable verification report. No API credential is included.
+Every executable native replay path carries source CadQuery body, volume,
+surface-area, bounding-box, and center-of-mass metrics. The runner refuses to
+publish a native part if its reopened geometry does not match that oracle.
 `Check-SolidWorks-Setup.cmd` performs the integrity, installation, API,
 replay-engine compilation, and replay-plan consistency checks without opening
 or creating a part.

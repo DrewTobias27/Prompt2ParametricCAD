@@ -6,6 +6,7 @@ import subprocess
 
 import pytest
 
+from prompt2cad.editable_model import build_editable_model_document
 from prompt2cad.editable_model import model_data_to_editable_document
 from prompt2cad.solidworks_export import model_path_to_replay_plan
 from prompt2cad.solidworks_export import materialize_stable_feature_ids
@@ -19,6 +20,7 @@ from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
 from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_replay import verify_solidworks_editability
+from prompt2cad.solidworks_verification import geometry_metrics
 
 
 def native_model_data() -> dict:
@@ -151,8 +153,12 @@ def angled_face_pattern_model_data() -> dict:
 
 
 def replay_plan(model_data: dict | None = None):
-    document = model_data_to_editable_document(model_data or native_model_data())
-    return build_solidworks_replay_plan(document)
+    source = model_data or native_model_data()
+    part, document = build_editable_model_document(source)
+    return build_solidworks_replay_plan(
+        document,
+        expected_geometry=geometry_metrics(part),
+    )
 
 
 def expected_geometry() -> dict:
@@ -1449,6 +1455,7 @@ def test_native_runner_accepts_the_current_replay_plan_version():
     assert 'DataMember(Name = "expected_geometry")' in runner_source
     assert 'DataMember(Name = "geometry_verification_passed")' in runner_source
     assert "RequireExpectedGeometryMatch(" in runner_source
+    assert runner_source.count("RequireExecutableGeometryOracle(plan)") == 2
     assert runner_source.index('"reopened native build"') < runner_source.index(
         "PublishStagedOutput(stagedOutput, resolvedOutput)"
     )
@@ -1772,6 +1779,27 @@ def test_export_invokes_packaged_runner_with_validated_plan(tmp_path: Path):
         "capture_output": True,
         "text": True,
     }
+
+
+def test_native_execution_rejects_a_plan_without_a_geometry_oracle(
+    tmp_path: Path,
+):
+    plan = build_solidworks_replay_plan(
+        model_data_to_editable_document(native_model_data())
+    )
+
+    with pytest.raises(SolidWorksExecutionError, match="requires expected CadQuery"):
+        export_solidworks_part(plan, tmp_path / "missing-oracle.SLDPRT")
+
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+    with pytest.raises(SolidWorksExecutionError, match="requires expected CadQuery"):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            tmp_path / "missing-edit-oracle.SLDPRT",
+            {"base.sketch.width": 90},
+        )
 
 
 def test_export_reports_runner_failure_and_requires_sldprt(tmp_path: Path):
@@ -2220,6 +2248,8 @@ def test_plan_file_helpers_are_deterministic(tmp_path: Path):
 
     assert saved == plan.to_dict()
     assert saved["features"][0]["feature_name"] == "P2P_base"
+    assert saved["expected_geometry"]["solid_body_count"] == 1
+    assert saved["capabilities"]["native_geometry_oracle"] is True
 
 
 @pytest.mark.parametrize(

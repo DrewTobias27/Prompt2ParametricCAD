@@ -758,6 +758,7 @@ namespace Prompt2Cad.SolidWorks
             Trace("Reading replay plan");
             ReplayPlan plan = ReadPlan(planPath);
             ValidateReplayPlan(plan);
+            RequireExecutableGeometryOracle(plan);
 
             string resolvedOutput = PrepareNewOutputPath(outputPath);
             string stagedOutput = CreateStagedOutputPath(resolvedOutput);
@@ -1059,6 +1060,7 @@ namespace Prompt2Cad.SolidWorks
         {
             ReplayPlan plan = ReadPlan(planPath);
             ValidateReplayPlan(plan);
+            RequireExecutableGeometryOracle(plan);
             MutationDocument mutationDocument = ReadMutations(mutationPath);
             if (!String.Equals(
                 mutationDocument.Format,
@@ -1512,6 +1514,17 @@ namespace Prompt2Cad.SolidWorks
                 "Expected geometry",
                 true
             );
+        }
+
+        private static void RequireExecutableGeometryOracle(ReplayPlan plan)
+        {
+            if (plan.ExpectedGeometry == null)
+            {
+                throw new InvalidOperationException(
+                    "Native SOLIDWORKS execution requires expected CadQuery " +
+                    "geometry. Regenerate the replay plan from the source model."
+                );
+            }
         }
 
         private static void RequireUniqueValue(

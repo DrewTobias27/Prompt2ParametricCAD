@@ -7,12 +7,13 @@ from copy import deepcopy
 import json
 from pathlib import Path
 
-from prompt2cad.editable_model import model_data_to_editable_document
+from prompt2cad.editable_model import build_editable_model_document
 from prompt2cad.solidworks_replay import SolidWorksExecutionError
 from prompt2cad.solidworks_replay import SolidWorksReplayError
 from prompt2cad.solidworks_replay import SolidWorksReplayPlan
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
+from prompt2cad.solidworks_verification import geometry_metrics
 
 
 def load_json(path: Path) -> dict:
@@ -33,8 +34,11 @@ def save_plan(plan: SolidWorksReplayPlan, path: Path) -> Path:
 def model_path_to_replay_plan(model_path: Path) -> SolidWorksReplayPlan:
     """Build and validate the native replay plan for one model file."""
     model_data = materialize_stable_feature_ids(load_json(model_path))
-    document = model_data_to_editable_document(model_data)
-    return build_solidworks_replay_plan(document)
+    part, document = build_editable_model_document(model_data)
+    return build_solidworks_replay_plan(
+        document,
+        expected_geometry=geometry_metrics(part),
+    )
 
 
 def materialize_stable_feature_ids(model_data: dict) -> dict:

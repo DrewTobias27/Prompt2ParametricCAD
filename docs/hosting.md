@@ -59,7 +59,8 @@ creating a part. Then run
 reopens it, verifies the saved history, exact parameter/helper identities,
 localized datum/template resolution, and body/volume/area/bounds/center against
 the embedded CadQuery geometry oracle, and only then writes the final part plus
-a JSON verification report.
+a JSON verification report. The same fail-closed oracle is required by CLI,
+smoke-suite, release-matrix, and capability-audit native execution paths.
 
 ## Public-release gate
 

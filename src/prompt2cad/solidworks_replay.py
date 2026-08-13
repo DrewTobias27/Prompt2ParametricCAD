@@ -483,6 +483,7 @@ def export_solidworks_part(
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> Path:
     """Replay a validated plan into a native ``SLDPRT`` file on Windows."""
+    _require_geometry_oracle_for_execution(plan)
     output_path = output_path.resolve()
     if output_path.suffix.lower() != ".sldprt":
         raise SolidWorksExecutionError("SOLIDWORKS output must use the .SLDPRT suffix")
@@ -625,6 +626,7 @@ def verify_solidworks_editability(
     dimension or a native feature-data property, allowing this workflow to
     grow with new feature types without adding test-specific mutation code.
     """
+    _require_geometry_oracle_for_execution(plan)
     source_path = source_path.resolve()
     output_path = output_path.resolve()
     if source_path.suffix.lower() != ".sldprt" or output_path.suffix.lower() != ".sldprt":
@@ -742,6 +744,15 @@ def verify_solidworks_editability(
             )
 
     return output_path
+
+
+def _require_geometry_oracle_for_execution(plan: SolidWorksReplayPlan) -> None:
+    """Fail closed when executable native replay lacks a geometry contract."""
+    if plan.expected_geometry is None:
+        raise SolidWorksExecutionError(
+            "Native SOLIDWORKS execution requires expected CadQuery geometry; "
+            "regenerate the replay plan from the source model"
+        )
 
 
 def _replay_feature(
