@@ -235,7 +235,12 @@ geometry from a validated CadQuery rebuild, and the runner refuses to publish
 the edited `SLDPRT` unless its reopened result matches.
 `Check-SolidWorks-Setup.cmd` performs the integrity, installation, API,
 replay-engine compilation, and replay-plan consistency checks without opening
-or creating a part.
+or creating a part, and reports the selected API root and interop version when
+multiple SolidWorks installations are present. The downloaded launcher now
+requires a complete receipt matching the exact replay-plan feature order,
+parameter and helper identities, feature/sketch health, geometry oracle, and
+persistent references. It removes the new output and any stale report when
+that proof is incomplete.
 
 Run the automated tests:
 

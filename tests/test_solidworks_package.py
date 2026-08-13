@@ -195,6 +195,8 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"temporary staged file" in readme
     assert b"SLDPRT.replay.log" in readme
     assert b"Successful runs remove this diagnostic log" in readme
+    assert b"P2P_SOLIDWORKS_ROOT" in readme
+    assert b"interop version it selected" in readme
     assert b"solidworks-replay-plan.json" in launcher
     assert b"SolidWorks package version 10" in launcher
     assert b"Saved file reopened" in launcher
@@ -297,6 +299,103 @@ def write_mutation_document(
     )
 
 
+def complete_native_receipt(plan: dict, output_path: Path) -> dict:
+    features = plan["features"]
+    bindings = [
+        binding
+        for feature in features
+        for binding in feature["parameter_bindings"]
+    ]
+    helper_names = []
+    for feature in features:
+        if feature["support"]["kind"] == "offset_plane":
+            helper_names.append(feature["support"]["name"])
+        pattern = feature.get("pattern")
+        if pattern is None:
+            continue
+        helper_names.append(pattern["seed_feature_name"])
+        if pattern["kind"] in {"circular_pattern", "linear_pattern"}:
+            helper_names.append(pattern["reference_sketch_name"])
+        if pattern["kind"] == "circular_pattern":
+            helper_names.append(pattern["axis_name"])
+        elif pattern["kind"] == "mirror_pattern":
+            helper_names.append(pattern["placement_sketch_name"])
+    references = [
+        reference
+        for feature in features
+        for reference in feature["publish_references"]
+    ]
+    return {
+        "status": "success",
+        "output_path": str(output_path.resolve()),
+        "native_features": [feature["feature_name"] for feature in features],
+        "feature_count": len(features),
+        "verification_passed": True,
+        "geometry_verification_passed": True,
+        "reopened": True,
+        "verified_dimension_count": sum(
+            binding["binding_kind"] == "named_dimension"
+            for binding in bindings
+        ),
+        "declared_parameter_count": len(bindings),
+        "verified_parameter_count": len(bindings),
+        "verified_parameter_ids": [
+            binding["parameter_id"] for binding in bindings
+        ],
+        "declared_helper_count": len(helper_names),
+        "verified_helper_count": len(helper_names),
+        "verified_helper_names": helper_names,
+        "health": {
+            "feature_error_count": 0,
+            "features": [
+                {
+                    "feature_name": feature["feature_name"],
+                    "error_code": 0,
+                    "is_warning": False,
+                }
+                for feature in features
+            ],
+            "sketches": [
+                {
+                    "sketch_name": feature["sketch_name"],
+                    "is_valid": True,
+                }
+                for feature in features
+                if feature.get("sketch_name")
+            ],
+        },
+        "published_references": [
+            {
+                "reference_id": reference["reference_id"],
+                "persistent_id_base64": f"persistent-{index}",
+                "resolved": True,
+                "resolution_error_code": 0,
+            }
+            for index, reference in enumerate(references, start=1)
+        ],
+    }
+
+
+def install_fake_package_runner(root: Path, receipt: dict) -> None:
+    receipt_json = json.dumps(receipt)
+    (root / "solidworks_replay.ps1").write_text(
+        "\n".join(
+            [
+                "param([string]$PlanPath, [string]$OutputPath)",
+                "[System.IO.File]::WriteAllBytes(",
+                "    $OutputPath,",
+                "    [byte[]](80, 50, 80, 67, 65, 68)",
+                ")",
+                "@'",
+                receipt_json,
+                "'@",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_generated_launcher_is_valid_powershell(tmp_path: Path):
     package = create_solidworks_package(fixture_model_data(), "Parser check")
     extract_package(package.content, tmp_path)
@@ -374,6 +473,93 @@ def test_launcher_rejects_an_incompatible_package_version(tmp_path: Path):
 
     assert result.returncode != 0
     assert "SolidWorks package version 10" in result.stdout + result.stderr
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to use installed API registration",
+)
+def test_launcher_accepts_only_a_complete_native_receipt(tmp_path: Path):
+    package = create_solidworks_package(fixture_model_data(), "Receipt check")
+    extract_package(package.content, tmp_path)
+    plan = json.loads(
+        (tmp_path / "solidworks-replay-plan.json").read_text(encoding="utf-8")
+    )
+    output_path = tmp_path / "receipt-check.SLDPRT"
+    receipt = complete_native_receipt(plan, output_path)
+    install_fake_package_runner(tmp_path, receipt)
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "Build-SolidWorks-Part.ps1"),
+            "-OutputPath",
+            str(output_path),
+            "-SkipIntegrityCheck",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output_path.read_bytes() == b"P2PCAD"
+    saved_receipt = json.loads(
+        Path(f"{output_path}.result.json").read_text(encoding="utf-8-sig")
+    )
+    assert saved_receipt == receipt
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to use installed API registration",
+)
+def test_launcher_removes_output_when_native_receipt_is_incomplete(
+    tmp_path: Path,
+):
+    package = create_solidworks_package(fixture_model_data(), "Receipt failure")
+    extract_package(package.content, tmp_path)
+    plan = json.loads(
+        (tmp_path / "solidworks-replay-plan.json").read_text(encoding="utf-8")
+    )
+    output_path = tmp_path / "receipt-failure.SLDPRT"
+    result_path = Path(f"{output_path}.result.json")
+    result_path.write_text('{"status":"stale"}', encoding="utf-8")
+    receipt = complete_native_receipt(plan, output_path)
+    receipt["verified_parameter_ids"] = receipt[
+        "verified_parameter_ids"
+    ][:-1]
+    install_fake_package_runner(tmp_path, receipt)
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "Build-SolidWorks-Part.ps1"),
+            "-OutputPath",
+            str(output_path),
+            "-SkipIntegrityCheck",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "Verified parameter identities count" in (
+        result.stdout + result.stderr
+    )
+    assert not output_path.exists()
+    assert not result_path.exists()
 
 
 @pytest.mark.skipif(

@@ -247,11 +247,30 @@ def _launcher_script(native_filename: str) -> str:
             Write-Host "[Prompt2CAD] $Message" -ForegroundColor Cyan
         }}
 
+        function Assert-ExactSequence(
+            [string]$Label,
+            [object[]]$Expected,
+            [object[]]$Actual
+        ) {{
+            $expectedItems = @($Expected)
+            $actualItems = @($Actual)
+            if ($expectedItems.Count -ne $actualItems.Count) {{
+                throw "$Label count does not match the replay plan."
+            }}
+            for ($index = 0; $index -lt $expectedItems.Count; $index++) {{
+                if ([string]$expectedItems[$index] -cne
+                    [string]$actualItems[$index]) {{
+                    throw "$Label order does not match the replay plan."
+                }}
+            }}
+        }}
+
         Write-Stage "Checking package files"
         $manifestPath = Join-Path $PSScriptRoot "manifest.json"
+        $planPath = Join-Path $PSScriptRoot "solidworks-replay-plan.json"
         $requiredFiles = @(
             $manifestPath,
-            (Join-Path $PSScriptRoot "solidworks-replay-plan.json"),
+            $planPath,
             (Join-Path $PSScriptRoot "solidworks_replay.ps1"),
             (Join-Path $PSScriptRoot "solidworks_replay_runner.cs")
         )
@@ -279,6 +298,59 @@ def _launcher_script(native_filename: str) -> str:
                 }}
             }}
         }}
+        $plan = Get-Content -LiteralPath $planPath -Raw | ConvertFrom-Json
+        $expectedFeatureNames = @(
+            $plan.features | ForEach-Object {{ [string]$_.feature_name }}
+        )
+        $expectedSketchNames = @(
+            $plan.features |
+                Where-Object {{ -not [string]::IsNullOrWhiteSpace(
+                    [string]$_.sketch_name
+                ) }} |
+                ForEach-Object {{ [string]$_.sketch_name }}
+        )
+        $expectedBindings = @(
+            $plan.features | ForEach-Object {{ @($_.parameter_bindings) }}
+        )
+        $expectedParameterIds = @(
+            $expectedBindings | ForEach-Object {{ [string]$_.parameter_id }}
+        )
+        $expectedDimensionCount = @(
+            $expectedBindings |
+                Where-Object {{ $_.binding_kind -eq "named_dimension" }}
+        ).Count
+        $expectedHelperNames = @()
+        foreach ($feature in @($plan.features)) {{
+            if ($feature.support.kind -eq "offset_plane") {{
+                $expectedHelperNames += [string]$feature.support.name
+            }}
+            $pattern = $feature.pattern
+            if ($null -eq $pattern) {{
+                continue
+            }}
+            $expectedHelperNames += [string]$pattern.seed_feature_name
+            if ($pattern.kind -eq "circular_pattern" -or
+                $pattern.kind -eq "linear_pattern") {{
+                $expectedHelperNames += [string]$pattern.reference_sketch_name
+            }}
+            if ($pattern.kind -eq "circular_pattern") {{
+                $expectedHelperNames += [string]$pattern.axis_name
+            }}
+            elseif ($pattern.kind -eq "mirror_pattern") {{
+                $expectedHelperNames += [string]$pattern.placement_sketch_name
+            }}
+        }}
+        $expectedReferenceIds = @(
+            $plan.features |
+                ForEach-Object {{ @($_.publish_references) }} |
+                ForEach-Object {{ [string]$_.reference_id }}
+        )
+        if ([int]$manifest.replay_plan.feature_count -ne
+            $expectedFeatureNames.Count -or
+            [int]$manifest.editability.named_binding_count -ne
+            $expectedParameterIds.Count) {{
+            throw "Package manifest does not match its replay plan."
+        }}
 
         if (-not [Environment]::Is64BitProcess) {{
             throw "Use 64-bit Windows PowerShell so it can load the SolidWorks API."
@@ -297,7 +369,7 @@ def _launcher_script(native_filename: str) -> str:
         }}
 
         $arguments = @{{
-            PlanPath = (Join-Path $PSScriptRoot "solidworks-replay-plan.json")
+            PlanPath = $planPath
             OutputPath = $OutputPath
         }}
         if ($TemplatePath) {{
@@ -339,28 +411,133 @@ def _launcher_script(native_filename: str) -> str:
         }}
 
         Write-Stage "Building editable SolidWorks part"
-        $resultText = (& (Join-Path $PSScriptRoot "solidworks_replay.ps1") @arguments |
-            Out-String).Trim()
         try {{
-            $result = $resultText | ConvertFrom-Json
+            $resultText = (& (Join-Path $PSScriptRoot "solidworks_replay.ps1") @arguments |
+                Out-String).Trim()
+            try {{
+                $result = $resultText | ConvertFrom-Json
+            }}
+            catch {{
+                throw "SolidWorks returned an unreadable build result: $resultText"
+            }}
+            if ($result.status -ne "success" -or -not $result.reopened -or
+                -not $result.verification_passed -or
+                -not $result.geometry_verification_passed) {{
+                throw "SolidWorks did not return a complete verified-build receipt."
+            }}
+            if ([string]::IsNullOrWhiteSpace([string]$result.output_path)) {{
+                throw "SolidWorks verification receipt does not identify an output part."
+            }}
+            $reportedOutputPath = [System.IO.Path]::GetFullPath(
+                [string]$result.output_path
+            )
+            if ($reportedOutputPath -ne $OutputPath) {{
+                throw "SolidWorks verification receipt identifies a different output part."
+            }}
+
+            if ([int]$result.feature_count -ne $expectedFeatureNames.Count) {{
+                throw "Verified feature count does not match the replay plan."
+            }}
+            Assert-ExactSequence "Native feature history" `
+                $expectedFeatureNames @($result.native_features)
+            if ([int]$result.declared_parameter_count -ne
+                $expectedParameterIds.Count -or
+                [int]$result.verified_parameter_count -ne
+                $expectedParameterIds.Count -or
+                [int]$result.verified_dimension_count -ne
+                $expectedDimensionCount) {{
+                throw "Native parameter verification is incomplete."
+            }}
+            Assert-ExactSequence "Verified parameter identities" `
+                $expectedParameterIds @($result.verified_parameter_ids)
+            if ([int]$result.declared_helper_count -ne
+                $expectedHelperNames.Count -or
+                [int]$result.verified_helper_count -ne
+                $expectedHelperNames.Count) {{
+                throw "Native helper verification is incomplete."
+            }}
+            Assert-ExactSequence "Verified helper identities" `
+                $expectedHelperNames @($result.verified_helper_names)
+
+            if ($null -eq $result.health -or
+                [int]$result.health.feature_error_count -ne 0) {{
+                throw "SolidWorks reports unhealthy native feature history."
+            }}
+            Assert-ExactSequence "Feature health records" `
+                $expectedFeatureNames @(
+                    $result.health.features |
+                        ForEach-Object {{ [string]$_.feature_name }}
+                )
+            Assert-ExactSequence "Sketch health records" `
+                $expectedSketchNames @(
+                    $result.health.sketches |
+                        ForEach-Object {{ [string]$_.sketch_name }}
+                )
+            $invalidFeatures = @(
+                $result.health.features | Where-Object {{
+                    $null -ne $_.error_code -and
+                    [int]$_.error_code -ne 0 -and
+                    $_.is_warning -ne $true
+                }}
+            )
+            $invalidSketches = @(
+                $result.health.sketches |
+                    Where-Object {{ $_.is_valid -ne $true }}
+            )
+            if ($invalidFeatures.Count -gt 0 -or
+                $invalidSketches.Count -gt 0) {{
+                throw "SolidWorks reports unhealthy native features or sketches."
+            }}
+
+            $actualReferences = @($result.published_references)
+            Assert-ExactSequence "Persistent reference identities" `
+                $expectedReferenceIds @(
+                    $actualReferences |
+                        ForEach-Object {{ [string]$_.reference_id }}
+                )
+            $invalidReferences = @(
+                $actualReferences | Where-Object {{
+                    $_.resolved -ne $true -or
+                    [string]::IsNullOrWhiteSpace(
+                        [string]$_.persistent_id_base64
+                    ) -or
+                    [int]$_.resolution_error_code -ne 0
+                }}
+            )
+            $persistentIds = @(
+                $actualReferences |
+                    ForEach-Object {{ [string]$_.persistent_id_base64 }}
+            )
+            if ($invalidReferences.Count -gt 0 -or
+                @($persistentIds | Select-Object -Unique).Count -ne
+                $persistentIds.Count) {{
+                throw "Persistent reference verification is incomplete."
+            }}
+
+            $temporaryResultPath = (
+                "$resultPath.prompt2cad-" +
+                [Guid]::NewGuid().ToString("N") + ".tmp"
+            )
+            try {{
+                $result | ConvertTo-Json -Depth 20 |
+                    Set-Content -LiteralPath $temporaryResultPath -Encoding UTF8
+                Move-Item -LiteralPath $temporaryResultPath `
+                    -Destination $resultPath
+            }}
+            finally {{
+                if (Test-Path -LiteralPath $temporaryResultPath) {{
+                    Remove-Item -LiteralPath $temporaryResultPath `
+                        -Force -ErrorAction SilentlyContinue
+                }}
+            }}
         }}
         catch {{
-            throw "SolidWorks returned an unreadable build result: $resultText"
+            Remove-Item -LiteralPath $OutputPath `
+                -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $resultPath `
+                -Force -ErrorAction SilentlyContinue
+            throw
         }}
-        if ($result.status -ne "success" -or -not $result.reopened -or
-            -not $result.verification_passed -or
-            -not $result.geometry_verification_passed) {{
-            throw "SolidWorks did not return a complete verified-build receipt."
-        }}
-        $reportedOutputPath = [System.IO.Path]::GetFullPath(
-            [string]$result.output_path
-        )
-        if ($reportedOutputPath -ne $OutputPath) {{
-            throw "SolidWorks verification receipt identifies a different output part."
-        }}
-
-        $result | ConvertTo-Json -Depth 20 |
-            Set-Content -LiteralPath $resultPath -Encoding UTF8
         Write-Host ""
         Write-Host "Created editable SolidWorks part" -ForegroundColor Green
         Write-Host "  Part:   $OutputPath"
@@ -465,6 +642,12 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
            package and compiles the replay engine without creating a part.
         3. Double-click Build-SolidWorks-Part.cmd.
         4. Keep the window open while SolidWorks creates and verifies the part.
+
+        If more than one SolidWorks version is installed, the setup check
+        prints the API folder and interop version it selected. To choose a
+        different installation for the current PowerShell window, set:
+
+           $env:P2P_SOLIDWORKS_ROOT = "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS"
 
         The runner will not overwrite an existing SLDPRT. Move or rename the
         prior output before rebuilding the package.
