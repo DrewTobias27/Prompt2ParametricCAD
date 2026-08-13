@@ -27,8 +27,6 @@ if (Test-Path -LiteralPath $OutputRoot) {
         $OutputRoot
     )
 }
-New-Item -ItemType Directory -Path $OutputRoot | Out-Null
-$transcriptPath = Join-Path $OutputRoot "solidworks-release-transcript.txt"
 
 if ($DownloadedPackagePath) {
     if (-not (Test-Path -LiteralPath $DownloadedPackagePath -PathType Leaf)) {
@@ -39,6 +37,8 @@ if ($DownloadedPackagePath) {
         throw "DownloadedPackagePath must point to a ZIP file."
     }
 }
+New-Item -ItemType Directory -Path $OutputRoot | Out-Null
+$transcriptPath = Join-Path $OutputRoot "solidworks-release-transcript.txt"
 
 function Invoke-NativeReleaseStep {
     param(
@@ -116,6 +116,61 @@ try {
                 --result $downloadedResult `
                 --output $verificationReport
         }
+
+        $mutationPath = Join-Path `
+            $OutputRoot `
+            "downloaded-package-mutation.json"
+        Invoke-NativeReleaseStep "Selecting a safe public-package edit" {
+            & $pythonExe -m prompt2cad.solidworks_package_check mutation `
+                --package-root $downloadedRoot `
+                --output $mutationPath
+        }
+
+        $editedOutput = Join-Path `
+            $OutputRoot `
+            "downloaded-package-edited.SLDPRT"
+        $editedResult = "$editedOutput.result.json"
+        $editArguments = @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", (Join-Path $downloadedRoot "solidworks_replay.ps1"),
+            "-PlanPath", (
+                Join-Path $downloadedRoot "solidworks-replay-plan.json"
+            ),
+            "-ExistingPartPath", $downloadedOutput,
+            "-MutationPath", $mutationPath,
+            "-OutputPath", $editedOutput
+        )
+        if ($Visible.IsPresent) {
+            $editArguments += "-Visible"
+        }
+        Invoke-NativeReleaseStep "Editing and reopening the public package" {
+            $editResultText = (& powershell.exe @editArguments | Out-String).Trim()
+            $editExitCode = $LASTEXITCODE
+            if ($editExitCode -ne 0) {
+                throw (
+                    "Downloaded-package edit failed with exit code " +
+                    "$editExitCode."
+                )
+            }
+            if (-not $editResultText) {
+                throw "Downloaded-package edit returned no verification result."
+            }
+            $editResultText |
+                Set-Content -LiteralPath $editedResult -Encoding UTF8
+        }
+
+        $editVerificationReport = Join-Path `
+            $OutputRoot `
+            "downloaded-package-edit-verification.json"
+        Invoke-NativeReleaseStep "Verifying the public package edit" {
+            & $pythonExe -m prompt2cad.solidworks_package_check verify-edit `
+                --package-root $downloadedRoot `
+                --mutation $mutationPath `
+                --source $downloadedOutput `
+                --result $editedResult `
+                --output $editVerificationReport
+        }
     }
     else {
         Write-Host ""
@@ -157,9 +212,55 @@ try {
         & $pythonExe @goldenArguments
     }
 
+    $publicReleaseReady = [bool]$DownloadedPackagePath
+    $releaseStatus = "native_suite_pass_public_package_pending"
+    $downloadedEvidence = $null
+    if ($publicReleaseReady) {
+        $releaseStatus = "pass"
+        $downloadedEvidence = [ordered]@{
+            source_zip = $DownloadedPackagePath
+            source_zip_sha256 = (
+                Get-FileHash `
+                    -LiteralPath $DownloadedPackagePath `
+                    -Algorithm SHA256
+            ).Hash.ToLowerInvariant()
+            integrity = $extractionReport
+            initial_part = $downloadedOutput
+            initial_result = $downloadedResult
+            initial_verification = $verificationReport
+            mutation = $mutationPath
+            edited_part = $editedOutput
+            edited_result = $editedResult
+            edit_verification = $editVerificationReport
+        }
+    }
+    $releaseSummaryPath = Join-Path $OutputRoot "release-summary.json"
+    [ordered]@{
+        format = "prompt2cad.solidworks-release-evidence"
+        version = 1
+        status = $releaseStatus
+        completed_at_utc = [DateTime]::UtcNow.ToString("o")
+        package_version = 8
+        public_release_ready = $publicReleaseReady
+        portable_package_native_cases = 2
+        native_smoke_cases = 10
+        native_golden_cases = 7
+        downloaded_package = $downloadedEvidence
+        smoke_report = (Join-Path $OutputRoot "smoke\report.json")
+        golden_report = (Join-Path $OutputRoot "golden\report.json")
+        transcript = $transcriptPath
+    } | ConvertTo-Json -Depth 8 |
+        Set-Content -LiteralPath $releaseSummaryPath -Encoding UTF8
+
     Write-Host ""
     Write-Host "Installed-SolidWorks release checks passed." -ForegroundColor Green
+    if (-not $publicReleaseReady) {
+        Write-Host (
+            "Public release is still pending a fresh downloaded package run."
+        ) -ForegroundColor Yellow
+    }
     Write-Host "Evidence: $OutputRoot"
+    Write-Host "Summary:  $releaseSummaryPath"
 }
 finally {
     $env:P2P_RUN_SOLIDWORKS_NATIVE = $previousNativeSetting

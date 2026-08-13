@@ -63,37 +63,15 @@ def create_solidworks_package(
     stem = _safe_package_stem(filename_hint, model_data)
     native_filename = f"{stem}.SLDPRT"
 
-    replay_script_path = Path(__file__).with_name("solidworks_replay.ps1")
-    replay_runner_path = Path(__file__).with_name("solidworks_replay_runner.cs")
-    missing_assets = [
-        path
-        for path in (replay_script_path, replay_runner_path)
-        if not path.is_file()
-    ]
-    if missing_assets:
-        raise FileNotFoundError(
-            "SolidWorks replay assets were not found: "
-            + ", ".join(str(path) for path in missing_assets)
-        )
-
     files = {
-        "README.txt": _readme_text(
+        **solidworks_package_static_payload(
             native_filename,
             editability_coverage,
-        ).encode("utf-8"),
-        "Build-SolidWorks-Part.ps1": _launcher_script(native_filename).encode(
-            "utf-8"
-        ),
-        "Build-SolidWorks-Part.cmd": _cmd_launcher_script().encode("utf-8"),
-        "Check-SolidWorks-Setup.cmd": _check_cmd_launcher_script().encode(
-            "utf-8"
         ),
         "source-model.json": _json_bytes(model_data),
         "editable-model.json": _json_bytes(document.to_dict()),
         "editability-coverage.json": _json_bytes(editability_coverage),
         "solidworks-replay-plan.json": _json_bytes(replay_plan.to_dict()),
-        "solidworks_replay.ps1": replay_script_path.read_bytes(),
-        "solidworks_replay_runner.cs": replay_runner_path.read_bytes(),
     }
     manifest = {
         "format": SOLIDWORKS_PACKAGE_FORMAT,
@@ -160,6 +138,40 @@ def solidworks_package_editability_summary(coverage: dict) -> dict:
         "restricted_count": len(coverage["restricted_parameter_ids"]),
         "restricted_parameter_ids": coverage["restricted_parameter_ids"],
         "restricted_parameters": coverage["restricted_parameters"],
+    }
+
+
+def solidworks_package_static_payload(
+    native_filename: str,
+    editability_coverage: dict,
+) -> dict[str, bytes]:
+    """Return the canonical launchers, instructions, and replay engine."""
+    replay_script_path = Path(__file__).with_name("solidworks_replay.ps1")
+    replay_runner_path = Path(__file__).with_name("solidworks_replay_runner.cs")
+    missing_assets = [
+        path
+        for path in (replay_script_path, replay_runner_path)
+        if not path.is_file()
+    ]
+    if missing_assets:
+        raise FileNotFoundError(
+            "SolidWorks replay assets were not found: "
+            + ", ".join(str(path) for path in missing_assets)
+        )
+    return {
+        "README.txt": _readme_text(
+            native_filename,
+            editability_coverage,
+        ).encode("utf-8"),
+        "Build-SolidWorks-Part.ps1": _launcher_script(native_filename).encode(
+            "utf-8"
+        ),
+        "Build-SolidWorks-Part.cmd": _cmd_launcher_script().encode("utf-8"),
+        "Check-SolidWorks-Setup.cmd": _check_cmd_launcher_script().encode(
+            "utf-8"
+        ),
+        "solidworks_replay.ps1": replay_script_path.read_bytes(),
+        "solidworks_replay_runner.cs": replay_runner_path.read_bytes(),
     }
 
 

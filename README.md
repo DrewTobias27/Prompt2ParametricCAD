@@ -263,8 +263,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 Before a public release, add
 `-DownloadedPackagePath "C:\path\to\fresh-v8-solidworks.zip"` to prove that the
 exact ZIP served by the deployed site reproduces its source model, replay plan,
-native feature identities, persistent references, and final geometry. The gate
-keeps a transcript and machine-readable evidence in a new timestamped folder.
+native feature identities, persistent references, and final geometry, then
+survives a validated parameter edit and second save/reopen. The gate keeps a
+transcript and machine-readable evidence in a new timestamped folder.
 
 Run deterministic and generated-model evaluations:
 

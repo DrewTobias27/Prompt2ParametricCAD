@@ -99,6 +99,16 @@ def test_native_release_script_runs_every_focused_live_gate():
     assert "prompt2cad.solidworks_package_check extract" in source
     assert "prompt2cad.solidworks_package_check verify" in source
     assert "downloaded-package-native-verification.json" in source
+    assert "prompt2cad.solidworks_package_check mutation" in source
+    assert "prompt2cad.solidworks_package_check verify-edit" in source
+    assert "--source $downloadedOutput" in source
+    assert "downloaded-package-edit-verification.json" in source
+    assert "-ExistingPartPath" in source
+    assert "-MutationPath" in source
     assert "Start-Transcript" in source
     assert "Stop-Transcript" in source
+    assert "prompt2cad.solidworks-release-evidence" in source
+    assert "public_release_ready" in source
+    assert "source_zip_sha256" in source
+    assert "release-summary.json" in source
     assert "OPENAI_API_KEY" not in source

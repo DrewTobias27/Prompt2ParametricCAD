@@ -105,9 +105,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 The extra gate safely extracts the ZIP, verifies every payload hash, rebuilds
 the editable document, replay plan, and editability report from the embedded
 source model, creates the SLDPRT, and checks exact feature/parameter/helper
-identities, persistent references, and geometry equivalence. The evidence
-folder retains machine-readable integrity and native-verification reports plus
-a complete terminal transcript.
+identities, persistent references, and geometry equivalence. It then selects a
+safe native-bound parameter, proves the corresponding edit in CadQuery,
+applies it to the downloaded SLDPRT, saves and reopens a second SLDPRT, and
+compares that edited geometry too. The evidence folder retains both native
+parts, the mutation, machine-readable verification reports, and a complete
+terminal transcript.
 
 ### Most recent verification
 
