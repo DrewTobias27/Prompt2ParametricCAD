@@ -253,6 +253,13 @@ Add `-FullMatrix` before a tagged release to include all 292 generated
 capability cases. Native create/edit/reopen verification remains the separate,
 explicit workstation gate in [docs/hosting.md](docs/hosting.md).
 
+Run that complete installed-SolidWorks gate with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\check_solidworks_release.ps1 -Visible
+```
+
 Run deterministic and generated-model evaluations:
 
 ```powershell

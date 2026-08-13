@@ -9,6 +9,9 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RELEASE_SCRIPT = PROJECT_ROOT / "scripts" / "check_release.ps1"
+NATIVE_RELEASE_SCRIPT = (
+    PROJECT_ROOT / "scripts" / "check_solidworks_release.ps1"
+)
 
 
 def powershell_path() -> str:
@@ -39,6 +42,27 @@ def test_release_script_is_valid_powershell():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_native_release_script_is_valid_powershell():
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-Command",
+            (
+                "$tokens=$null; $errors=$null; "
+                "[System.Management.Automation.Language.Parser]::ParseFile("
+                f"'{NATIVE_RELEASE_SCRIPT}', [ref]$tokens, [ref]$errors) "
+                "| Out-Null; if ($errors.Count) { $errors | Out-String; exit 1 }"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_release_script_keeps_native_execution_explicit():
     source = RELEASE_SCRIPT.read_text(encoding="utf-8")
 
@@ -56,4 +80,19 @@ def test_release_script_keeps_native_execution_explicit():
     assert "vite\\bin\\vite.js" in source
     assert "PROMPT2CAD_PNPM" not in source
     assert "--execute-native" not in source
+    assert "OPENAI_API_KEY" not in source
+
+
+def test_native_release_script_runs_every_focused_live_gate():
+    source = NATIVE_RELEASE_SCRIPT.read_text(encoding="utf-8")
+
+    assert "P2P_RUN_SOLIDWORKS_NATIVE" in source
+    assert "test_extracted_package_builds_verified_native_part" in source
+    assert "test_curved_side_attachment_matches_cadquery" in source
+    assert "prompt2cad.solidworks_smoke" in source
+    assert "--verify-editability" in source
+    assert "prompt2cad.release_matrix" in source
+    assert "--verify-native-editability" in source
+    assert "solidworks-release-v8-" in source
+    assert "Refusing to overwrite" in source
     assert "OPENAI_API_KEY" not in source

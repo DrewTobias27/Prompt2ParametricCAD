@@ -81,6 +81,17 @@ The messaging requirements for that later post are recorded in
 [LinkedIn launch notes](linkedin_launch_notes.md). They are release constraints,
 not a prepared post draft.
 
+Run the complete installed-application portion as one non-destructive command:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\check_solidworks_release.ps1 -Visible
+```
+
+The script creates a new timestamped evidence directory, refuses to overwrite
+an earlier run, and executes the downloaded-package checks, all ten native
+smoke/edit cases, and all seven golden native/edit cases. It makes no API calls.
+
 ### Most recent verification
 
 The public-release gate was exercised on August 10, 2026. The deployed site
