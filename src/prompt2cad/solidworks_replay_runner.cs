@@ -1009,6 +1009,11 @@ namespace Prompt2Cad.SolidWorks
                 model = OpenNativePart(application, stagedOutput);
                 modelTitle = model.GetTitle();
                 part = (PartDoc)model;
+                Trace("Rebuilding reopened native part");
+                RequireSuccessfulRebuild(
+                    model,
+                    "after reopening native build"
+                );
                 Trace("Verifying reopened feature history and dimensions");
                 parameterVerification = VerifyReplay(model, part, plan);
                 health = InspectNativeHealth(model, plan);
@@ -1213,12 +1218,7 @@ namespace Prompt2Cad.SolidWorks
                     CapturePersistentReferenceIds(model, part, plan);
 
                 ApplyParameterMutations(model, plan, mutations);
-                if (!model.EditRebuild3())
-                {
-                    throw new InvalidOperationException(
-                        "SOLIDWORKS rebuild failed after parameter mutation."
-                    );
-                }
+                RequireSuccessfulRebuild(model, "after parameter mutation");
                 NativeHealthResult beforeSaveHealth = InspectNativeHealth(
                     model,
                     plan
@@ -1246,6 +1246,11 @@ namespace Prompt2Cad.SolidWorks
                 model = OpenNativePart(application, stagedOutput);
                 modelTitle = model.GetTitle();
                 part = (PartDoc)model;
+                Trace("Rebuilding reopened edited part");
+                RequireSuccessfulRebuild(
+                    model,
+                    "after reopening edited part"
+                );
                 ParameterVerificationResult verification = VerifyReplay(
                     model,
                     part,
@@ -1378,6 +1383,18 @@ namespace Prompt2Cad.SolidWorks
                 Directory.CreateDirectory(outputDirectory);
             }
             return resolvedOutput;
+        }
+
+        private static void RequireSuccessfulRebuild(
+            ModelDoc2 model,
+            string stage)
+        {
+            if (!model.EditRebuild3())
+            {
+                throw new InvalidOperationException(
+                    "SOLIDWORKS rebuild failed " + stage + "."
+                );
+            }
         }
 
         private static string CreateStagedOutputPath(string resolvedOutput)

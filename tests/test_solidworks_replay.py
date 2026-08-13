@@ -1869,6 +1869,10 @@ def test_native_build_reopens_before_publishing_the_verified_part():
         "model = OpenNativePart(application, stagedOutput);",
         save_position,
     )
+    rebuild_position = runner_source.index(
+        "RequireSuccessfulRebuild(",
+        reopen_position,
+    )
     verify_position = runner_source.index(
         "parameterVerification = VerifyReplay(model, part, plan);",
         reopen_position,
@@ -1878,7 +1882,13 @@ def test_native_build_reopens_before_publishing_the_verified_part():
         verify_position,
     )
 
-    assert save_position < reopen_position < verify_position < publish_position
+    assert (
+        save_position
+        < reopen_position
+        < rebuild_position
+        < verify_position
+        < publish_position
+    )
     assert 'DataMember(Name = "reopened")' in runner_source
     assert "Reopened = true" in runner_source
 
@@ -2827,11 +2837,27 @@ def test_native_runner_reopens_and_reverifies_mutated_parts():
     assert edit_section.index(
         'RequireHealthyModel(sourceHealth, "before mutation");'
     ) < edit_section.index(mutation_call)
-    assert "model = OpenNativePart(application, stagedOutput);" in edit_section
+    reopened_position = edit_section.index(
+        "model = OpenNativePart(application, stagedOutput);"
+    )
+    reopened_rebuild_position = edit_section.index(
+        "RequireSuccessfulRebuild(",
+        reopened_position,
+    )
+    reopened_verify_position = edit_section.index(
+        "ParameterVerificationResult verification = VerifyReplay(",
+        reopened_position,
+    )
+    assert (
+        reopened_position
+        < reopened_rebuild_position
+        < reopened_verify_position
+    )
     assert "PublishStagedOutput(stagedOutput, resolvedOutput);" in edit_section
     assert 'SourceHistoryVerificationPassed = true' in edit_section
     assert 'Reopened = true' in edit_section
     assert "RequireHealthyModel(reopenedHealth" in edit_section
+    assert "private static void RequireSuccessfulRebuild(" in runner_source
 
 
 def test_native_runner_rejects_wrong_or_noneditable_open_documents():

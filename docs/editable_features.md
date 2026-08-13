@@ -76,9 +76,9 @@ automation API:
 6. resolve later targets from semantic selection recipes after each rebuild;
 7. capture persistent SolidWorks reference IDs for published faces and retain
    canonical geometric recipes for selected edge groups;
-8. save to a staged `SLDPRT`, close and reopen it, then verify dimensions,
-   helper objects, sketch constraint state, feature health, geometry, and
-   reference resolution before publishing the file.
+8. save to a staged `SLDPRT`, close and reopen it, require a successful rebuild,
+   then verify dimensions, helper objects, sketch constraint state, feature
+   health, geometry, and reference resolution before publishing the file.
 
 The adapter never uses final B-rep edge numbers as its only source of
 truth. It prefers feature ownership, support aliases, local frames, and
