@@ -35,7 +35,7 @@ Verified against the public deployment on August 10, 2026:
   native create/edit/reopen parity across the same coverage surface.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 13 package-v10 gate passes 624 Python tests with all nine
+- The August 13 package-v10 gate passes 636 Python tests with all eleven
   compile-only C# contract probes enabled, all six frontend behavior suites, a
   production frontend build, and all seven golden end-to-end cases. The
   established 292-case STEP/native-plan capability baseline remains green.
