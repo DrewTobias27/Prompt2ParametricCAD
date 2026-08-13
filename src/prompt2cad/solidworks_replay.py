@@ -781,6 +781,7 @@ def verify_solidworks_editability(
             required_receipt_fields=(
                 "reopened",
                 "source_geometry_verification_passed",
+                "source_history_verification_passed",
                 "edited_geometry_verification_passed",
             ),
             receipt_validator=lambda receipt: _validate_native_edit_receipt(

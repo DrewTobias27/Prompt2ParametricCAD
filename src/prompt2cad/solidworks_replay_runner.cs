@@ -633,6 +633,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "source_geometry_verification_passed")]
         public bool SourceGeometryVerificationPassed { get; set; }
 
+        [DataMember(Name = "source_history_verification_passed")]
+        public bool SourceHistoryVerificationPassed { get; set; }
+
         [DataMember(Name = "edited_geometry_verification_passed")]
         public bool EditedGeometryVerificationPassed { get; set; }
 
@@ -1199,6 +1202,13 @@ namespace Prompt2Cad.SolidWorks
                     beforeGeometry,
                     "source native part"
                 );
+                Trace("Verifying source feature history and sketch health");
+                VerifyReplay(model, part, plan);
+                NativeHealthResult sourceHealth = InspectNativeHealth(
+                    model,
+                    plan
+                );
+                RequireHealthyModel(sourceHealth, "before mutation");
                 IDictionary<string, byte[]> persistentReferenceIds =
                     CapturePersistentReferenceIds(model, part, plan);
 
@@ -1285,6 +1295,7 @@ namespace Prompt2Cad.SolidWorks
                         Reopened = true,
                         SourceGeometryVerificationPassed =
                             plan.ExpectedGeometry != null,
+                        SourceHistoryVerificationPassed = true,
                         EditedGeometryVerificationPassed = true,
                         DeclaredParameterCount =
                             verification.DeclaredParameterCount,

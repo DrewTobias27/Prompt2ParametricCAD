@@ -511,6 +511,20 @@ def test_native_contract_requires_embedded_geometry_oracle_evidence(
             context="test edit",
         )
 
+    source_history_missing = native_result_factory(
+        plan,
+        editability=True,
+        mutated_parameter_ids=[mutation_id],
+    )
+    source_history_missing["source_history_verification_passed"] = False
+    with pytest.raises(RuntimeError, match="source native feature history"):
+        validate_native_editability_result(
+            plan,
+            source_history_missing,
+            expected_mutation_ids=[mutation_id],
+            context="test edit",
+        )
+
     edited_geometry_missing = native_result_factory(
         plan,
         editability=True,

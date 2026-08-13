@@ -60,6 +60,10 @@ def validate_native_editability_result(
     _require_success_result(native_result, context=context)
     if native_result.get("reopened") is not True:
         raise RuntimeError(f"{context} did not reopen the saved native part")
+    if native_result.get("source_history_verification_passed") is not True:
+        raise RuntimeError(
+            f"{context} did not verify source native feature history"
+        )
     expected_ids = sorted(expected_mutation_ids)
     if native_result.get("mutation_count") != len(expected_ids):
         raise RuntimeError(f"{context} did not apply every requested mutation")

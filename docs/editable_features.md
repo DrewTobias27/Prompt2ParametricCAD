@@ -126,7 +126,10 @@ constraints or selection rules:
   and persistent references still resolve after a rebuild.
 
 Native edits are preflighted as one transaction before the runner changes the
-open document. The preflight rejects non-finite or nonpositive dimensions,
+open document. After opening the closed source part, the runner first verifies
+its CadQuery geometry oracle, complete named feature/helper/parameter history,
+sketch health, and persistent references. Only then can parameter mutation
+begin. The preflight rejects non-finite or nonpositive dimensions,
 fractional pattern counts, invalid angle ranges, unsafe coordinate sign
 crossings, collapsed linear patterns, and countersinks whose seat diameter is
 not larger than the through-hole diameter.

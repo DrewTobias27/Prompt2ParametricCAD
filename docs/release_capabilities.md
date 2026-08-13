@@ -149,6 +149,10 @@ volume or envelope.
 The same comparison is mandatory after a native edit. Mutation documents carry
 a separately rebuilt edited-geometry oracle, and a mismatched staged edit is
 deleted instead of published.
+Before applying an edit, the runner verifies that the closed source SLDPRT still
+matches the replay plan's complete feature, helper, parameter, sketch-health,
+geometry, and persistent-reference contract. This prevents a similarly shaped
+but stale or damaged native file from being used as the mutation source.
 The Python/CLI execution boundary also revalidates the complete native receipt
 before it publishes either the SLDPRT or its report: exact feature order,
 parameter and helper identities, feature/sketch health, persistent references,

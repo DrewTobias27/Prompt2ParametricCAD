@@ -35,13 +35,13 @@ Verified against the public deployment on August 10, 2026:
   native create/edit/reopen parity across the same coverage surface.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 13 package-v10 regression collects 659 Python test cases with all 14
+- The August 13 package-v11 regression collects 659 Python test cases with all 14
   installed-API compile/setup cases passing, all six frontend behavior suites, a
   production frontend build, and all seven golden end-to-end cases. The
   established 292-case STEP/native-plan capability baseline remains green.
   Only the fresh public ZIP and installed-SolidWorks create/edit/reopen gate
   remains pending.
-- Package v10 assigns explicit collision-safe names to pattern/support helpers,
+- Package v11 assigns explicit collision-safe names to pattern/support helpers,
   reports the exact parameter/helper/mutation identities it verifies, resolves
   localized datum planes and part templates, and closes/reopens the staged
   `SLDPRT` before publishing it. The release checker now verifies the exact
@@ -74,7 +74,7 @@ The prepared portfolio renders are stored in the portfolio repository under
   scrollbars, API keys, local paths, or unrelated tabs.
 - Run one known-good prompt and one correction immediately before publishing.
 - Download both the STEP file and SolidWorks package from the public site.
-- Confirm the fresh download is a `v10-solidworks.zip`, run its setup check, then
+- Confirm the fresh download is a `v11-solidworks.zip`, run its setup check, then
   build it on Windows with SolidWorks and confirm the JSON report says the saved
   file reopened and all declared parameters/helpers verified.
 - Run the ten-case native smoke suite with editability verification and capture

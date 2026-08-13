@@ -192,7 +192,7 @@ def test_native_release_script_runs_every_focused_live_gate():
     assert "prompt2cad.release_matrix" in source
     assert "--verify-native-editability" in source
     assert "solidworks-release-v{0}-{1}" in source
-    assert "solidworks-release-v10-" not in source
+    assert "solidworks-release-v11-" not in source
     assert source.index("SOLIDWORKS_PACKAGE_VERSION") < source.index(
         "if (-not $OutputRoot)"
     )

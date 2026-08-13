@@ -306,6 +306,7 @@ def native_edit_receipt(
         "output_path": str(output_path.resolve()),
         "reopened": True,
         "source_geometry_verification_passed": True,
+        "source_history_verification_passed": True,
         "edited_geometry_verification_passed": True,
         "mutation_count": len(mutation_ids),
         "mutated_parameter_ids": mutation_ids,
@@ -2814,13 +2815,23 @@ def test_native_runner_reopens_and_reverifies_mutated_parts():
         / "solidworks_replay_runner.cs"
     ).read_text(encoding="utf-8")
 
-    assert "VerifyEditablePart(" in runner_source
-    assert "ApplyParameterMutations(model, plan, mutations)" in runner_source
-    assert "model = OpenNativePart(application, stagedOutput);" in runner_source
-    assert "PublishStagedOutput(stagedOutput, resolvedOutput);" in runner_source
-    assert 'Reopened = true' in runner_source
-    assert "VerifyReplay(" in runner_source
-    assert "RequireHealthyModel(reopenedHealth" in runner_source
+    edit_section = runner_source[
+        runner_source.index("public static string VerifyEditablePart") :
+        runner_source.index("private static string PrepareNewOutputPath")
+    ]
+    mutation_call = "ApplyParameterMutations(model, plan, mutations)"
+
+    assert edit_section.index("VerifyReplay(model, part, plan);") < (
+        edit_section.index(mutation_call)
+    )
+    assert edit_section.index(
+        'RequireHealthyModel(sourceHealth, "before mutation");'
+    ) < edit_section.index(mutation_call)
+    assert "model = OpenNativePart(application, stagedOutput);" in edit_section
+    assert "PublishStagedOutput(stagedOutput, resolvedOutput);" in edit_section
+    assert 'SourceHistoryVerificationPassed = true' in edit_section
+    assert 'Reopened = true' in edit_section
+    assert "RequireHealthyModel(reopenedHealth" in edit_section
 
 
 def test_plan_file_helpers_are_deterministic(tmp_path: Path):
