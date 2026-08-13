@@ -105,7 +105,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     files = package_files(package.content)
 
     assert package.filename.endswith("-solidworks.zip")
-    assert "-v5-solidworks.zip" in package.filename
+    assert "-v6-solidworks.zip" in package.filename
     assert set(files) == {
         "Build-SolidWorks-Part.cmd",
         "Build-SolidWorks-Part.ps1",
@@ -172,7 +172,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"will not overwrite an existing SLDPRT" in readme
     assert b"temporary staged file" in readme
     assert b"solidworks-replay-plan.json" in launcher
-    assert b"SolidWorks package version 5" in launcher
+    assert b"SolidWorks package version 6" in launcher
     assert b"Get-FileHash" in launcher
     assert b"Is64BitProcess" in launcher
     assert b"GetTypeFromProgID" in launcher
@@ -184,6 +184,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"Build-SolidWorks-Part.ps1" in check_launcher
     assert b"-CheckOnly" in check_launcher
     assert b"CompileOnly" in launcher
+    assert b"plan_validated" in launcher
     assert b"SolidWorks setup is ready" in launcher
     assert b"$LASTEXITCODE" not in files["Build-SolidWorks-Part.ps1"]
 
@@ -305,7 +306,7 @@ def test_launcher_rejects_an_incompatible_package_version(tmp_path: Path):
     )
 
     assert result.returncode != 0
-    assert "SolidWorks package version 5" in result.stdout + result.stderr
+    assert "SolidWorks package version 6" in result.stdout + result.stderr
 
 
 @pytest.mark.skipif(
@@ -334,6 +335,60 @@ def test_extracted_package_setup_check_compiles_runner(tmp_path: Path):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "SolidWorks setup is ready" in result.stdout
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to compile against installed APIs",
+)
+def test_setup_check_rejects_conflicting_canonical_revolve_axis(tmp_path: Path):
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "shaft",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[5, 0]],
+                "width": 10,
+                "height": 40,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+            }
+        ]
+    }
+    package = create_solidworks_package(model_data, "Axis validation")
+    extract_package(package.content, tmp_path)
+    plan_path = tmp_path / "solidworks-replay-plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan["features"][0]["feature"]["canonical_axis"]["direction"] = [1, 0]
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "solidworks_replay.ps1"),
+            "-PlanPath",
+            str(plan_path),
+            "-OutputPath",
+            str(tmp_path / "unused.SLDPRT"),
+            "-CompileOnly",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "Canonical axis direction X does not match" in (
+        result.stdout + result.stderr
+    )
 
 
 @pytest.mark.skipif(

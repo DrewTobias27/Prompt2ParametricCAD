@@ -97,9 +97,14 @@ try {
         )
 
     if ($CompileOnly.IsPresent) {
+        $featureCount = [Prompt2Cad.SolidWorks.NativeReplayRunner]::ValidatePlanFile(
+            [System.IO.Path]::GetFullPath($PlanPath)
+        )
         [PSCustomObject]@{
             status = "success"
             compile_only = $true
+            plan_validated = $true
+            feature_count = $featureCount
         } | ConvertTo-Json -Compress
         exit 0
     }

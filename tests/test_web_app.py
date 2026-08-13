@@ -46,7 +46,7 @@ def test_solidworks_package_route_returns_downloadable_zip(monkeypatch):
         filename = "demo-solidworks.zip"
         content = b"zip-bytes"
         manifest = {
-            "version": 5,
+            "version": 6,
             "editability": {
                 "numeric_parameter_count": 12,
                 "named_binding_count": 9,
@@ -75,7 +75,7 @@ def test_solidworks_package_route_returns_downloadable_zip(monkeypatch):
         'attachment; filename="demo-solidworks.zip"'
     )
     assert response.headers["cache-control"] == "no-store"
-    assert response.headers["x-prompt2cad-package-version"] == "5"
+    assert response.headers["x-prompt2cad-package-version"] == "6"
     assert response.headers["x-prompt2cad-numeric-parameters"] == "12"
     assert response.headers["x-prompt2cad-named-bindings"] == "9"
     assert response.headers["x-prompt2cad-relation-controls"] == "2"

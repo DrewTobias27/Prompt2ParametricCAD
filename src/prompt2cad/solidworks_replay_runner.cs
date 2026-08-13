@@ -300,6 +300,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "axis_end_mm")]
         public double[] AxisEndMillimeters { get; set; }
 
+        [DataMember(Name = "canonical_axis")]
+        public CanonicalAxisSpec CanonicalAxis { get; set; }
+
         [DataMember(Name = "hole_diameter_mm")]
         public double HoleDiameterMillimeters { get; set; }
 
@@ -317,6 +320,37 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "driving_dimensions")]
         public DimensionSpec[] DrivingDimensions { get; set; }
+    }
+
+    [DataContract]
+    public sealed class CanonicalAxisSpec
+    {
+        [DataMember(Name = "kind")]
+        public string Kind { get; set; }
+
+        [DataMember(Name = "anchor_mm")]
+        public double[] AnchorMillimeters { get; set; }
+
+        [DataMember(Name = "direction")]
+        public double[] Direction { get; set; }
+
+        [DataMember(Name = "normal")]
+        public double[] Normal { get; set; }
+
+        [DataMember(Name = "signed_offset_mm")]
+        public double SignedOffsetMillimeters { get; set; }
+
+        [DataMember(Name = "direction_angle_deg")]
+        public double DirectionAngleDegrees { get; set; }
+
+        [DataMember(Name = "source_span_mm")]
+        public double SourceSpanMillimeters { get; set; }
+
+        [DataMember(Name = "automated_mutation")]
+        public bool AutomatedMutation { get; set; }
+
+        [DataMember(Name = "edit_strategy")]
+        public string EditStrategy { get; set; }
     }
 
     [DataContract]
@@ -649,6 +683,13 @@ namespace Prompt2Cad.SolidWorks
         private const int ReplayVersion = 10;
         private static string tracePath;
 
+        public static int ValidatePlanFile(string planPath)
+        {
+            ReplayPlan plan = ReadPlan(planPath);
+            ValidateReplayPlan(plan);
+            return plan.Features.Length;
+        }
+
         public static string Execute(
             string planPath,
             string outputPath,
@@ -662,16 +703,7 @@ namespace Prompt2Cad.SolidWorks
             }
             Trace("Reading replay plan");
             ReplayPlan plan = ReadPlan(planPath);
-            if (plan.Format != ReplayFormat || plan.Version != ReplayVersion)
-            {
-                throw new InvalidOperationException(
-                    "Unsupported SOLIDWORKS replay plan format or version."
-                );
-            }
-            if (plan.Features == null || plan.Features.Length == 0)
-            {
-                throw new InvalidOperationException("The replay plan has no features.");
-            }
+            ValidateReplayPlan(plan);
 
             string resolvedOutput = PrepareNewOutputPath(outputPath);
             string stagedOutput = CreateStagedOutputPath(resolvedOutput);
@@ -969,12 +1001,7 @@ namespace Prompt2Cad.SolidWorks
             bool visible)
         {
             ReplayPlan plan = ReadPlan(planPath);
-            if (plan.Format != ReplayFormat || plan.Version != ReplayVersion)
-            {
-                throw new InvalidOperationException(
-                    "Unsupported SOLIDWORKS replay plan format or version."
-                );
-            }
+            ValidateReplayPlan(plan);
             MutationDocument mutationDocument = ReadMutations(mutationPath);
             if (!String.Equals(
                 mutationDocument.Format,
@@ -1265,6 +1292,171 @@ namespace Prompt2Cad.SolidWorks
             using (FileStream stream = File.OpenRead(path))
             {
                 return (ReplayPlan)serializer.ReadObject(stream);
+            }
+        }
+
+        private static void ValidateReplayPlan(ReplayPlan plan)
+        {
+            if (plan == null || plan.Format != ReplayFormat ||
+                plan.Version != ReplayVersion)
+            {
+                throw new InvalidOperationException(
+                    "Unsupported SOLIDWORKS replay plan format or version."
+                );
+            }
+            if (plan.Features == null || plan.Features.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "The replay plan has no features."
+                );
+            }
+            foreach (ReplayStep step in plan.Features)
+            {
+                if (step == null || step.Feature == null)
+                {
+                    throw new InvalidOperationException(
+                        "Every replay step must contain a native feature."
+                    );
+                }
+                if (step.Feature.Kind == "boss_revolve" ||
+                    step.Feature.Kind == "cut_revolve")
+                {
+                    ValidateCanonicalRevolveAxis(step);
+                }
+            }
+        }
+
+        private static void ValidateCanonicalRevolveAxis(ReplayStep step)
+        {
+            FeatureSpec feature = step.Feature;
+            RequireFinitePair(
+                feature.AxisStartMillimeters,
+                step.Id + " revolve axis start"
+            );
+            RequireFinitePair(
+                feature.AxisEndMillimeters,
+                step.Id + " revolve axis end"
+            );
+            CanonicalAxisSpec canonical = feature.CanonicalAxis;
+            if (canonical == null || !String.Equals(
+                canonical.Kind,
+                "canonical_line_2d",
+                StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Revolve feature '" + step.Id +
+                    "' is missing canonical axis metadata."
+                );
+            }
+            RequireFinitePair(canonical.AnchorMillimeters, "canonical axis anchor");
+            RequireFinitePair(canonical.Direction, "canonical axis direction");
+            RequireFinitePair(canonical.Normal, "canonical axis normal");
+            RequireFiniteValue(
+                canonical.SignedOffsetMillimeters,
+                "canonical axis signed offset"
+            );
+            RequireFiniteValue(
+                canonical.DirectionAngleDegrees,
+                "canonical axis direction angle"
+            );
+            RequireFiniteValue(
+                canonical.SourceSpanMillimeters,
+                "canonical axis source span"
+            );
+
+            double deltaX = feature.AxisEndMillimeters[0] -
+                feature.AxisStartMillimeters[0];
+            double deltaY = feature.AxisEndMillimeters[1] -
+                feature.AxisStartMillimeters[1];
+            double sourceSpan = Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+            if (sourceSpan <= 1e-12)
+            {
+                throw new InvalidOperationException(
+                    "Revolve feature '" + step.Id +
+                    "' has coincident axis endpoints."
+                );
+            }
+            double directionX = deltaX / sourceSpan;
+            double directionY = deltaY / sourceSpan;
+            if (directionX < -1e-12 ||
+                (Math.Abs(directionX) <= 1e-12 && directionY < 0.0))
+            {
+                directionX *= -1.0;
+                directionY *= -1.0;
+            }
+            double normalX = -directionY;
+            double normalY = directionX;
+            double signedOffset = feature.AxisStartMillimeters[0] * normalX +
+                feature.AxisStartMillimeters[1] * normalY;
+            double anchorX = normalX * signedOffset;
+            double anchorY = normalY * signedOffset;
+            double directionAngle = Math.Atan2(directionY, directionX) *
+                180.0 / Math.PI;
+
+            RequireNear(canonical.Direction[0], directionX, "axis direction X");
+            RequireNear(canonical.Direction[1], directionY, "axis direction Y");
+            RequireNear(canonical.Normal[0], normalX, "axis normal X");
+            RequireNear(canonical.Normal[1], normalY, "axis normal Y");
+            RequireNear(canonical.AnchorMillimeters[0], anchorX, "axis anchor X");
+            RequireNear(canonical.AnchorMillimeters[1], anchorY, "axis anchor Y");
+            RequireNear(
+                canonical.SignedOffsetMillimeters,
+                signedOffset,
+                "axis signed offset"
+            );
+            RequireNear(
+                canonical.DirectionAngleDegrees,
+                directionAngle,
+                "axis direction angle"
+            );
+            RequireNear(
+                canonical.SourceSpanMillimeters,
+                sourceSpan,
+                "axis source span"
+            );
+            if (canonical.AutomatedMutation || !String.Equals(
+                canonical.EditStrategy,
+                "edit_native_construction_line_or_regenerate",
+                StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Revolve feature '" + step.Id +
+                    "' declares an unsupported canonical-axis edit strategy."
+                );
+            }
+        }
+
+        private static void RequireFinitePair(double[] values, string label)
+        {
+            if (values == null || values.Length != 2)
+            {
+                throw new InvalidOperationException(
+                    label + " must contain exactly two values."
+                );
+            }
+            RequireFiniteValue(values[0], label + " X");
+            RequireFiniteValue(values[1], label + " Y");
+        }
+
+        private static void RequireFiniteValue(double value, string label)
+        {
+            if (Double.IsNaN(value) || Double.IsInfinity(value))
+            {
+                throw new InvalidOperationException(label + " must be finite.");
+            }
+        }
+
+        private static void RequireNear(
+            double actual,
+            double expected,
+            string label)
+        {
+            double tolerance = 1e-8 * Math.Max(1.0, Math.Abs(expected));
+            if (Math.Abs(actual - expected) > tolerance)
+            {
+                throw new InvalidOperationException(
+                    "Canonical " + label + " does not match the source endpoints."
+                );
             }
         }
 

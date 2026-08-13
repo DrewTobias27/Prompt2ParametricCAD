@@ -17,7 +17,7 @@ from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 
 
 SOLIDWORKS_PACKAGE_FORMAT = "prompt2cad.solidworks-package"
-SOLIDWORKS_PACKAGE_VERSION = 5
+SOLIDWORKS_PACKAGE_VERSION = 6
 _FIXED_ZIP_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 
@@ -285,7 +285,8 @@ def _launcher_script(native_filename: str) -> str:
             catch {{
                 throw "SolidWorks setup check returned an unreadable result: $checkText"
             }}
-            if ($check.status -ne "success" -or -not $check.compile_only) {{
+            if ($check.status -ne "success" -or -not $check.compile_only -or
+                -not $check.plan_validated) {{
                 throw "SolidWorks setup check did not report success."
             }}
             Write-Host ""

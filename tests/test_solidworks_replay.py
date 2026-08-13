@@ -1350,6 +1350,9 @@ def test_native_runner_accepts_the_current_replay_plan_version():
         in runner_source
     )
     assert "plan.Version != ReplayVersion" in runner_source
+    assert 'DataMember(Name = "canonical_axis")' in runner_source
+    assert "ValidateCanonicalRevolveAxis(step)" in runner_source
+    assert "ValidatePlanFile(string planPath)" in runner_source
 
 
 def test_native_runner_replays_offset_planes_and_reverse_attachment_depths():
