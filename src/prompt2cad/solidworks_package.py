@@ -317,6 +317,7 @@ def _launcher_script(native_filename: str) -> str:
         Write-Host "  Report: $resultPath"
         Write-Host "  Features: $($result.feature_count)"
         Write-Host "  Verified parameters: $($result.verified_parameter_count)"
+        Write-Host "  Verified helpers: $($result.verified_helper_count)"
         Write-Host "  Persistent references: $($result.published_references.Count)"
         """
     ).lstrip()

@@ -178,6 +178,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"GetTypeFromProgID" in launcher
     assert b".result.json" in launcher
     assert b"verified_parameter_count" in launcher
+    assert b"verified_helper_count" in launcher
     assert b"published_references" in launcher
     assert b"Build-SolidWorks-Part.ps1" in command_launcher
     assert b"-Visible" in command_launcher

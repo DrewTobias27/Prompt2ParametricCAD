@@ -540,6 +540,12 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "verified_parameter_count")]
         public int VerifiedParameterCount { get; set; }
 
+        [DataMember(Name = "declared_helper_count")]
+        public int DeclaredHelperCount { get; set; }
+
+        [DataMember(Name = "verified_helper_count")]
+        public int VerifiedHelperCount { get; set; }
+
         [DataMember(Name = "health")]
         public NativeHealthResult Health { get; set; }
 
@@ -592,6 +598,12 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "verified_parameter_count")]
         public int VerifiedParameterCount { get; set; }
+
+        [DataMember(Name = "declared_helper_count")]
+        public int DeclaredHelperCount { get; set; }
+
+        [DataMember(Name = "verified_helper_count")]
+        public int VerifiedHelperCount { get; set; }
 
         [DataMember(Name = "before_geometry")]
         public NativeGeometryResult BeforeGeometry { get; set; }
@@ -946,6 +958,10 @@ namespace Prompt2Cad.SolidWorks
                             parameterVerification.DeclaredParameterCount,
                         VerifiedParameterCount =
                             parameterVerification.VerifiedParameterCount,
+                        DeclaredHelperCount =
+                            parameterVerification.DeclaredHelperCount,
+                        VerifiedHelperCount =
+                            parameterVerification.VerifiedHelperCount,
                         Health = health,
                         Geometry = geometry,
                         PublishedReferences = publishedReferences,
@@ -1162,6 +1178,10 @@ namespace Prompt2Cad.SolidWorks
                             verification.DeclaredParameterCount,
                         VerifiedParameterCount =
                             verification.VerifiedParameterCount,
+                        DeclaredHelperCount =
+                            verification.DeclaredHelperCount,
+                        VerifiedHelperCount =
+                            verification.VerifiedHelperCount,
                         BeforeGeometry = beforeGeometry,
                         AfterGeometry = afterGeometry,
                         Health = reopenedHealth,
@@ -5134,6 +5154,8 @@ namespace Prompt2Cad.SolidWorks
             public int DeclaredParameterCount { get; set; }
             public int VerifiedParameterCount { get; set; }
             public int VerifiedDimensionCount { get; set; }
+            public int DeclaredHelperCount { get; set; }
+            public int VerifiedHelperCount { get; set; }
         }
 
         private static NativeHealthResult InspectNativeHealth(
@@ -5767,6 +5789,8 @@ namespace Prompt2Cad.SolidWorks
             int declaredParameterCount = 0;
             int verifiedParameterCount = 0;
             int verifiedDimensionCount = 0;
+            int declaredHelperCount = 0;
+            int verifiedHelperCount = 0;
             foreach (ReplayStep step in plan.Features)
             {
                 if (!String.IsNullOrWhiteSpace(step.SketchName) &&
@@ -5781,6 +5805,18 @@ namespace Prompt2Cad.SolidWorks
                     throw new InvalidOperationException(
                         "Saved history is missing feature '" + step.FeatureName + "'."
                     );
+                }
+                foreach (string helperName in ExpectedNativeHelperNames(step))
+                {
+                    declaredHelperCount += 1;
+                    if (!featureNames.Contains(helperName))
+                    {
+                        throw new InvalidOperationException(
+                            "Saved history is missing helper '" + helperName +
+                            "' for feature '" + step.FeatureName + "'."
+                        );
+                    }
+                    verifiedHelperCount += 1;
                 }
 
                 NativeParameterBinding[] bindings =
@@ -5854,7 +5890,50 @@ namespace Prompt2Cad.SolidWorks
                 DeclaredParameterCount = declaredParameterCount,
                 VerifiedParameterCount = verifiedParameterCount,
                 VerifiedDimensionCount = verifiedDimensionCount,
+                DeclaredHelperCount = declaredHelperCount,
+                VerifiedHelperCount = verifiedHelperCount,
             };
+        }
+
+        private static IEnumerable<string> ExpectedNativeHelperNames(
+            ReplayStep step)
+        {
+            if (step.Support != null &&
+                String.Equals(
+                    step.Support.Kind,
+                    "offset_plane",
+                    StringComparison.Ordinal))
+            {
+                yield return step.Support.Name;
+            }
+            if (step.Pattern == null)
+            {
+                yield break;
+            }
+
+            yield return step.Pattern.SeedFeatureName;
+            if (String.Equals(
+                step.Pattern.Kind,
+                "circular_pattern",
+                StringComparison.Ordinal))
+            {
+                yield return step.Pattern.ReferenceSketchName;
+                yield return step.Pattern.AxisName;
+            }
+            else if (String.Equals(
+                step.Pattern.Kind,
+                "linear_pattern",
+                StringComparison.Ordinal))
+            {
+                yield return step.Pattern.ReferenceSketchName;
+            }
+            else if (String.Equals(
+                step.Pattern.Kind,
+                "mirror_pattern",
+                StringComparison.Ordinal))
+            {
+                yield return step.Pattern.PlacementSketchName;
+            }
         }
 
         private static IDictionary<string, byte[]> CapturePersistentReferenceIds(

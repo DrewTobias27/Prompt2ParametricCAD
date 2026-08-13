@@ -1383,6 +1383,10 @@ def test_native_runner_accepts_the_current_replay_plan_version():
     assert "step.Pattern.ReferenceSketchName" in runner_source
     assert "step.Pattern.AxisName" in runner_source
     assert "step.Pattern.PlacementSketchName" in runner_source
+    assert "ExpectedNativeHelperNames(step)" in runner_source
+    assert 'DataMember(Name = "declared_helper_count")' in runner_source
+    assert 'DataMember(Name = "verified_helper_count")' in runner_source
+    assert "Saved history is missing helper" in runner_source
     assert 'DataMember(Name = "surface_area_mm2")' in runner_source
     assert 'DataMember(Name = "center_of_mass_mm")' in runner_source
 
