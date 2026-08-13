@@ -359,6 +359,15 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "seed_feature_name")]
         public string SeedFeatureName { get; set; }
 
+        [DataMember(Name = "reference_sketch_name")]
+        public string ReferenceSketchName { get; set; }
+
+        [DataMember(Name = "axis_name")]
+        public string AxisName { get; set; }
+
+        [DataMember(Name = "placement_sketch_name")]
+        public string PlacementSketchName { get; set; }
+
         [DataMember(Name = "seed_position_mm")]
         public double[] SeedPositionMillimeters { get; set; }
 
@@ -1313,6 +1322,18 @@ namespace Prompt2Cad.SolidWorks
                     "The replay plan has no features."
                 );
             }
+            var featureIds = new HashSet<string>(StringComparer.Ordinal);
+            var nativeNames = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase
+            );
+            var parameterIds = new HashSet<string>(StringComparer.Ordinal);
+            var qualifiedParameterNames = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase
+            );
+            var referenceIds = new HashSet<string>(StringComparer.Ordinal);
+            var entityNames = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase
+            );
             foreach (ReplayStep step in plan.Features)
             {
                 if (step == null || step.Feature == null)
@@ -1321,11 +1342,116 @@ namespace Prompt2Cad.SolidWorks
                         "Every replay step must contain a native feature."
                     );
                 }
+                RequireUniqueValue(featureIds, step.Id, "feature ID");
+                RequireUniqueValue(nativeNames, step.FeatureName, "native feature name");
+                if (!String.IsNullOrWhiteSpace(step.SketchName))
+                {
+                    RequireUniqueValue(nativeNames, step.SketchName, "native sketch name");
+                }
+                if (step.Support != null && step.Support.Kind == "offset_plane")
+                {
+                    RequireUniqueValue(
+                        nativeNames,
+                        step.Support.Name,
+                        "native offset-plane name"
+                    );
+                }
+                if (step.Pattern != null)
+                {
+                    RequireUniqueValue(
+                        nativeNames,
+                        step.Pattern.SeedFeatureName,
+                        "native pattern seed name"
+                    );
+                    if (step.Pattern.Kind == "circular_pattern" ||
+                        step.Pattern.Kind == "linear_pattern")
+                    {
+                        RequireUniqueValue(
+                            nativeNames,
+                            step.Pattern.ReferenceSketchName,
+                            "native pattern reference-sketch name"
+                        );
+                    }
+                    if (step.Pattern.Kind == "circular_pattern")
+                    {
+                        RequireUniqueValue(
+                            nativeNames,
+                            step.Pattern.AxisName,
+                            "native circular-pattern axis name"
+                        );
+                    }
+                    else if (step.Pattern.Kind == "mirror_pattern")
+                    {
+                        RequireUniqueValue(
+                            nativeNames,
+                            step.Pattern.PlacementSketchName,
+                            "native mirror-placement sketch name"
+                        );
+                    }
+                }
                 if (step.Feature.Kind == "boss_revolve" ||
                     step.Feature.Kind == "cut_revolve")
                 {
                     ValidateCanonicalRevolveAxis(step);
                 }
+            }
+            foreach (ReplayStep step in plan.Features)
+            {
+                foreach (NativeParameterBinding binding in
+                    step.ParameterBindings ?? new NativeParameterBinding[0])
+                {
+                    RequireUniqueValue(
+                        parameterIds,
+                        binding.ParameterId,
+                        "native parameter ID"
+                    );
+                    if (String.IsNullOrWhiteSpace(binding.OwnerName) ||
+                        !nativeNames.Contains(binding.OwnerName))
+                    {
+                        throw new InvalidOperationException(
+                            "Native parameter '" + binding.ParameterId +
+                            "' references unknown owner '" +
+                            binding.OwnerName + "'."
+                        );
+                    }
+                    RequireUniqueValue(
+                        qualifiedParameterNames,
+                        binding.NativeName + "@" + binding.OwnerName,
+                        "qualified native parameter name"
+                    );
+                }
+                foreach (NativeReferenceSpec reference in
+                    step.PublishReferences ?? new NativeReferenceSpec[0])
+                {
+                    RequireUniqueValue(
+                        referenceIds,
+                        reference.ReferenceId,
+                        "semantic reference ID"
+                    );
+                    RequireUniqueValue(
+                        entityNames,
+                        reference.EntityName,
+                        "native entity name"
+                    );
+                }
+            }
+        }
+
+        private static void RequireUniqueValue(
+            ISet<string> values,
+            string value,
+            string label)
+        {
+            if (String.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException(label + " cannot be blank.");
+            }
+            if (!values.Add(value))
+            {
+                throw new InvalidOperationException(
+                    "Replay plan contains duplicate " + label + " '" +
+                    value + "'."
+                );
             }
         }
 
@@ -3988,7 +4114,7 @@ namespace Prompt2Cad.SolidWorks
                     "SOLIDWORKS did not enter the pattern reference sketch."
                 );
             }
-            sketchFeature.Name = step.FeatureName + "_References";
+            sketchFeature.Name = step.Pattern.ReferenceSketchName;
             SketchManager sketchManager = model.SketchManager;
             FrameSpec frame = step.Support.Frame;
             double[] seed = step.Pattern.SeedPositionMillimeters;
@@ -4074,7 +4200,7 @@ namespace Prompt2Cad.SolidWorks
                         "Could not retrieve the circular-pattern axis feature."
                     );
                 }
-                circularAxis.Name = step.FeatureName + "_Axis";
+                circularAxis.Name = step.Pattern.AxisName;
                 RequireReferenceAxisDirection(
                     circularAxis,
                     direction1,
@@ -4213,7 +4339,7 @@ namespace Prompt2Cad.SolidWorks
                     "SOLIDWORKS did not create the mirror placement sketch."
                 );
             }
-            sketchFeature.Name = step.FeatureName + "_MirrorPositions";
+            sketchFeature.Name = step.Pattern.PlacementSketchName;
             MathUtility mathUtility = application.IGetMathUtility();
             MathTransform modelToSketch = sketch.ModelToSketchTransform;
             var patternPoints = new List<SketchPoint>();

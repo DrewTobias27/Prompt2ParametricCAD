@@ -47,6 +47,7 @@ def test_release_script_keeps_native_execution_explicit():
     assert "prompt2cad.capability_audit" in source
     assert "P2P_RUN_SOLIDWORKS_COMPILE" in source
     assert "test_setup_check_rejects_conflicting_canonical_revolve_axis" in source
+    assert "test_setup_check_rejects_duplicate_native_names" in source
     assert "PROMPT2CAD_NODE" in source
     assert "solidworks-package-smoke.mjs" in source
     assert "vite\\bin\\vite.js" in source

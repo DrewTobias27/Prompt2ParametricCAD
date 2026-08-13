@@ -532,7 +532,7 @@ def test_replay_preserves_exact_curved_side_attachment_and_global_top_holes():
 
     assert left_tab.support == {
         "kind": "offset_plane",
-        "name": "P2P_base_left_support_plane",
+        "name": "P2P_left_tab_SupportPlane",
         "datum_name": "Right Plane",
         "semantic_plane": "YZ",
         "parent_feature_id": "base",
@@ -547,6 +547,7 @@ def test_replay_preserves_exact_curved_side_attachment_and_global_top_holes():
         },
     }
     assert right_tab.support["kind"] == "offset_plane"
+    assert right_tab.support["name"] == "P2P_right_tab_SupportPlane"
     assert right_tab.support["datum_name"] == "Right Plane"
     assert right_tab.support["offset_mm"] == 50
     assert right_tab.support["flip_offset"] is False
@@ -969,6 +970,16 @@ def test_replay_separates_native_pattern_seed_from_pattern_feature(
 
     assert native_pattern.pattern["kind"] == expected_kind
     assert native_pattern.pattern["seed_feature_name"] == "P2P_boss_Seed"
+    if expected_kind in {"circular_pattern", "linear_pattern"}:
+        assert native_pattern.pattern["reference_sketch_name"] == (
+            "P2P_boss_References"
+        )
+    if expected_kind == "circular_pattern":
+        assert native_pattern.pattern["axis_name"] == "P2P_boss_Axis"
+    if expected_kind == "mirror_pattern":
+        assert native_pattern.pattern["placement_sketch_name"] == (
+            "P2P_boss_MirrorPositions"
+        )
     assert native_pattern.sketch["positions_mm"] == [expected_seed]
     assert native_pattern.pattern["positions_mm"] == [
         [float(value) for value in position]
@@ -990,6 +1001,31 @@ def test_replay_rejects_pattern_metadata_that_disagrees_with_positions():
 
     with pytest.raises(ValueError, match="count must match"):
         replay_plan(model_data)
+
+
+def test_replay_avoids_case_insensitive_helper_name_collisions():
+    model_data = native_model_data()
+    model_data["operations"] = model_data["operations"][:2]
+    model_data["operations"][1]["id"] = "BASE_SKETCH"
+
+    plan = replay_plan(model_data)
+    native_names = [
+        name
+        for feature in plan.features
+        for name in (
+            feature.feature_name,
+            feature.sketch_name,
+            *(
+                [feature.pattern["seed_feature_name"]]
+                if feature.pattern is not None
+                else []
+            ),
+        )
+        if name
+    ]
+
+    assert len({name.casefold() for name in native_names}) == len(native_names)
+    assert plan.features[1].feature_name.startswith("P2P_BASE_SKETCH_")
 
 
 def test_replay_supports_non_centered_and_multi_instance_sketches():
@@ -1340,6 +1376,13 @@ def test_native_runner_accepts_the_current_replay_plan_version():
     assert 'DataMember(Name = "canonical_axis")' in runner_source
     assert "ValidateCanonicalRevolveAxis(step)" in runner_source
     assert "ValidatePlanFile(string planPath)" in runner_source
+    assert 'DataMember(Name = "reference_sketch_name")' in runner_source
+    assert 'DataMember(Name = "axis_name")' in runner_source
+    assert 'DataMember(Name = "placement_sketch_name")' in runner_source
+    assert "RequireUniqueValue(nativeNames" in runner_source
+    assert "step.Pattern.ReferenceSketchName" in runner_source
+    assert "step.Pattern.AxisName" in runner_source
+    assert "step.Pattern.PlacementSketchName" in runner_source
     assert 'DataMember(Name = "surface_area_mm2")' in runner_source
     assert 'DataMember(Name = "center_of_mass_mm")' in runner_source
 

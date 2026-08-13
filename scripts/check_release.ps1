@@ -89,6 +89,7 @@ if ($CompileSolidWorksPackage) {
             & $pythonExe -m pytest `
                 tests\test_solidworks_package.py::test_extracted_package_setup_check_compiles_runner `
                 tests\test_solidworks_package.py::test_setup_check_rejects_conflicting_canonical_revolve_axis `
+                tests\test_solidworks_package.py::test_setup_check_rejects_duplicate_native_names `
                 -q
         }
     }

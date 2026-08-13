@@ -189,11 +189,11 @@ def build_solidworks_replay_plan(
     native_feature_names: dict[str, str] = {}
     native_feature_frames: dict[str, dict] = {}
     published_face_planes: dict[tuple, str] = {}
-    used_feature_names: set[str] = set()
+    used_native_names: set[str] = set()
 
     for build_index, feature in enumerate(document.features):
         try:
-            feature_name = _unique_feature_name(feature.id, used_feature_names)
+            feature_name = _unique_feature_name(feature, used_native_names)
             replay_feature = _replay_feature(
                 feature,
                 build_index=build_index,
@@ -212,7 +212,9 @@ def build_solidworks_replay_plan(
             published_face_planes,
         )
         replay_features.append(replay_feature)
-        used_feature_names.add(feature_name)
+        used_native_names.update(
+            name.casefold() for name in _owned_native_names(replay_feature)
+        )
         native_feature_names[feature.id] = feature_name
         native_feature_frames[feature.id] = dict(replay_feature.support.get("frame", {}))
         published_faces[feature.id] = feature_face_map
@@ -228,10 +230,12 @@ def build_solidworks_replay_plan(
             "Native replay feature order does not match the editable build order"
         )
 
-    return SolidWorksReplayPlan(
+    plan = SolidWorksReplayPlan(
         features=tuple(replay_features),
         source_build_order=document.build_order,
     )
+    _validate_replay_plan_contract(plan)
+    return plan
 
 
 def _deduplicate_coplanar_face_references(
@@ -690,6 +694,7 @@ def _replay_feature(
     else:
         support = _named_face_support(
             feature,
+            feature_name=feature_name,
             published_faces=published_faces,
             native_feature_names=native_feature_names,
         )
@@ -700,11 +705,15 @@ def _replay_feature(
     else:
         sketch = _native_sketch(feature, profile)
         native_feature = _native_feature_control(feature)
-    pattern = _native_pattern_control(feature)
+    pattern = _native_pattern_control(feature, feature_name)
     if pattern is not None:
         sketch["positions_mm"] = [pattern["seed_position_mm"]]
         sketch["placement_controls"] = sketch.get("placement_controls", [])[:1]
-    publish_references = _published_reference_specs(feature, support)
+    publish_references = _published_reference_specs(
+        feature,
+        support,
+        feature_name,
+    )
     parameter_bindings = _native_parameter_bindings(
         feature,
         sketch_name=f"{feature_name}_Sketch",
@@ -968,6 +977,7 @@ def _native_placement_controls(
 
 def _native_pattern_control(
     feature: EditableFeatureDefinition,
+    feature_name: str,
 ) -> dict | None:
     """Validate and lower canonical operation pattern metadata."""
     operation = feature.source_operation
@@ -1000,7 +1010,7 @@ def _native_pattern_control(
         )
 
     common = {
-        "seed_feature_name": f"P2P_{_safe_token(feature.id)}_Seed",
+        "seed_feature_name": f"{feature_name}_Seed",
         "seed_position_mm": seed,
         "positions_mm": positions,
     }
@@ -1013,6 +1023,8 @@ def _native_pattern_control(
         return {
             **common,
             "kind": "circular_pattern",
+            "reference_sketch_name": f"{feature_name}_References",
+            "axis_name": f"{feature_name}_Axis",
             "center_mm": [float(value) for value in pattern["center"]],
             "count": count,
             "total_angle_deg": float(pattern["total_angle_degrees"]),
@@ -1036,6 +1048,7 @@ def _native_pattern_control(
         return {
             **common,
             "kind": "linear_pattern",
+            "reference_sketch_name": f"{feature_name}_References",
             "direction_1": [float(value) for value in pattern["direction_1"]],
             "count_1": count_1,
             "spacing_1_mm": spacing_1,
@@ -1048,6 +1061,7 @@ def _native_pattern_control(
         return {
             **common,
             "kind": "mirror_pattern",
+            "placement_sketch_name": f"{feature_name}_MirrorPositions",
             "axes": list(pattern["axes"]),
         }
 
@@ -1669,6 +1683,7 @@ def _clean_zero(value: float) -> float:
 def _named_face_support(
     feature: EditableFeatureDefinition,
     *,
+    feature_name: str,
     published_faces: dict[str, dict[str, str]],
     native_feature_names: dict[str, str],
 ) -> dict:
@@ -1694,17 +1709,22 @@ def _named_face_support(
             "parent_feature_id": parent_id,
             "reference": reference,
             "target_feature_name": target_feature_name,
-            "entity_name": _entity_name(
-                parent_id,
+            "entity_name": _native_entity_name(
+                target_feature_name,
                 f"{instance_name}_{reference}",
             ),
             "frame": frame,
         }
     entity_name = published_faces.get(parent_id, {}).get(reference)
     if entity_name is None:
+        if native_feature_names.get(parent_id) is None:
+            raise SolidWorksReplayError(
+                f"target '{target}' references an unknown native parent feature"
+            )
         return _axis_aligned_offset_plane_support(
             feature,
             parent_id=parent_id,
+            support_feature_name=feature_name,
             reference=reference,
             frame=frame,
         )
@@ -1721,6 +1741,7 @@ def _axis_aligned_offset_plane_support(
     feature: EditableFeatureDefinition,
     *,
     parent_id: str,
+    support_feature_name: str,
     reference: str,
     frame: dict,
 ) -> dict:
@@ -1773,7 +1794,7 @@ def _axis_aligned_offset_plane_support(
 
     return {
         "kind": "offset_plane",
-        "name": _entity_name(parent_id, f"{reference}_support_plane"),
+        "name": f"{support_feature_name}_SupportPlane",
         "datum_name": specification["name"],
         "semantic_plane": semantic_plane,
         "parent_feature_id": parent_id,
@@ -1840,6 +1861,7 @@ def _semantic_reference_name(
 def _published_reference_specs(
     feature: EditableFeatureDefinition,
     support: dict,
+    feature_name: str,
 ) -> tuple[dict, ...]:
     """Return extensible native entity-publication instructions.
 
@@ -1895,17 +1917,20 @@ def _published_reference_specs(
             {
                 "reference_id": f"{feature.id}.{semantic}",
                 "semantic_name": semantic,
-                "entity_name": _entity_name(feature.id, semantic),
+                "entity_name": _native_entity_name(feature_name, semantic),
                 "entity_type": "face",
                 "selector": selector,
             }
         )
-    references.extend(_actual_planar_face_reference_specs(feature))
+    references.extend(
+        _actual_planar_face_reference_specs(feature, feature_name)
+    )
     return tuple(references)
 
 
 def _actual_planar_face_reference_specs(
     feature: EditableFeatureDefinition,
+    feature_name: str,
 ) -> list[dict]:
     """Publish topology-derived planar sides with geometric selectors.
 
@@ -1936,7 +1961,10 @@ def _actual_planar_face_reference_specs(
             {
                 "reference_id": snapshot["name"],
                 "semantic_name": published_semantic,
-                "entity_name": _entity_name(feature.id, entity_semantic),
+                "entity_name": _native_entity_name(
+                    feature_name,
+                    entity_semantic,
+                ),
                 "entity_type": "face",
                 "selector": {
                     "kind": "planar_face_geometry",
@@ -2039,18 +2067,144 @@ def _dimension(
     return dimension
 
 
-def _unique_feature_name(feature_id: str, used_names: set[str]) -> str:
+def _unique_feature_name(
+    feature: EditableFeatureDefinition,
+    used_names: set[str],
+) -> str:
+    feature_id = feature.id
+    suffixes = _owned_native_name_suffixes(feature)
     base_name = f"P2P_{_safe_token(feature_id)}"
-    if base_name not in used_names:
+    if not _native_name_conflicts(base_name, suffixes, used_names):
         return base_name
 
     digest = sha1(feature_id.encode("utf-8")).hexdigest()[:6]
     candidate = f"{base_name}_{digest}"
-    if candidate in used_names:
+    if _native_name_conflicts(candidate, suffixes, used_names):
         raise SolidWorksReplayError(
             f"feature id '{feature_id}' cannot be converted into a unique native name"
         )
     return candidate
+
+
+def _owned_native_name_suffixes(
+    feature: EditableFeatureDefinition,
+) -> tuple[str, ...]:
+    """List every feature-tree name a replay step will own."""
+    suffixes = [""]
+    if feature.operation_type not in {"chamfer", "fillet"}:
+        suffixes.append("_Sketch")
+    if feature.target and feature.operation_type not in {"chamfer", "fillet"}:
+        suffixes.append("_SupportPlane")
+    pattern = feature.source_operation.get("pattern")
+    if not isinstance(pattern, dict):
+        return tuple(suffixes)
+    suffixes.append("_Seed")
+    pattern_type = pattern.get("type")
+    if pattern_type in {"circular", "linear"}:
+        suffixes.append("_References")
+    if pattern_type == "circular":
+        suffixes.append("_Axis")
+    elif pattern_type == "mirror":
+        suffixes.append("_MirrorPositions")
+    return tuple(suffixes)
+
+
+def _native_name_conflicts(
+    base_name: str,
+    suffixes: tuple[str, ...],
+    used_names: set[str],
+) -> bool:
+    return any(f"{base_name}{suffix}".casefold() in used_names for suffix in suffixes)
+
+
+def _owned_native_names(feature: SolidWorksReplayFeature) -> tuple[str, ...]:
+    """Read all explicit feature-tree names from one replay step."""
+    names = [feature.feature_name]
+    if feature.sketch_name:
+        names.append(feature.sketch_name)
+    if feature.support.get("kind") == "offset_plane":
+        names.append(feature.support["name"])
+    pattern = feature.pattern
+    if pattern is not None:
+        for field_name in (
+            "seed_feature_name",
+            "reference_sketch_name",
+            "axis_name",
+            "placement_sketch_name",
+        ):
+            name = pattern.get(field_name)
+            if name:
+                names.append(name)
+    return tuple(names)
+
+
+def _validate_replay_plan_contract(plan: SolidWorksReplayPlan) -> None:
+    """Reject ambiguous names and IDs before external CAD is opened."""
+    feature_ids = [feature.id for feature in plan.features]
+    if len(feature_ids) != len(set(feature_ids)):
+        raise SolidWorksReplayError("native replay contains duplicate feature IDs")
+
+    owned_names = [
+        name
+        for feature in plan.features
+        for name in _owned_native_names(feature)
+    ]
+    folded_names = [name.casefold() for name in owned_names]
+    if len(folded_names) != len(set(folded_names)):
+        raise SolidWorksReplayError(
+            "native replay contains case-insensitive feature-tree name collisions"
+        )
+    owned_name_set = set(folded_names)
+
+    bindings = [
+        binding
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    ]
+    parameter_ids = [binding["parameter_id"] for binding in bindings]
+    if len(parameter_ids) != len(set(parameter_ids)):
+        raise SolidWorksReplayError(
+            "native replay contains duplicate parameter IDs"
+        )
+    qualified_native_names = [
+        (
+            binding["owner_name"].casefold(),
+            binding["native_name"].casefold(),
+        )
+        for binding in bindings
+    ]
+    if len(qualified_native_names) != len(set(qualified_native_names)):
+        raise SolidWorksReplayError(
+            "native replay contains duplicate qualified parameter names"
+        )
+    missing_owners = sorted(
+        {
+            binding["owner_name"]
+            for binding in bindings
+            if binding["owner_name"].casefold() not in owned_name_set
+        }
+    )
+    if missing_owners:
+        raise SolidWorksReplayError(
+            "native parameter bindings reference unknown owners: "
+            + ", ".join(missing_owners)
+        )
+
+    references = [
+        reference
+        for feature in plan.features
+        for reference in feature.publish_references
+    ]
+    reference_ids = [reference["reference_id"] for reference in references]
+    if len(reference_ids) != len(set(reference_ids)):
+        raise SolidWorksReplayError(
+            "native replay contains duplicate semantic reference IDs"
+        )
+    entity_names = [reference["entity_name"].casefold() for reference in references]
+    if len(entity_names) != len(set(entity_names)):
+        raise SolidWorksReplayError(
+            "native replay contains duplicate native entity names"
+        )
 
 
 def _dimension_name(parameter_id: str, fallback_name: str) -> str:
@@ -2058,8 +2212,8 @@ def _dimension_name(parameter_id: str, fallback_name: str) -> str:
     return f"P2P_{token}"
 
 
-def _entity_name(feature_id: str, reference: str) -> str:
-    return f"P2P_{_safe_token(feature_id)}_{_safe_token(reference)}"
+def _native_entity_name(feature_name: str, reference: str) -> str:
+    return f"{feature_name}_{_safe_token(reference)}"
 
 
 def _safe_token(value: str) -> str:
