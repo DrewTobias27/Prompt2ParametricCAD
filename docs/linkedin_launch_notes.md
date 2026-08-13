@@ -35,7 +35,7 @@ Verified against the public deployment on August 10, 2026:
   native create/edit/reopen parity across the same coverage surface.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 13 package-v10 regression collects 647 Python test cases with all 14
+- The August 13 package-v10 regression collects 657 Python test cases with all 14
   installed-API compile/setup cases passing, all six frontend behavior suites, a
   production frontend build, and all seven golden end-to-end cases. The
   established 292-case STEP/native-plan capability baseline remains green.

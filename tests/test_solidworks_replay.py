@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 import subprocess
@@ -185,24 +186,132 @@ def expected_geometry() -> dict:
     }
 
 
-def native_build_receipt(output_path: Path, **extra) -> dict:
+def persistent_reference_records(plan) -> list[dict]:
+    return [
+        {
+            "reference_id": reference["reference_id"],
+            "entity_name": reference["entity_name"],
+            "entity_type": reference["entity_type"],
+            "persistent_id_base64": base64.b64encode(
+                index.to_bytes(4, byteorder="little")
+            ).decode("ascii"),
+            "resolved": True,
+            "resolution_error_code": 0,
+        }
+        for index, reference in enumerate(
+            (
+                reference
+                for feature in plan.features
+                for reference in feature.publish_references
+            ),
+            start=1,
+        )
+    ]
+
+
+def native_contract_receipt(plan) -> dict:
+    bindings = [
+        binding
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    ]
+    helper_names = []
+    for feature in plan.features:
+        if feature.support.get("kind") == "offset_plane":
+            helper_names.append(feature.support["name"])
+        pattern = feature.pattern
+        if pattern is None:
+            continue
+        helper_names.append(pattern["seed_feature_name"])
+        if pattern["kind"] in {"circular_pattern", "linear_pattern"}:
+            helper_names.append(pattern["reference_sketch_name"])
+        if pattern["kind"] == "circular_pattern":
+            helper_names.append(pattern["axis_name"])
+        elif pattern["kind"] == "mirror_pattern":
+            helper_names.append(pattern["placement_sketch_name"])
+    return {
+        "declared_parameter_count": len(bindings),
+        "verified_parameter_count": len(bindings),
+        "verified_parameter_ids": [
+            binding["parameter_id"] for binding in bindings
+        ],
+        "verified_dimension_count": sum(
+            binding.get("binding_kind") == "named_dimension"
+            for binding in bindings
+        ),
+        "declared_helper_count": len(helper_names),
+        "verified_helper_count": len(helper_names),
+        "verified_helper_names": helper_names,
+        "health": {
+            "features": [
+                {
+                    "feature_name": feature.feature_name,
+                    "error_code": 0,
+                    "is_warning": False,
+                }
+                for feature in plan.features
+            ],
+            "sketches": [
+                {
+                    "sketch_name": feature.sketch_name,
+                    "is_valid": True,
+                }
+                for feature in plan.features
+                if feature.sketch_name
+            ],
+            "feature_error_count": 0,
+        },
+        "published_references": persistent_reference_records(plan),
+    }
+
+
+def native_build_receipt(plan, output_path: Path, **extra) -> dict:
     return {
         "status": "success",
         "output_path": str(output_path.resolve()),
         "reopened": True,
         "verification_passed": True,
         "geometry_verification_passed": True,
+        "feature_count": len(plan.features),
+        "native_features": [
+            feature.feature_name for feature in plan.features
+        ],
+        "geometry": plan.expected_geometry,
+        **native_contract_receipt(plan),
         **extra,
     }
 
 
-def native_edit_receipt(output_path: Path, **extra) -> dict:
+def native_edit_receipt(
+    plan,
+    output_path: Path,
+    *,
+    mutations: dict[str, float] | None = None,
+    after_geometry: dict | None = None,
+    **extra,
+) -> dict:
+    mutation_ids = sorted(mutations or {})
+    topology_ids = [
+        binding["parameter_id"]
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+        if binding["parameter_id"] in mutation_ids
+        and binding.get("owner_kind") == "pattern"
+        and binding.get("unit") == "count"
+    ]
     return {
         "status": "success",
         "output_path": str(output_path.resolve()),
         "reopened": True,
         "source_geometry_verification_passed": True,
         "edited_geometry_verification_passed": True,
+        "mutation_count": len(mutation_ids),
+        "mutated_parameter_ids": mutation_ids,
+        "topology_changed": bool(topology_ids),
+        "topology_changing_parameter_ids": sorted(topology_ids),
+        "before_geometry": plan.expected_geometry,
+        "after_geometry": after_geometry or plan.expected_geometry,
+        **native_contract_receipt(plan),
         **extra,
     }
 
@@ -1855,7 +1964,7 @@ def test_export_invokes_packaged_runner_with_validated_plan(tmp_path: Path):
         return subprocess.CompletedProcess(
             command,
             0,
-            stdout=json.dumps(native_build_receipt(actual_output)),
+            stdout=json.dumps(native_build_receipt(plan, actual_output)),
             stderr="",
         )
 
@@ -1952,7 +2061,10 @@ def test_export_removes_unverified_output_and_new_receipt(tmp_path: Path):
     def wrong_receipt_runner(command, **kwargs):
         actual_output = Path(command[command.index("-OutputPath") + 1])
         actual_output.write_bytes(b"unverified-native-part")
-        receipt = native_build_receipt(tmp_path / "different.SLDPRT")
+        receipt = native_build_receipt(
+            plan,
+            tmp_path / "different.SLDPRT",
+        )
         return subprocess.CompletedProcess(
             command,
             0,
@@ -1966,6 +2078,63 @@ def test_export_removes_unverified_output_and_new_receipt(tmp_path: Path):
             output_path,
             result_output_path=result_path,
             runner=wrong_receipt_runner,
+        )
+
+    assert not output_path.exists()
+    assert not result_path.exists()
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "feature_order",
+        "parameter_identity",
+        "sketch_health",
+        "persistent_reference",
+        "geometry",
+    ],
+)
+def test_export_rejects_incomplete_native_contract(
+    tmp_path: Path,
+    corruption: str,
+):
+    plan = replay_plan()
+    output_path = tmp_path / "part.SLDPRT"
+    result_path = tmp_path / "part.result.json"
+
+    def incomplete_contract_runner(command, **kwargs):
+        actual_output = Path(command[command.index("-OutputPath") + 1])
+        actual_output.write_bytes(b"unverified-native-part")
+        receipt = native_build_receipt(plan, actual_output)
+        if corruption == "feature_order":
+            receipt["native_features"] = list(
+                reversed(receipt["native_features"])
+            )
+        elif corruption == "parameter_identity":
+            receipt["verified_parameter_ids"][0] = "wrong.parameter"
+        elif corruption == "sketch_health":
+            receipt["health"]["sketches"][0]["is_valid"] = False
+        elif corruption == "persistent_reference":
+            receipt["published_references"].pop()
+        elif corruption == "geometry":
+            receipt["geometry"] = dict(receipt["geometry"])
+            receipt["geometry"]["volume_mm3"] *= 2
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(receipt),
+            stderr="",
+        )
+
+    with pytest.raises(
+        SolidWorksExecutionError,
+        match="returned incomplete verification",
+    ):
+        export_solidworks_part(
+            plan,
+            output_path,
+            result_output_path=result_path,
+            runner=incomplete_contract_runner,
         )
 
     assert not output_path.exists()
@@ -2030,7 +2199,14 @@ def test_editability_verification_reopens_and_mutates_bound_parameters(
         return subprocess.CompletedProcess(
             command,
             0,
-            stdout=json.dumps(native_edit_receipt(actual_output, mutation_count=2)),
+            stdout=json.dumps(
+                native_edit_receipt(
+                    plan,
+                    actual_output,
+                    mutations=changes,
+                    after_geometry=expected_edited_geometry,
+                )
+            ),
             stderr="",
         )
 
@@ -2114,7 +2290,15 @@ def test_editability_removes_output_without_complete_proof(tmp_path: Path):
     def incomplete_receipt_runner(command, **kwargs):
         actual_output = Path(command[command.index("-OutputPath") + 1])
         actual_output.write_bytes(b"unverified-mutated-part")
-        receipt = native_edit_receipt(actual_output)
+        receipt = native_edit_receipt(
+            plan,
+            actual_output,
+            mutations={"base.sketch.width": 90},
+            after_geometry=edited_geometry(
+                model_data,
+                {"base.sketch.width": 90},
+            ),
+        )
         receipt["edited_geometry_verification_passed"] = False
         return subprocess.CompletedProcess(
             command,
@@ -2139,6 +2323,75 @@ def test_editability_removes_output_without_complete_proof(tmp_path: Path):
     assert not output_path.exists()
 
 
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "mutation_identity",
+        "sketch_health",
+        "persistent_reference",
+        "source_geometry",
+        "edited_geometry",
+    ],
+)
+def test_editability_rejects_incomplete_native_contract(
+    tmp_path: Path,
+    corruption: str,
+):
+    model_data = native_model_data()
+    plan = replay_plan(model_data)
+    changes = {"base.sketch.width": 90}
+    expected_edited_geometry = edited_geometry(model_data, changes)
+    source_path = tmp_path / "source.SLDPRT"
+    output_path = tmp_path / "mutated.SLDPRT"
+    result_path = tmp_path / "mutated.result.json"
+    source_path.write_bytes(b"source-native-part")
+
+    def incomplete_contract_runner(command, **kwargs):
+        actual_output = Path(command[command.index("-OutputPath") + 1])
+        actual_output.write_bytes(b"unverified-mutated-part")
+        receipt = native_edit_receipt(
+            plan,
+            actual_output,
+            mutations=changes,
+            after_geometry=expected_edited_geometry,
+        )
+        if corruption == "mutation_identity":
+            receipt["mutated_parameter_ids"] = ["wrong.parameter"]
+        elif corruption == "sketch_health":
+            receipt["health"]["sketches"][0]["is_valid"] = False
+        elif corruption == "persistent_reference":
+            receipt["published_references"].pop()
+        elif corruption == "source_geometry":
+            receipt["before_geometry"] = dict(receipt["before_geometry"])
+            receipt["before_geometry"]["volume_mm3"] *= 2
+        elif corruption == "edited_geometry":
+            receipt["after_geometry"] = dict(receipt["after_geometry"])
+            receipt["after_geometry"]["volume_mm3"] *= 2
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(receipt),
+            stderr="",
+        )
+
+    with pytest.raises(
+        SolidWorksExecutionError,
+        match="returned incomplete verification",
+    ):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            output_path,
+            changes,
+            expected_geometry=expected_edited_geometry,
+            result_output_path=result_path,
+            runner=incomplete_contract_runner,
+        )
+
+    assert not output_path.exists()
+    assert not result_path.exists()
+
+
 def test_editability_verification_preserves_signed_placement_side(
     tmp_path: Path,
 ):
@@ -2149,6 +2402,8 @@ def test_editability_verification_preserves_signed_placement_side(
     output_path = tmp_path / "mutated.SLDPRT"
     source_path.write_bytes(b"source-native-part")
     captured: dict = {}
+    changes = {"boss.placement.inst001.x": -20}
+    expected_edited_geometry = edited_geometry(model_data, changes)
 
     def fake_runner(command, **kwargs):
         mutation_path = Path(command[command.index("-MutationPath") + 1])
@@ -2160,7 +2415,14 @@ def test_editability_verification_preserves_signed_placement_side(
         return subprocess.CompletedProcess(
             command,
             0,
-            stdout=json.dumps(native_edit_receipt(actual_output)),
+            stdout=json.dumps(
+                native_edit_receipt(
+                    plan,
+                    actual_output,
+                    mutations=changes,
+                    after_geometry=expected_edited_geometry,
+                )
+            ),
             stderr="",
         )
 
@@ -2168,11 +2430,8 @@ def test_editability_verification_preserves_signed_placement_side(
         plan,
         source_path,
         output_path,
-        {"boss.placement.inst001.x": -20},
-        expected_geometry=edited_geometry(
-            model_data,
-            {"boss.placement.inst001.x": -20},
-        ),
+        changes,
+        expected_geometry=expected_edited_geometry,
         runner=fake_runner,
     )
 
@@ -2429,13 +2688,26 @@ def test_editability_preflight_validates_countersink_dimensions_together(
             {"mounting_hole.feature.diameter": 13},
         )
 
+    changes = {
+        "mounting_hole.feature.diameter": 13,
+        "mounting_hole.feature.countersink_diameter": 16,
+    }
+    expected_edited_geometry = edited_geometry(model_data, changes)
+
     def fake_runner(command, **kwargs):
         actual_output = Path(command[command.index("-OutputPath") + 1])
         actual_output.write_bytes(b"mutated-native-part")
         return subprocess.CompletedProcess(
             command,
             0,
-            stdout=json.dumps(native_edit_receipt(actual_output)),
+            stdout=json.dumps(
+                native_edit_receipt(
+                    plan,
+                    actual_output,
+                    mutations=changes,
+                    after_geometry=expected_edited_geometry,
+                )
+            ),
             stderr="",
         )
 
@@ -2443,17 +2715,8 @@ def test_editability_preflight_validates_countersink_dimensions_together(
         plan,
         source_path,
         tmp_path / "valid.SLDPRT",
-        {
-            "mounting_hole.feature.diameter": 13,
-            "mounting_hole.feature.countersink_diameter": 16,
-        },
-        expected_geometry=edited_geometry(
-            model_data,
-            {
-                "mounting_hole.feature.diameter": 13,
-                "mounting_hole.feature.countersink_diameter": 16,
-            },
-        ),
+        changes,
+        expected_geometry=expected_edited_geometry,
         runner=fake_runner,
     )
 

@@ -559,6 +559,11 @@ def export_solidworks_part(
                 "verification_passed",
                 "geometry_verification_passed",
             ),
+            receipt_validator=lambda receipt: _validate_native_build_receipt(
+                plan,
+                receipt,
+                context="SOLIDWORKS replay",
+            ),
             runner=runner,
         )
 
@@ -778,6 +783,15 @@ def verify_solidworks_editability(
                 "source_geometry_verification_passed",
                 "edited_geometry_verification_passed",
             ),
+            receipt_validator=lambda receipt: _validate_native_edit_receipt(
+                plan,
+                receipt,
+                expected_mutation_ids=mutations,
+                expected_edited_geometry=mutation_document[
+                    "expected_geometry"
+                ],
+                context="SOLIDWORKS editability verification",
+            ),
             runner=runner,
         )
 
@@ -791,15 +805,15 @@ def _run_solidworks_transaction(
     result_output_path: Path | None,
     context: str,
     required_receipt_fields: tuple[str, ...],
+    receipt_validator: Callable[[dict], None],
     runner: Callable[..., subprocess.CompletedProcess[str]],
 ) -> dict:
     """Require one coherent native output and verification receipt.
 
     The C# engine stages and verifies its SLDPRT before publication. This
     boundary independently rejects process success without a valid receipt,
-    removes artifacts created by a failed invocation, and clears stale
-    receipts before a retry so an old success cannot be mistaken for a new
-    one.
+    removes artifacts created by a failed invocation, and refuses an existing
+    receipt so user evidence cannot be mistaken for or replaced by a new run.
     """
     prepared_result_path = _prepare_native_result_path(
         result_output_path,
@@ -836,6 +850,7 @@ def _run_solidworks_transaction(
             context=context,
             required_fields=required_receipt_fields,
         )
+        receipt_validator(receipt)
         if prepared_result_path is not None:
             _write_json_atomically(prepared_result_path, receipt)
         transaction_verified = True
@@ -844,6 +859,67 @@ def _run_solidworks_transaction(
         if not transaction_verified:
             _try_remove_generated_file(output_path)
             _try_remove_generated_file(prepared_result_path)
+
+
+def _validate_native_build_receipt(
+    plan: SolidWorksReplayPlan,
+    receipt: dict,
+    *,
+    context: str,
+) -> None:
+    """Verify every native-build claim before publishing its artifacts."""
+    from prompt2cad.solidworks_verification import compare_geometry_metrics
+    from prompt2cad.solidworks_verification import validate_native_build_result
+    from prompt2cad.solidworks_verification import validate_published_references
+
+    try:
+        validate_native_build_result(plan, receipt, context=context)
+        validate_published_references(plan, receipt, context=context)
+        compare_geometry_metrics(
+            plan.expected_geometry,
+            receipt.get("geometry", {}),
+        )
+    except RuntimeError as error:
+        raise SolidWorksExecutionError(
+            f"{context} returned incomplete verification: {error}"
+        ) from error
+
+
+def _validate_native_edit_receipt(
+    plan: SolidWorksReplayPlan,
+    receipt: dict,
+    *,
+    expected_mutation_ids: Collection[str],
+    expected_edited_geometry: dict,
+    context: str,
+) -> None:
+    """Verify an edited part, its transaction, and both geometry states."""
+    from prompt2cad.solidworks_verification import compare_geometry_metrics
+    from prompt2cad.solidworks_verification import (
+        validate_native_editability_result,
+    )
+    from prompt2cad.solidworks_verification import validate_published_references
+
+    try:
+        validate_native_editability_result(
+            plan,
+            receipt,
+            expected_mutation_ids=expected_mutation_ids,
+            context=context,
+        )
+        validate_published_references(plan, receipt, context=context)
+        compare_geometry_metrics(
+            plan.expected_geometry,
+            receipt.get("before_geometry", {}),
+        )
+        compare_geometry_metrics(
+            expected_edited_geometry,
+            receipt.get("after_geometry", {}),
+        )
+    except RuntimeError as error:
+        raise SolidWorksExecutionError(
+            f"{context} returned incomplete verification: {error}"
+        ) from error
 
 
 def _prepare_native_result_path(

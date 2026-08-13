@@ -149,6 +149,11 @@ volume or envelope.
 The same comparison is mandatory after a native edit. Mutation documents carry
 a separately rebuilt edited-geometry oracle, and a mismatched staged edit is
 deleted instead of published.
+The Python/CLI execution boundary also revalidates the complete native receipt
+before it publishes either the SLDPRT or its report: exact feature order,
+parameter and helper identities, feature/sketch health, persistent references,
+and the reported geometry must all match the replay plan. A successful process
+exit or a set of success booleans is not sufficient.
 
 Polyline vertices plus explicit-sketch start, end, and arc-through coordinates
 are exposed through stable native dimensions when nonzero. Zero coordinates use
