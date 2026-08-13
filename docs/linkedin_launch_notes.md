@@ -35,13 +35,14 @@ Verified against the public deployment on August 10, 2026:
   native create/edit/reopen parity across the same coverage surface.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 12 release-candidate gate passed 560 Python tests, all six frontend
+- The August 13 package-v7 gate passed 584 Python tests, all six frontend
   behavior suites, a production frontend build, all seven golden end-to-end
-  cases, and all 292 generated capability cases. Five Python tests remained
-  intentionally environment-gated.
-- The latest polygon-diameter and patterned-countersink placement changes still
-  require the focused installed-SolidWorks rerun in `docs/hosting.md` before the
-  native claim is published.
+  cases, and all 292 generated capability cases. The three environment-gated
+  C# compile/plan-tamper checks also passed separately.
+- Package v7 assigns explicit collision-safe names to pattern/support helpers,
+  validates the complete native result contract, and closes/reopens the staged
+  `SLDPRT` before publishing it. The two installed-SolidWorks package tests
+  remain the final workstation gate before the native claim is published.
 
 ## Recommended visuals
 
@@ -67,7 +68,10 @@ The prepared portfolio renders are stored in the portfolio repository under
   scrollbars, API keys, local paths, or unrelated tabs.
 - Run one known-good prompt and one correction immediately before publishing.
 - Download both the STEP file and SolidWorks package from the public site.
-- Run the downloaded SolidWorks package on Windows with SolidWorks and capture
-  the resulting native feature tree.
+- Confirm the fresh download is a `v7-solidworks.zip`, run its setup check, then
+  build it on Windows with SolidWorks and confirm the JSON report says the saved
+  file reopened and all declared parameters/helpers verified.
+- Run the ten-case native smoke suite with editability verification and capture
+  the resulting native feature tree only after every case passes.
 - Preview the finished LinkedIn post and portfolio link while signed out or in a
   private browser window.

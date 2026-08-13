@@ -67,11 +67,12 @@ Before linking the application from a LinkedIn post:
 2. Run its launcher on Windows with the supported SolidWorks version.
 3. Confirm the resulting `SLDPRT` opens, rebuilds, and exposes editable named
    sketches, dimensions, patterns, and ordered features.
-4. Run `prompt2cad-solidworks-smoke --execute --verify-editability` and require
-   every native parity fixture to pass.
-5. Run focused native mutation cases for any SolidWorks runner code changed
-   since the last full matrix. For the current candidate, include polygon
-   diameter and patterned-countersink seed placement.
+4. Confirm the package-v7 result reports `reopened: true`, equal declared and
+   verified parameter/helper counts, healthy features/sketches, matching
+   geometry, and resolved persistent face references.
+5. Run `prompt2cad-solidworks-smoke --execute --verify-editability` and require
+   every native parity fixture to pass. This is the focused native rerun for the
+   current helper-identity and initial-save/reopen changes.
 6. Confirm both download buttons and the package instructions work for a new
    user without access to the repository.
 
