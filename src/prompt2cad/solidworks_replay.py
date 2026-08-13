@@ -862,8 +862,12 @@ def _prepare_native_result_path(
         raise SolidWorksExecutionError(
             f"SOLIDWORKS result path is not a file: {resolved_result}"
         )
+    if resolved_result.is_file():
+        raise SolidWorksExecutionError(
+            "Refusing to overwrite existing SOLIDWORKS result: "
+            f"{resolved_result}"
+        )
     resolved_result.parent.mkdir(parents=True, exist_ok=True)
-    _try_remove_generated_file(resolved_result)
     return resolved_result
 
 

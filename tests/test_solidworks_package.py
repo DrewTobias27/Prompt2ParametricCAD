@@ -202,7 +202,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"retained as native reference geometry" in readme
     assert b"editability-coverage.json" in readme
     assert b"limited to their current origin side" in readme
-    assert b"will not overwrite an existing SLDPRT" in readme
+    assert b"will not overwrite an existing SLDPRT or verification" in readme
     assert b"temporary staged file" in readme
     assert b"SLDPRT.replay.log" in readme
     assert b"Successful runs remove this diagnostic log" in readme
@@ -232,7 +232,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"SolidWorks API root:" in launcher
     assert b"Interop version:" in launcher
     assert b"Refusing to overwrite existing SolidWorks part" in launcher
-    assert b"Remove-Item -LiteralPath $resultPath -Force" in launcher
+    assert b"Refusing to overwrite existing verification report" in launcher
     assert b"complete verified-build receipt" in launcher
     assert b"receipt identifies a different output part" in launcher
     assert b"$LASTEXITCODE" not in files["Build-SolidWorks-Part.ps1"]
@@ -554,7 +554,6 @@ def test_launcher_removes_output_when_native_receipt_is_incomplete(
     )
     output_path = tmp_path / "receipt-failure.SLDPRT"
     result_path = Path(f"{output_path}.result.json")
-    result_path.write_text('{"status":"stale"}', encoding="utf-8")
     receipt = complete_native_receipt(plan, output_path)
     receipt["verified_parameter_ids"] = receipt[
         "verified_parameter_ids"
@@ -585,6 +584,52 @@ def test_launcher_removes_output_when_native_receipt_is_incomplete(
     )
     assert not output_path.exists()
     assert not result_path.exists()
+
+
+@pytest.mark.skipif(
+    os.getenv("P2P_RUN_SOLIDWORKS_COMPILE") != "1",
+    reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to use installed API registration",
+)
+@pytest.mark.solidworks_compile
+def test_launcher_preserves_an_existing_verification_report(tmp_path: Path):
+    package = create_solidworks_package(fixture_model_data(), "Report collision")
+    extract_package(package.content, tmp_path)
+    plan = json.loads(
+        (tmp_path / "solidworks-replay-plan.json").read_text(encoding="utf-8")
+    )
+    output_path = tmp_path / "report-collision.SLDPRT"
+    result_path = Path(f"{output_path}.result.json")
+    original_report = b'{"status":"existing-user-evidence"}'
+    result_path.write_bytes(original_report)
+    install_fake_package_runner(
+        tmp_path,
+        complete_native_receipt(plan, output_path),
+    )
+
+    result = subprocess.run(
+        [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(tmp_path / "Build-SolidWorks-Part.ps1"),
+            "-OutputPath",
+            str(output_path),
+            "-SkipIntegrityCheck",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "Refusing to overwrite existing verification report" in (
+        result.stdout + result.stderr
+    )
+    assert not output_path.exists()
+    assert result_path.read_bytes() == original_report
 
 
 @pytest.mark.skipif(

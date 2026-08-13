@@ -407,7 +407,7 @@ def _launcher_script(native_filename: str) -> str:
         }}
         $resultPath = "$OutputPath.result.json"
         if (Test-Path -LiteralPath $resultPath) {{
-            Remove-Item -LiteralPath $resultPath -Force
+            throw "Refusing to overwrite existing verification report: $resultPath"
         }}
 
         Write-Stage "Building editable SolidWorks part"
@@ -649,8 +649,8 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
 
            $env:P2P_SOLIDWORKS_ROOT = "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS"
 
-        The runner will not overwrite an existing SLDPRT. Move or rename the
-        prior output before rebuilding the package.
+        The runner will not overwrite an existing SLDPRT or verification
+        report. Move or rename prior outputs before rebuilding the package.
 
         PowerShell alternative
         ----------------------

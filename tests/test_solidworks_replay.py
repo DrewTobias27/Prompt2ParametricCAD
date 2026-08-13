@@ -1944,11 +1944,10 @@ def test_export_reports_runner_failure_and_requires_sldprt(tmp_path: Path):
         )
 
 
-def test_export_removes_unverified_output_and_stale_receipt(tmp_path: Path):
+def test_export_removes_unverified_output_and_new_receipt(tmp_path: Path):
     plan = replay_plan()
     output_path = tmp_path / "part.SLDPRT"
     result_path = tmp_path / "part.result.json"
-    result_path.write_text('{"status": "old-success"}', encoding="utf-8")
 
     def wrong_receipt_runner(command, **kwargs):
         actual_output = Path(command[command.index("-OutputPath") + 1])
@@ -1971,6 +1970,24 @@ def test_export_removes_unverified_output_and_stale_receipt(tmp_path: Path):
 
     assert not output_path.exists()
     assert not result_path.exists()
+
+
+def test_export_preserves_an_existing_result_without_starting(tmp_path: Path):
+    output_path = tmp_path / "part.SLDPRT"
+    result_path = tmp_path / "part.result.json"
+    original_result = b'{"status":"existing-user-evidence"}'
+    result_path.write_bytes(original_result)
+
+    with pytest.raises(SolidWorksExecutionError, match="Refusing to overwrite"):
+        export_solidworks_part(
+            replay_plan(),
+            output_path,
+            result_output_path=result_path,
+            runner=lambda *_args, **_kwargs: pytest.fail("runner was invoked"),
+        )
+
+    assert not output_path.exists()
+    assert result_path.read_bytes() == original_result
 
 
 def test_export_rejects_one_path_for_part_and_receipt(tmp_path: Path):
