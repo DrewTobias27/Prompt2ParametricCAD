@@ -17,7 +17,9 @@ from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_export import save_plan
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_replay import export_solidworks_part
+from prompt2cad.solidworks_replay import SOLIDWORKS_FEATURE_KIND_MATRIX
 from prompt2cad.solidworks_replay import SUPPORTED_OPERATION_TYPES
+from prompt2cad.solidworks_replay import SUPPORTED_PATTERN_TYPES
 from prompt2cad.solidworks_replay import SUPPORTED_PROFILE_TYPES
 from prompt2cad.solidworks_replay import validate_solidworks_mutations
 from prompt2cad.solidworks_replay import verify_solidworks_editability
@@ -111,19 +113,10 @@ NATIVE_GATE_REQUIRED_COVERAGE = {
         "resolved_feature_face",
     },
     "pattern_kinds": {
-        "circular_pattern",
-        "linear_pattern",
-        "mirror_pattern",
+        f"{pattern_type}_pattern"
+        for pattern_type in SUPPORTED_PATTERN_TYPES
     },
-    "feature_kinds": {
-        "boss_extrude",
-        "boss_revolve",
-        "countersink",
-        "cut_extrude",
-        "cut_revolve",
-        "edge_chamfer",
-        "edge_fillet",
-    },
+    "feature_kinds": set(SOLIDWORKS_FEATURE_KIND_MATRIX.values()),
     "end_conditions": {"blind", "through_all"},
     "binding_kinds": {"feature_property", "named_dimension"},
     "binding_units": {"count", "deg", "mm"},
@@ -135,9 +128,8 @@ NATIVE_EDIT_REQUIRED_COVERAGE = {
     "binding_units": {"count", "deg", "mm"},
     "owner_kinds": {"feature", "pattern", "sketch"},
     "pattern_kinds": {
-        "circular_pattern",
-        "linear_pattern",
-        "mirror_pattern",
+        f"{pattern_type}_pattern"
+        for pattern_type in SUPPORTED_PATTERN_TYPES
     },
     "pattern_properties": {
         "D1Spacing",

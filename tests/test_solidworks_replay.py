@@ -16,6 +16,7 @@ from prompt2cad.schema import FEATURE_PATTERN_SCHEMA
 from prompt2cad.schema import OPERATION_SCHEMAS
 from prompt2cad.solidworks_replay import SOLIDWORKS_REPLAY_FORMAT
 from prompt2cad.solidworks_replay import SOLIDWORKS_REPLAY_VERSION
+from prompt2cad.solidworks_replay import SOLIDWORKS_FEATURE_KIND_MATRIX
 from prompt2cad.solidworks_replay import SOLIDWORKS_PARITY_MATRIX
 from prompt2cad.solidworks_replay import SUPPORTED_OPERATION_TYPES
 from prompt2cad.solidworks_replay import SUPPORTED_PATTERN_TYPES
@@ -1311,6 +1312,7 @@ def test_solidworks_parity_matrix_covers_every_step_operation_type():
     }
 
     assert set(SOLIDWORKS_PARITY_MATRIX) == schema_operation_types
+    assert set(SOLIDWORKS_FEATURE_KIND_MATRIX) == schema_operation_types
     assert SUPPORTED_OPERATION_TYPES == schema_operation_types
     assert SUPPORTED_PROFILE_TYPES == schema_profile_types
 

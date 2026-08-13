@@ -65,6 +65,17 @@ SOLIDWORKS_PARITY_MATRIX = {
     "chamfer": "native_edge_chamfer",
     "fillet": "native_edge_fillet",
 }
+SOLIDWORKS_FEATURE_KIND_MATRIX = {
+    "extrude": "boss_extrude",
+    "add_extrude": "boss_extrude",
+    "cut": "cut_extrude",
+    "revolve": "boss_revolve",
+    "add_revolve": "boss_revolve",
+    "cut_revolve": "cut_revolve",
+    "countersink": "countersink",
+    "chamfer": "edge_chamfer",
+    "fillet": "edge_fillet",
+}
 
 DATUM_PLANE_SUPPORTS = {
     "XY": {
@@ -1296,7 +1307,7 @@ def _native_countersink_control(feature: EditableFeatureDefinition) -> dict:
             )
         )
     return {
-        "kind": "countersink",
+        "kind": SOLIDWORKS_FEATURE_KIND_MATRIX["countersink"],
         "end_condition": "through_all" if depth == "through" else "blind",
         "depth_mm": None if depth == "through" else float(depth),
         "hole_diameter_mm": float(operation["diameter"]),
@@ -1331,7 +1342,7 @@ def _edge_treatment_replay_feature(
     dimension_key = "distance" if operation_type == "chamfer" else "radius"
     value = float(operation[dimension_key])
     native_feature = {
-        "kind": f"edge_{operation_type}",
+        "kind": SOLIDWORKS_FEATURE_KIND_MATRIX[operation_type],
         f"{dimension_key}_mm": value,
         "driving_dimension": _dimension(
             feature,
@@ -1736,7 +1747,7 @@ def _native_feature_control(feature: EditableFeatureDefinition) -> dict:
     if operation_type in {"extrude", "add_extrude"}:
         distance = float(operation["distance"])
         control = {
-            "kind": "boss_extrude",
+            "kind": SOLIDWORKS_FEATURE_KIND_MATRIX[operation_type],
             "end_condition": "blind",
             "depth_mm": distance,
             "merge_result": True,
@@ -1770,11 +1781,7 @@ def _native_feature_control(feature: EditableFeatureDefinition) -> dict:
         axis_start = [float(value) for value in operation["axis_start"][:2]]
         axis_end = [float(value) for value in operation["axis_end"][:2]]
         return {
-            "kind": (
-                "cut_revolve"
-                if operation_type == "cut_revolve"
-                else "boss_revolve"
-            ),
+            "kind": SOLIDWORKS_FEATURE_KIND_MATRIX[operation_type],
             "angle_deg": angle,
             "axis_start_mm": axis_start,
             "axis_end_mm": axis_end,
@@ -1792,7 +1799,7 @@ def _native_feature_control(feature: EditableFeatureDefinition) -> dict:
     depth = operation["depth"]
     if depth == "through":
         return {
-            "kind": "cut_extrude",
+            "kind": SOLIDWORKS_FEATURE_KIND_MATRIX[operation_type],
             "end_condition": "through_all",
             "depth_mm": None,
             "driving_dimension": None,
@@ -1800,7 +1807,7 @@ def _native_feature_control(feature: EditableFeatureDefinition) -> dict:
 
     depth_value = float(depth)
     return {
-        "kind": "cut_extrude",
+        "kind": SOLIDWORKS_FEATURE_KIND_MATRIX[operation_type],
         "end_condition": "blind",
         "depth_mm": depth_value,
         "driving_dimension": _dimension(
