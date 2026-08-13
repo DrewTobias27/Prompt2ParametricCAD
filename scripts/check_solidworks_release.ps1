@@ -207,10 +207,11 @@ try {
     $smokeReport = Get-Content -LiteralPath $smokeReportPath -Raw |
         ConvertFrom-Json
     if (-not $smokeReport.release_gate_passed -or
-        -not $smokeReport.native_gate_coverage.passed) {
+        -not $smokeReport.native_gate_coverage.passed -or
+        -not $smokeReport.native_edit_coverage.passed) {
         throw (
-            "Native smoke cases passed without complete replay-family " +
-            "coverage. Add a gate fixture before release."
+            "Native smoke cases passed without complete replay or edit " +
+            "coverage. Add a gate fixture or mutation before release."
         )
     }
 
@@ -263,6 +264,7 @@ try {
         portable_package_native_cases = 2
         native_smoke_cases = 10
         native_smoke_coverage = $smokeReport.native_gate_coverage
+        native_edit_coverage = $smokeReport.native_edit_coverage
         native_golden_cases = 7
         downloaded_package = $downloadedEvidence
         smoke_report = $smokeReportPath

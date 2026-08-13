@@ -32,6 +32,12 @@ Every case must pass these deterministic gates:
    native history/helper/geometry/reference verification, parameter mutation,
    rebuild, second save/reopen, and a second geometry comparison.
 
+The focused ten-part native gate separately enforces that its edit scenarios
+exercise both binding strategies, every binding unit, signed placement
+controls, all three pattern families, circular count/angle, and both
+linear-pattern count/spacing directions. Creation coverage alone cannot satisfy
+the release gate.
+
 The August 2026 native audit passed the original 286 STEP round trips and all
 286 native SolidWorks cases after four generalized fixes found by the matrix:
 local feature frames replaced ambiguous global face tags, native polygons were

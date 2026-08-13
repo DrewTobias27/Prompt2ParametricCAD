@@ -12,6 +12,7 @@ from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_smoke import SMOKE_FIXTURE_NAMES
 from prompt2cad.solidworks_smoke import EDITABILITY_SCENARIOS
+from prompt2cad.solidworks_smoke import NATIVE_EDIT_REQUIRED_COVERAGE
 from prompt2cad.solidworks_smoke import NATIVE_GATE_REQUIRED_COVERAGE
 from prompt2cad.solidworks_smoke import run_smoke_suite
 from prompt2cad.solidworks_smoke import smoke_fixture_paths
@@ -62,6 +63,13 @@ def test_every_native_smoke_fixture_builds_and_plans(tmp_path: Path):
         category: sorted(values)
         for category, values in NATIVE_GATE_REQUIRED_COVERAGE.items()
     }
+    assert report["native_edit_coverage"]["complete_fixture_suite"] is True
+    assert report["native_edit_coverage"]["passed"] is True
+    assert report["native_edit_coverage"]["missing"] == {}
+    assert report["native_edit_coverage"]["required"] == {
+        category: sorted(values)
+        for category, values in NATIVE_EDIT_REQUIRED_COVERAGE.items()
+    }
     for result in report["results"]:
         assert Path(result["step_path"]).is_file()
         assert Path(result["plan_path"]).is_file()
@@ -84,6 +92,8 @@ def test_partial_native_smoke_selection_reports_but_does_not_claim_coverage(
     assert report["native_gate_coverage"]["complete_fixture_suite"] is False
     assert report["native_gate_coverage"]["passed"] is None
     assert report["native_gate_coverage"]["missing"]
+    assert report["native_edit_coverage"]["passed"] is None
+    assert report["native_edit_coverage"]["missing"]
 
 
 def test_every_native_fixture_has_a_valid_bound_editability_scenario():
@@ -273,13 +283,16 @@ def test_native_smoke_editability_rebuilds_and_compares_mutated_geometry(
         assert source_path.is_file()
         assert mutations == {
             "base.sketch.width": 120,
+            "bosses.placement.inst001.x": 34,
+            "bosses.placement.inst001.y": 22,
             "bosses.feature.distance": 10,
             "mounting_holes.feature.diameter": 6,
         }
-        model_data = load_model(fixture[0])
-        model_data["operations"][0]["width"] = 120
-        model_data["operations"][1]["distance"] = 10
-        model_data["operations"][2]["diameter"] = 6
+        source_document = model_data_to_editable_document(load_model(fixture[0]))
+        expected_part, _ = rebuild_with_parameter_updates(
+            source_document,
+            mutations,
+        )
         output_path.write_bytes(b"mutated-native-part")
         kwargs["result_output_path"].write_text(
             json.dumps(
@@ -287,7 +300,7 @@ def test_native_smoke_editability_rebuilds_and_compares_mutated_geometry(
                     plan,
                     editability=True,
                     mutated_parameter_ids=mutations,
-                    after_geometry=geometry_metrics(build_model(model_data)),
+                    after_geometry=geometry_metrics(expected_part),
                     published_references=persistent_reference_records(plan),
                 )
             ),

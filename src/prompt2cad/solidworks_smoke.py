@@ -44,6 +44,8 @@ SMOKE_FIXTURE_NAMES = (
 EDITABILITY_SCENARIOS = {
     "solidworks_smoke_patterned_plate": {
         "base.sketch.width": 120,
+        "bosses.placement.inst001.x": 34,
+        "bosses.placement.inst001.y": 22,
         "bosses.feature.distance": 10,
         "mounting_holes.feature.diameter": 6,
     },
@@ -51,12 +53,18 @@ EDITABILITY_SCENARIOS = {
         "base.feature.distance": 10,
         "radial_posts.sketch.diameter": 14,
         "radial_posts.feature.distance": 10,
+        "radial_posts.pattern.count": 5,
+        "radial_posts.pattern.total_angle": 300,
         "fourth_post_hole.sketch.diameter": 5,
     },
     "solidworks_smoke_linear_pattern": {
         "base.sketch.width": 130,
         "mounting_pads.sketch.width": 16,
         "mounting_pads.feature.distance": 9,
+        "mounting_pads.pattern.count_1": 4,
+        "mounting_pads.pattern.spacing_1": 30,
+        "mounting_pads.pattern.count_2": 3,
+        "mounting_pads.pattern.spacing_2": 25,
         "sixth_pad_hole.sketch.diameter": 5,
     },
     "solidworks_smoke_side_features": {
@@ -122,6 +130,26 @@ NATIVE_GATE_REQUIRED_COVERAGE = {
     "mutation_modes": {"absolute_same_side"},
 }
 
+NATIVE_EDIT_REQUIRED_COVERAGE = {
+    "binding_kinds": {"feature_property", "named_dimension"},
+    "binding_units": {"count", "deg", "mm"},
+    "owner_kinds": {"feature", "pattern", "sketch"},
+    "pattern_kinds": {
+        "circular_pattern",
+        "linear_pattern",
+        "mirror_pattern",
+    },
+    "pattern_properties": {
+        "D1Spacing",
+        "D1TotalInstances",
+        "D2Spacing",
+        "D2TotalInstances",
+        "Spacing",
+        "TotalInstances",
+    },
+    "mutation_modes": {"absolute_same_side"},
+}
+
 
 def project_root() -> Path:
     """Return the repository root for an editable or installed source tree."""
@@ -165,6 +193,9 @@ def run_smoke_suite(
     results: list[dict] = []
     observed_coverage = {
         category: set() for category in NATIVE_GATE_REQUIRED_COVERAGE
+    }
+    observed_edit_coverage = {
+        category: set() for category in NATIVE_EDIT_REQUIRED_COVERAGE
     }
 
     for fixture_path in fixture_paths:
@@ -223,6 +254,12 @@ def run_smoke_suite(
                 if mutations is not None
                 else None
             )
+            if mutations is not None:
+                _record_native_edit_coverage(
+                    observed_edit_coverage,
+                    plan,
+                    mutations,
+                )
 
             if execute_native:
                 native_exporter(
@@ -321,15 +358,26 @@ def run_smoke_suite(
         observed_coverage,
         complete_fixture_suite=complete_fixture_suite,
     )
+    edit_coverage = _native_edit_coverage_summary(
+        observed_edit_coverage,
+        complete_fixture_suite=complete_fixture_suite,
+    )
     failed = len(results) - passed
     return {
         "mode": "native" if execute_native else "plan_only",
         "passed": passed,
         "failed": failed,
         "native_gate_coverage": coverage,
+        "native_edit_coverage": edit_coverage,
         "release_gate_passed": (
             failed == 0
-            and (not complete_fixture_suite or coverage["passed"] is True)
+            and (
+                not complete_fixture_suite
+                or (
+                    coverage["passed"] is True
+                    and edit_coverage["passed"] is True
+                )
+            )
         ),
         "results": results,
     }
@@ -365,8 +413,60 @@ def _record_native_gate_coverage(
                 observed["mutation_modes"].add(mutation_mode)
 
 
+def _record_native_edit_coverage(
+    observed: dict[str, set[str]],
+    plan,
+    mutations: dict[str, float],
+) -> None:
+    """Collect the exact native controls exercised by edit/reopen scenarios."""
+    bindings = {
+        binding["parameter_id"]: (feature, binding)
+        for feature in plan.features
+        for binding in feature.parameter_bindings
+    }
+    for parameter_id in mutations:
+        feature, binding = bindings[parameter_id]
+        observed["binding_kinds"].add(binding["binding_kind"])
+        observed["binding_units"].add(binding["unit"])
+        observed["owner_kinds"].add(binding["owner_kind"])
+        mutation_mode = binding.get("mutation_mode")
+        if mutation_mode:
+            observed["mutation_modes"].add(mutation_mode)
+        if feature.pattern:
+            observed["pattern_kinds"].add(feature.pattern["kind"])
+        if binding["owner_kind"] == "pattern":
+            observed["pattern_properties"].update(
+                binding.get("native_properties", [])
+            )
+
+
 def _native_gate_coverage_summary(
     observed: dict[str, set[str]],
+    *,
+    complete_fixture_suite: bool,
+) -> dict:
+    return _coverage_summary(
+        observed,
+        NATIVE_GATE_REQUIRED_COVERAGE,
+        complete_fixture_suite=complete_fixture_suite,
+    )
+
+
+def _native_edit_coverage_summary(
+    observed: dict[str, set[str]],
+    *,
+    complete_fixture_suite: bool,
+) -> dict:
+    return _coverage_summary(
+        observed,
+        NATIVE_EDIT_REQUIRED_COVERAGE,
+        complete_fixture_suite=complete_fixture_suite,
+    )
+
+
+def _coverage_summary(
+    observed: dict[str, set[str]],
+    required: dict[str, set[str]],
     *,
     complete_fixture_suite: bool,
 ) -> dict:
@@ -374,9 +474,9 @@ def _native_gate_coverage_summary(
         category: sorted(values) for category, values in observed.items()
     }
     missing = {
-        category: sorted(required - observed[category])
-        for category, required in NATIVE_GATE_REQUIRED_COVERAGE.items()
-        if required - observed[category]
+        category: sorted(expected - observed[category])
+        for category, expected in required.items()
+        if expected - observed[category]
     }
     return {
         "complete_fixture_suite": complete_fixture_suite,
@@ -384,7 +484,7 @@ def _native_gate_coverage_summary(
         "observed": normalized_observed,
         "required": {
             category: sorted(values)
-            for category, values in NATIVE_GATE_REQUIRED_COVERAGE.items()
+            for category, values in required.items()
         },
         "missing": missing,
     }

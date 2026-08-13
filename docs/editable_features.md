@@ -218,6 +218,12 @@ current contract: CadQuery remains the geometry oracle, every declared native
 parameter and helper must verify after reopening, required sketches must be
 fully defined, and every published persistent reference must resolve.
 
+The ten-case native edit gate now mutates both named dimensions and feature
+properties. Its enforced coverage includes mirror-seed placement, circular
+pattern count and total angle, both linear-pattern counts and spacings, length,
+angle, and count units, and signed same-side coordinates. A fixture set that
+only creates those controls but no longer edits them fails the release gate.
+
 Run `prompt2cad-release-matrix` for the compact deterministic whole-pipeline
 gate and `prompt2cad-solidworks-smoke` for the broader CadQuery build and
 native-plan phase.

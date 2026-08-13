@@ -113,7 +113,9 @@ def test_native_release_script_runs_every_focused_live_gate():
     assert "SOLIDWORKS_PACKAGE_VERSION" in source
     assert "package_version = $packageVersion" in source
     assert "native_gate_coverage.passed" in source
+    assert "native_edit_coverage.passed" in source
     assert "native_smoke_coverage" in source
+    assert "native_edit_coverage" in source
     assert "package_version = 8" not in source
     assert "source_zip_sha256" in source
     assert "release-summary.json" in source

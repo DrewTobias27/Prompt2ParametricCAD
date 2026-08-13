@@ -76,8 +76,9 @@ Before linking the application from a LinkedIn post:
    parameter/helper identities, healthy features/sketches, matching geometry,
    and resolved persistent face references.
 5. Run `prompt2cad-solidworks-smoke --execute --verify-editability` and require
-   every native parity fixture to pass. This is the focused native rerun for the
-   current helper-identity and initial-save/reopen changes.
+   every native parity fixture plus the reported replay-family and edit-control
+   coverage contracts to pass. This includes actual pattern count, angle, and
+   two-direction spacing mutations—not only creation of patterned geometry.
 6. Confirm both download buttons and the package instructions work for a new
    user without access to the repository.
 
