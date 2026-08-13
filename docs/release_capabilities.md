@@ -159,7 +159,9 @@ parameter and helper identities, feature/sketch health, persistent references,
 source/output identity for edits, and the reported geometry must all match the
 replay plan. Edit receipts must also reproduce every validated mutation ID,
 unit, and value read back from the reopened native model. A successful process
-exit or a set of success booleans is not sufficient.
+exit or a set of success booleans is not sufficient. SHA-256 digests bind each
+receipt to the exact replay plan, mutation document, source part, and generated
+part used by that transaction.
 
 Polyline vertices plus explicit-sketch start, end, and arc-through coordinates
 are exposed through stable native dimensions when nonzero. Zero coordinates use

@@ -131,8 +131,8 @@ The public-release gate was exercised on August 10, 2026. The deployed site
 generated and refined a valid multi-feature model, both public download paths
 returned non-empty artifacts, and a package downloaded from the public URL
 created a native SolidWorks part with editable features and dimensions. That
-result predates package v12. The August 13 v12 regression now collects 668 Python
-test cases with all 15 installed-API compile/setup cases passing, all six frontend
+result predates package v12. The August 13 v12 regression now collects 674 Python
+test cases with all 16 installed-API compile/setup cases passing, all six frontend
 behavior suites, a production frontend build, the 7/7 golden release matrix,
 and the established 292-case STEP/native-plan capability baseline. A fresh package
 downloaded from the deployed site must still pass the installed-SolidWorks

@@ -30,6 +30,10 @@ from prompt2cad.solidworks_smoke import smoke_fixture_paths
 PROJECT_ROOT = Path(__file__).parents[1]
 
 
+def file_sha256(path: Path) -> str:
+    return sha256(path.read_bytes()).hexdigest()
+
+
 def fixture_model_data() -> dict:
     return json.loads(
         (
@@ -106,7 +110,10 @@ def test_downloaded_package_result_proves_native_contract_and_geometry(
     result = native_result_factory(
         verified.plan,
         output_path=str(output_path),
-        output_sha256=sha256(output_path.read_bytes()).hexdigest(),
+        plan_sha256=file_sha256(
+            extracted / "solidworks-replay-plan.json"
+        ),
+        output_sha256=file_sha256(output_path),
         geometry=geometry_metrics(build_model(verified.model_data)),
         published_references=persistent_reference_records(verified.plan),
     )
@@ -116,13 +123,19 @@ def test_downloaded_package_result_proves_native_contract_and_geometry(
 
     assert summary["verification_scope"] == "package_and_native_result"
     assert summary["native_contract"]["verification_passed"] is True
+    assert summary["replay_plan_sha256"] == file_sha256(
+        extracted / "solidworks-replay-plan.json"
+    )
+    assert summary["native_output_sha256"] == file_sha256(output_path)
     assert summary["persistent_references"]["passed"] is True
     assert summary["geometry_comparison"]["passed"] is True
 
 
-def test_downloaded_package_result_rejects_different_native_bytes(
+@pytest.mark.parametrize("hash_field", ["output_sha256", "plan_sha256"])
+def test_downloaded_package_result_rejects_different_verified_bytes(
     tmp_path: Path,
     native_result_factory,
+    hash_field: str,
 ):
     archive_path = write_package_zip(tmp_path)
     extracted = tmp_path / "verified-package"
@@ -133,10 +146,14 @@ def test_downloaded_package_result_rejects_different_native_bytes(
     result = native_result_factory(
         verified.plan,
         output_path=str(output_path),
-        output_sha256="0" * 64,
+        output_sha256=file_sha256(output_path),
+        plan_sha256=file_sha256(
+            extracted / "solidworks-replay-plan.json"
+        ),
         geometry=geometry_metrics(build_model(verified.model_data)),
         published_references=persistent_reference_records(verified.plan),
     )
+    result[hash_field] = "0" * 64
     result_path.write_text(json.dumps(result), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="SHA-256 digest"):
@@ -284,7 +301,10 @@ def test_package_result_must_point_to_its_own_nonempty_sldprt(
     result = native_result_factory(
         verified.plan,
         output_path=str(output_path),
-        output_sha256=sha256(output_path.read_bytes()).hexdigest(),
+        plan_sha256=file_sha256(
+            extracted / "solidworks-replay-plan.json"
+        ),
+        output_sha256=file_sha256(output_path),
         geometry=geometry_metrics(build_model(verified.model_data)),
         published_references=persistent_reference_records(verified.plan),
     )
@@ -307,7 +327,10 @@ def test_package_result_rejects_wrong_exact_parameter_identity(
     result = native_result_factory(
         verified.plan,
         output_path=str(output_path),
-        output_sha256=sha256(output_path.read_bytes()).hexdigest(),
+        output_sha256=file_sha256(output_path),
+        plan_sha256=file_sha256(
+            extracted / "solidworks-replay-plan.json"
+        ),
         geometry=geometry_metrics(build_model(verified.model_data)),
         published_references=persistent_reference_records(verified.plan),
     )
@@ -398,9 +421,13 @@ def test_package_edit_result_proves_second_save_reopen_and_geometry(
         mutated_parameter_ids=mutations,
         mutated_parameters=mutations,
         source_path=str(source_path),
-        source_sha256=sha256(source_path.read_bytes()).hexdigest(),
+        source_sha256=file_sha256(source_path),
         output_path=str(output_path),
-        output_sha256=sha256(output_path.read_bytes()).hexdigest(),
+        output_sha256=file_sha256(output_path),
+        plan_sha256=file_sha256(
+            extracted / "solidworks-replay-plan.json"
+        ),
+        mutation_sha256=file_sha256(mutation_path),
         before_geometry=geometry_metrics(build_model(verified.model_data)),
         after_geometry=geometry_metrics(edited_part),
         published_references=persistent_reference_records(verified.plan),
@@ -416,6 +443,12 @@ def test_package_edit_result_proves_second_save_reopen_and_geometry(
 
     assert summary["verification_scope"] == "package_native_editability"
     assert summary["native_contract"]["reopened"] is True
+    assert summary["replay_plan_sha256"] == file_sha256(
+        extracted / "solidworks-replay-plan.json"
+    )
+    assert summary["mutation_sha256"] == file_sha256(mutation_path)
+    assert summary["source_native_sha256"] == file_sha256(source_path)
+    assert summary["edited_native_sha256"] == file_sha256(output_path)
     assert summary["before_geometry_comparison"]["passed"] is True
     assert summary["after_geometry_comparison"]["passed"] is True
 
@@ -457,9 +490,13 @@ def test_package_edit_result_rejects_wrong_mutation_identity(
         editability=True,
         mutated_parameter_ids=["wrong.parameter"],
         source_path=str(source_path),
-        source_sha256=sha256(source_path.read_bytes()).hexdigest(),
+        source_sha256=file_sha256(source_path),
         output_path=str(output_path),
-        output_sha256=sha256(output_path.read_bytes()).hexdigest(),
+        output_sha256=file_sha256(output_path),
+        plan_sha256=file_sha256(
+            extracted / "solidworks-replay-plan.json"
+        ),
+        mutation_sha256=file_sha256(mutation_path),
         before_geometry=geometry_metrics(build_model(verified.model_data)),
         after_geometry=geometry_metrics(edited_part),
         published_references=persistent_reference_records(verified.plan),
@@ -504,9 +541,13 @@ def test_package_edit_rejects_a_tampered_edited_geometry_oracle(
                 mutated_parameter_ids=mutations,
                 mutated_parameters=mutations,
                 source_path=str(source_path),
-                source_sha256=sha256(source_path.read_bytes()).hexdigest(),
+                source_sha256=file_sha256(source_path),
                 output_path=str(output_path),
-                output_sha256=sha256(output_path.read_bytes()).hexdigest(),
+                output_sha256=file_sha256(output_path),
+                plan_sha256=file_sha256(
+                    extracted / "solidworks-replay-plan.json"
+                ),
+                mutation_sha256=file_sha256(mutation_path),
                 before_geometry=geometry_metrics(build_model(verified.model_data)),
                 after_geometry=geometry_metrics(edited_part),
                 published_references=persistent_reference_records(verified.plan),

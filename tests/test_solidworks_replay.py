@@ -279,6 +279,9 @@ def native_build_receipt(plan, output_path: Path, **extra) -> dict:
         "status": "success",
         "output_path": str(output_path.resolve()),
         "output_sha256": output_hash,
+        "plan_sha256": sha256(
+            (json.dumps(plan.to_dict(), indent=2) + "\n").encode("utf-8")
+        ).hexdigest(),
         "reopened": True,
         "verification_passed": True,
         "geometry_verification_passed": True,
@@ -301,6 +304,12 @@ def native_edit_receipt(
     after_geometry: dict | None = None,
     **extra,
 ) -> dict:
+    expected_after_geometry = after_geometry or plan.expected_geometry
+    mutation_document = build_solidworks_mutation_document(
+        plan,
+        mutations or {},
+        expected_geometry=expected_after_geometry,
+    )
     mutation_ids = sorted(mutations or {})
     bindings_by_id = {
         binding["parameter_id"]: binding
@@ -321,6 +330,12 @@ def native_edit_receipt(
         "source_sha256": sha256(source_path.read_bytes()).hexdigest(),
         "output_path": str(output_path.resolve()),
         "output_sha256": sha256(output_path.read_bytes()).hexdigest(),
+        "plan_sha256": sha256(
+            (json.dumps(plan.to_dict(), indent=2) + "\n").encode("utf-8")
+        ).hexdigest(),
+        "mutation_sha256": sha256(
+            (json.dumps(mutation_document, indent=2) + "\n").encode("utf-8")
+        ).hexdigest(),
         "reopened": True,
         "source_geometry_verification_passed": True,
         "source_history_verification_passed": True,
@@ -338,7 +353,7 @@ def native_edit_receipt(
         "topology_changed": bool(topology_ids),
         "topology_changing_parameter_ids": sorted(topology_ids),
         "before_geometry": plan.expected_geometry,
-        "after_geometry": after_geometry or plan.expected_geometry,
+        "after_geometry": expected_after_geometry,
         **native_contract_receipt(plan),
         **extra,
     }
@@ -1934,6 +1949,37 @@ def test_native_runner_stages_verified_outputs_before_publication():
     assert "File.Move(stagedOutput, resolvedOutput)" in runner_source
 
 
+def test_native_runner_binds_receipts_to_unchanged_input_files():
+    runner_source = (
+        Path(__file__).parents[1]
+        / "src"
+        / "prompt2cad"
+        / "solidworks_replay_runner.cs"
+    ).read_text(encoding="utf-8")
+    build_source, edit_source = runner_source.split(
+        "public static string VerifyEditablePart(",
+        maxsplit=1,
+    )
+
+    assert build_source.index("planSha256 = Sha256File(resolvedPlan)") < (
+        build_source.index("ReplayPlan plan = ReadPlan(resolvedPlan)")
+    )
+    assert build_source.rindex("RequireUnchangedArtifact(") < (
+        build_source.rindex("PublishStagedOutput(stagedOutput, resolvedOutput)")
+    )
+    assert edit_source.index("planSha256 = Sha256File(resolvedPlan)") < (
+        edit_source.index("ReplayPlan plan = ReadPlan(resolvedPlan)")
+    )
+    assert edit_source.index("mutationSha256 = Sha256File(resolvedMutation)") < (
+        edit_source.index("ReadValidatedMutations(")
+    )
+    assert edit_source.index('"mutation document"') < edit_source.index(
+        "PublishStagedOutput(stagedOutput, resolvedOutput)"
+    )
+    assert runner_source.count('DataMember(Name = "plan_sha256")') == 2
+    assert runner_source.count('DataMember(Name = "mutation_sha256")') == 1
+
+
 def test_native_build_and_edit_keep_failure_traces_only():
     runner_source = (
         Path(__file__).parents[1]
@@ -2188,7 +2234,11 @@ def test_export_rejects_incomplete_native_contract(
     assert not result_path.exists()
 
 
-def test_export_rejects_receipt_for_different_native_bytes(tmp_path: Path):
+@pytest.mark.parametrize("corruption", ["output", "plan"])
+def test_export_rejects_receipt_for_different_verified_bytes(
+    tmp_path: Path,
+    corruption: str,
+):
     plan = replay_plan()
     output_path = tmp_path / "part.SLDPRT"
     result_path = tmp_path / "part.result.json"
@@ -2197,7 +2247,10 @@ def test_export_rejects_receipt_for_different_native_bytes(tmp_path: Path):
         actual_output = Path(command[command.index("-OutputPath") + 1])
         actual_output.write_bytes(b"verified-native-part")
         receipt = native_build_receipt(plan, actual_output)
-        actual_output.write_bytes(b"tampered-native-part")
+        if corruption == "output":
+            actual_output.write_bytes(b"tampered-native-part")
+        else:
+            receipt["plan_sha256"] = "0" * 64
         return subprocess.CompletedProcess(
             command,
             0,
@@ -2401,8 +2454,13 @@ def test_editability_removes_output_without_complete_proof(tmp_path: Path):
     assert not output_path.exists()
 
 
-def test_editability_rejects_receipt_for_different_source_bytes(
+@pytest.mark.parametrize(
+    "hash_field",
+    ["source_sha256", "plan_sha256", "mutation_sha256"],
+)
+def test_editability_rejects_receipt_for_different_input_bytes(
     tmp_path: Path,
+    hash_field: str,
 ):
     model_data = native_model_data()
     plan = replay_plan(model_data)
@@ -2422,7 +2480,7 @@ def test_editability_rejects_receipt_for_different_source_bytes(
             mutations=changes,
             after_geometry=edited_geometry(model_data, changes),
         )
-        receipt["source_sha256"] = "0" * 64
+        receipt[hash_field] = "0" * 64
         return subprocess.CompletedProcess(
             command,
             0,

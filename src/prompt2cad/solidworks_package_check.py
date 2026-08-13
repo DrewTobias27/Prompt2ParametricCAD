@@ -226,6 +226,12 @@ def verify_solidworks_package_result(
         )
 
     context = "downloaded SolidWorks package"
+    plan_sha256 = validate_native_artifact_hash(
+        native_result,
+        verified.root / "solidworks-replay-plan.json",
+        field_name="plan_sha256",
+        context=f"{context} replay plan",
+    )
     native_output_sha256 = validate_native_artifact_hash(
         native_result,
         native_output,
@@ -256,6 +262,7 @@ def verify_solidworks_package_result(
         "verification_scope": "package_and_native_result",
         "native_output": str(native_output),
         "native_output_size_bytes": native_output.stat().st_size,
+        "replay_plan_sha256": plan_sha256,
         "native_output_sha256": native_output_sha256,
         "native_contract": contract,
         "persistent_references": references,
@@ -364,6 +371,18 @@ def verify_solidworks_package_editability_result(
         )
 
     context = "downloaded SolidWorks package edit"
+    plan_sha256 = validate_native_artifact_hash(
+        native_result,
+        verified.root / "solidworks-replay-plan.json",
+        field_name="plan_sha256",
+        context=f"{context} replay plan",
+    )
+    mutation_sha256 = validate_native_artifact_hash(
+        native_result,
+        mutation_path.resolve(),
+        field_name="mutation_sha256",
+        context=f"{context} mutation document",
+    )
     source_sha256 = validate_native_artifact_hash(
         native_result,
         source_path,
@@ -408,6 +427,8 @@ def verify_solidworks_package_editability_result(
         "verification_scope": "package_native_editability",
         "source_native_output": str(source_path),
         "edited_native_output": str(output_path),
+        "replay_plan_sha256": plan_sha256,
+        "mutation_sha256": mutation_sha256,
         "source_native_sha256": source_sha256,
         "edited_native_sha256": output_sha256,
         "mutations": mutations,

@@ -542,6 +542,9 @@ namespace Prompt2Cad.SolidWorks
         [DataMember(Name = "output_sha256")]
         public string OutputSha256 { get; set; }
 
+        [DataMember(Name = "plan_sha256")]
+        public string PlanSha256 { get; set; }
+
         [DataMember(Name = "native_features")]
         public string[] NativeFeatures { get; set; }
 
@@ -624,6 +627,12 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "output_sha256")]
         public string OutputSha256 { get; set; }
+
+        [DataMember(Name = "plan_sha256")]
+        public string PlanSha256 { get; set; }
+
+        [DataMember(Name = "mutation_sha256")]
+        public string MutationSha256 { get; set; }
 
         [DataMember(Name = "mutation_count")]
         public int MutationCount { get; set; }
@@ -832,7 +841,9 @@ namespace Prompt2Cad.SolidWorks
         {
             InitializeTrace(outputPath, "native build");
             Trace("Reading replay plan");
-            ReplayPlan plan = ReadPlan(planPath);
+            string resolvedPlan = Path.GetFullPath(planPath);
+            string planSha256 = Sha256File(resolvedPlan);
+            ReplayPlan plan = ReadPlan(resolvedPlan);
             ValidateReplayPlan(plan);
             RequireExecutableGeometryOracle(plan);
 
@@ -1046,6 +1057,11 @@ namespace Prompt2Cad.SolidWorks
                 ReleaseComObject(model);
                 model = null;
                 modelTitle = null;
+                RequireUnchangedArtifact(
+                    resolvedPlan,
+                    planSha256,
+                    "replay plan"
+                );
                 PublishStagedOutput(stagedOutput, resolvedOutput);
                 stagedOutput = null;
                 string resultJson = WriteJson(
@@ -1054,6 +1070,7 @@ namespace Prompt2Cad.SolidWorks
                         Status = "success",
                         OutputPath = resolvedOutput,
                         OutputSha256 = Sha256File(resolvedOutput),
+                        PlanSha256 = planSha256,
                         NativeFeatures = createdNames.ToArray(),
                         FeatureCount = createdNames.Count,
                         VerificationPassed = true,
@@ -1142,12 +1159,16 @@ namespace Prompt2Cad.SolidWorks
         {
             InitializeTrace(outputPath, "native edit verification");
             Trace("Reading replay plan for native edit verification");
-            ReplayPlan plan = ReadPlan(planPath);
+            string resolvedPlan = Path.GetFullPath(planPath);
+            string resolvedMutation = Path.GetFullPath(mutationPath);
+            string planSha256 = Sha256File(resolvedPlan);
+            string mutationSha256 = Sha256File(resolvedMutation);
+            ReplayPlan plan = ReadPlan(resolvedPlan);
             ValidateReplayPlan(plan);
             RequireExecutableGeometryOracle(plan);
             NativeGeometryResult expectedEditedGeometry;
             ParameterMutation[] mutations = ReadValidatedMutations(
-                mutationPath,
+                resolvedMutation,
                 out expectedEditedGeometry
             );
             string[] topologyChangingParameterIds =
@@ -1287,15 +1308,21 @@ namespace Prompt2Cad.SolidWorks
                 ReleaseComObject(model);
                 model = null;
                 modelTitle = null;
-                if (!String.Equals(
+                RequireUnchangedArtifact(
+                    resolvedSource,
                     sourceSha256,
-                    Sha256File(resolvedSource),
-                    StringComparison.Ordinal))
-                {
-                    throw new InvalidOperationException(
-                        "The source SOLIDWORKS part changed during edit verification."
-                    );
-                }
+                    "source SOLIDWORKS part"
+                );
+                RequireUnchangedArtifact(
+                    resolvedPlan,
+                    planSha256,
+                    "replay plan"
+                );
+                RequireUnchangedArtifact(
+                    resolvedMutation,
+                    mutationSha256,
+                    "mutation document"
+                );
                 PublishStagedOutput(stagedOutput, resolvedOutput);
                 stagedOutput = null;
 
@@ -1307,6 +1334,8 @@ namespace Prompt2Cad.SolidWorks
                         SourceSha256 = sourceSha256,
                         OutputPath = resolvedOutput,
                         OutputSha256 = Sha256File(resolvedOutput),
+                        PlanSha256 = planSha256,
+                        MutationSha256 = mutationSha256,
                         MutationCount = mutations.Length,
                         MutatedParameterIds = mutations
                             .Select(item => item.ParameterId)
@@ -7212,6 +7241,22 @@ namespace Prompt2Cad.SolidWorks
                     algorithm.ComputeHash(stream).Select(
                         value => value.ToString("x2", CultureInfo.InvariantCulture)
                     )
+                );
+            }
+        }
+
+        private static void RequireUnchangedArtifact(
+            string path,
+            string originalSha256,
+            string description)
+        {
+            if (!String.Equals(
+                originalSha256,
+                Sha256File(path),
+                StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "The " + description + " changed during native verification."
                 );
             }
         }

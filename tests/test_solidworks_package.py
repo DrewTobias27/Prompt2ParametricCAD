@@ -340,6 +340,9 @@ def complete_native_receipt(plan: dict, output_path: Path) -> dict:
         "status": "success",
         "output_path": str(output_path.resolve()),
         "output_sha256": sha256(b"P2PCAD").hexdigest(),
+        "plan_sha256": sha256(
+            (json.dumps(plan, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        ).hexdigest(),
         "native_features": [feature["feature_name"] for feature in features],
         "feature_count": len(features),
         "verification_passed": True,
@@ -545,7 +548,18 @@ def test_launcher_accepts_only_a_complete_native_receipt(
     reason="Set P2P_RUN_SOLIDWORKS_COMPILE=1 to use installed API registration",
 )
 @pytest.mark.solidworks_compile
-def test_launcher_rejects_receipt_for_different_native_bytes(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("hash_field", "message"),
+    [
+        ("output_sha256", "output SHA-256 digest"),
+        ("plan_sha256", "replay-plan SHA-256 digest"),
+    ],
+)
+def test_launcher_rejects_receipt_for_different_verified_bytes(
+    tmp_path: Path,
+    hash_field: str,
+    message: str,
+):
     package = create_solidworks_package(fixture_model_data(), "Hash failure")
     extract_package(package.content, tmp_path)
     plan = json.loads(
@@ -554,7 +568,7 @@ def test_launcher_rejects_receipt_for_different_native_bytes(tmp_path: Path):
     output_path = tmp_path / "hash-failure.SLDPRT"
     result_path = Path(f"{output_path}.result.json")
     receipt = complete_native_receipt(plan, output_path)
-    receipt["output_sha256"] = "0" * 64
+    receipt[hash_field] = "0" * 64
     install_fake_package_runner(tmp_path, receipt)
 
     result = subprocess.run(
@@ -576,7 +590,7 @@ def test_launcher_rejects_receipt_for_different_native_bytes(tmp_path: Path):
     )
 
     assert result.returncode != 0
-    assert "output SHA-256 digest" in result.stdout + result.stderr
+    assert message in result.stdout + result.stderr
     assert not output_path.exists()
     assert not result_path.exists()
 

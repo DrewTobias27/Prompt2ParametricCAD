@@ -35,7 +35,7 @@ Verified against the public deployment on August 10, 2026:
   native create/edit/reopen parity across the same coverage surface.
 - All 49 checked-in operation models, evaluation fixtures, library examples,
   and reviewed design-intent examples lower to complete native replay plans.
-- The August 13 package-v12 regression collects 668 Python test cases with all 15
+- The August 13 package-v12 regression collects 674 Python test cases with all 16
   installed-API compile/setup cases passing, all six frontend behavior suites, a
   production frontend build, and all seven golden end-to-end cases. The
   established 292-case STEP/native-plan capability baseline remains green.
@@ -47,7 +47,8 @@ Verified against the public deployment on August 10, 2026:
   `SLDPRT` before publishing it. The release checker now verifies the exact
   downloaded ZIP, selects and proves a geometry-changing edit, then requires a
   second native save/reopen with matching geometry and persistent references.
-  Build and edit receipts are bound to the exact SLDPRT bytes with SHA-256.
+  Build and edit receipts are bound to the exact replay plan, mutation
+  document, and SLDPRT bytes with SHA-256.
   Each package carries a CadQuery geometry oracle and refuses to publish a
   native part whose body count, volume, area, bounds, or center does not match.
 

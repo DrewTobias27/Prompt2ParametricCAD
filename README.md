@@ -240,8 +240,8 @@ geometry from a validated CadQuery rebuild, and the runner refuses to publish
 the edited `SLDPRT` unless its reopened result matches. Its receipt records the
 exact parameter values read back from the reopened model and their units, not
 only the requested IDs. Build and edit receipts also carry SHA-256 digests for
-the exact SLDPRT files they verified, and package checks recompute those digests
-before accepting the evidence.
+the exact replay plan, mutation document, and SLDPRT files they verified, and
+package checks recompute those digests before accepting the evidence.
 `Check-SolidWorks-Setup.cmd` performs the integrity, installation, API,
 replay-engine compilation, and replay-plan consistency checks without opening
 or creating a part, and reports the selected API root and interop version when

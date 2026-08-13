@@ -527,9 +527,8 @@ def export_solidworks_part(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="prompt2cad-solidworks-") as directory:
         plan_path = Path(directory) / "replay-plan.json"
-        plan_path.write_text(
-            json.dumps(plan.to_dict(), indent=2) + "\n",
-            encoding="utf-8",
+        plan_path.write_bytes(
+            (json.dumps(plan.to_dict(), indent=2) + "\n").encode("utf-8")
         )
 
         command = [
@@ -564,6 +563,7 @@ def export_solidworks_part(
                 receipt,
                 context="SOLIDWORKS replay",
             ),
+            receipt_artifacts={"plan_sha256": plan_path},
             runner=runner,
         )
 
@@ -746,13 +746,11 @@ def verify_solidworks_editability(
         temporary_root = Path(directory)
         plan_path = temporary_root / "replay-plan.json"
         mutation_path = temporary_root / "mutations.json"
-        plan_path.write_text(
-            json.dumps(plan.to_dict(), indent=2) + "\n",
-            encoding="utf-8",
+        plan_path.write_bytes(
+            (json.dumps(plan.to_dict(), indent=2) + "\n").encode("utf-8")
         )
-        mutation_path.write_text(
-            json.dumps(mutation_document, indent=2) + "\n",
-            encoding="utf-8",
+        mutation_path.write_bytes(
+            (json.dumps(mutation_document, indent=2) + "\n").encode("utf-8")
         )
         command = [
             powershell_executable,
@@ -794,6 +792,10 @@ def verify_solidworks_editability(
                 ],
                 context="SOLIDWORKS editability verification",
             ),
+            receipt_artifacts={
+                "plan_sha256": plan_path,
+                "mutation_sha256": mutation_path,
+            },
             runner=runner,
         )
 
@@ -808,6 +810,7 @@ def _run_solidworks_transaction(
     context: str,
     required_receipt_fields: tuple[str, ...],
     receipt_validator: Callable[[dict], None],
+    receipt_artifacts: Mapping[str, Path] | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]],
 ) -> dict:
     """Require one coherent native output and verification receipt.
@@ -852,6 +855,19 @@ def _run_solidworks_transaction(
             context=context,
             required_fields=required_receipt_fields,
         )
+        for field_name, artifact_path in (receipt_artifacts or {}).items():
+            artifact_name = field_name.removesuffix("_sha256").replace(
+                "_", " "
+            )
+            try:
+                validate_native_artifact_hash(
+                    receipt,
+                    artifact_path,
+                    field_name=field_name,
+                    context=f"{context} {artifact_name}",
+                )
+            except RuntimeError as error:
+                raise SolidWorksExecutionError(str(error)) from error
         receipt_validator(receipt)
         if prepared_result_path is not None:
             _write_json_atomically(prepared_result_path, receipt)
