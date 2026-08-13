@@ -117,6 +117,12 @@ constraints or selection rules:
 - save/reopen mutation verification that confirms parameters remain editable
   and persistent references still resolve after a rebuild.
 
+Native edits are preflighted as one transaction before the runner changes the
+open document. The preflight rejects non-finite or nonpositive dimensions,
+fractional pattern counts, invalid angle ranges, unsafe coordinate sign
+crossings, collapsed linear patterns, and countersinks whose seat diameter is
+not larger than the through-hole diameter.
+
 The runner temporarily disables SolidWorks' interactive dimension-entry prompt
 and restores the user's prior setting after replay. It uses the configured part
 template when available and falls back to the newest installed standard part

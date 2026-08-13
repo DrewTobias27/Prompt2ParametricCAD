@@ -444,6 +444,12 @@ def test_native_pattern_controls_have_editable_feature_property_bindings(
         binding["binding_kind"] == "feature_property"
         for binding in pattern_bindings
     )
+    assert all("minimum_value" in binding for binding in pattern_bindings)
+    assert all(
+        binding["integer_only"]
+        for binding in pattern_bindings
+        if binding["unit"] == "count"
+    )
     document = model_data_to_editable_document(model_data)
     assert {
         binding["parameter_id"] for binding in pattern_bindings
@@ -1769,6 +1775,183 @@ def test_editability_verification_rejects_nonfinite_values(tmp_path: Path):
             source_path,
             tmp_path / "mutated.SLDPRT",
             {"base.sketch.width": float("nan")},
+        )
+
+
+@pytest.mark.parametrize("unsafe_value", [0, -1])
+def test_editability_verification_rejects_nonpositive_dimensions(
+    tmp_path: Path,
+    unsafe_value: float,
+):
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+
+    with pytest.raises(SolidWorksExecutionError, match="greater than 0.0"):
+        verify_solidworks_editability(
+            replay_plan(),
+            source_path,
+            tmp_path / "mutated.SLDPRT",
+            {"base.sketch.width": unsafe_value},
+        )
+
+
+def test_editability_verification_rejects_fractional_pattern_counts(
+    tmp_path: Path,
+):
+    model_data = native_model_data()
+    model_data["operations"] = model_data["operations"][:2]
+    model_data["operations"][1] = {
+        "type": "cut",
+        "id": "holes",
+        "target": "base.top",
+        "profile": "circle",
+        "positions": [[20, 0], [0, 20], [-20, 0], [0, -20]],
+        "pattern": {
+            "type": "circular",
+            "seed_position": [20, 0],
+            "center": [0, 0],
+            "count": 4,
+            "total_angle_degrees": 360,
+        },
+        "diameter": 6,
+        "depth": "through",
+    }
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+
+    with pytest.raises(SolidWorksExecutionError, match="whole-number value"):
+        verify_solidworks_editability(
+            replay_plan(model_data),
+            source_path,
+            tmp_path / "mutated.SLDPRT",
+            {"holes.pattern.count": 3.5},
+        )
+
+
+def test_editability_verification_rejects_out_of_range_angles(tmp_path: Path):
+    model_data = {
+        "operations": [
+            {
+                "type": "revolve",
+                "id": "shaft",
+                "plane": "XY",
+                "profile": "rectangle",
+                "positions": [[5, 0]],
+                "width": 10,
+                "height": 40,
+                "axis_start": [0, -1],
+                "axis_end": [0, 1],
+                "angle": 360,
+            }
+        ]
+    }
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+
+    with pytest.raises(SolidWorksExecutionError, match="at most 360.0"):
+        verify_solidworks_editability(
+            replay_plan(model_data),
+            source_path,
+            tmp_path / "mutated.SLDPRT",
+            {"shaft.feature.angle": 361},
+        )
+
+
+def test_editability_preflight_validates_countersink_dimensions_together(
+    tmp_path: Path,
+):
+    model_data = native_model_data()
+    model_data["operations"] = [
+        model_data["operations"][0],
+        {
+            "type": "countersink",
+            "id": "mounting_hole",
+            "target": "base.top",
+            "positions": [[20, 0]],
+            "diameter": 6,
+            "countersink_diameter": 12,
+            "angle": 82,
+            "depth": "through",
+        },
+    ]
+    plan = replay_plan(model_data)
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+
+    with pytest.raises(SolidWorksExecutionError, match="remain larger"):
+        verify_solidworks_editability(
+            plan,
+            source_path,
+            tmp_path / "invalid.SLDPRT",
+            {"mounting_hole.feature.diameter": 13},
+        )
+
+    def fake_runner(command, **kwargs):
+        Path(command[command.index("-OutputPath") + 1]).write_bytes(
+            b"mutated-native-part"
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="{}", stderr="")
+
+    verify_solidworks_editability(
+        plan,
+        source_path,
+        tmp_path / "valid.SLDPRT",
+        {
+            "mounting_hole.feature.diameter": 13,
+            "mounting_hole.feature.countersink_diameter": 16,
+        },
+        runner=fake_runner,
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutations", "message"),
+    [
+        (
+            {"holes.pattern.count_1": 1, "holes.pattern.count_2": 1},
+            "retain at least two instances",
+        ),
+        (
+            {"holes.pattern.count_1": 3, "holes.pattern.spacing_1": 0},
+            "requires positive direction-1 spacing",
+        ),
+    ],
+)
+def test_editability_preflight_validates_linear_pattern_relationships(
+    tmp_path: Path,
+    mutations: dict[str, float],
+    message: str,
+):
+    model_data = native_model_data()
+    model_data["operations"] = model_data["operations"][:2]
+    model_data["operations"][1] = {
+        "type": "cut",
+        "id": "holes",
+        "target": "base.top",
+        "profile": "circle",
+        "positions": [[-20, 0], [0, 0], [20, 0]],
+        "pattern": {
+            "type": "linear",
+            "seed_position": [-20, 0],
+            "direction_1": [1, 0],
+            "count_1": 3,
+            "spacing_1": 20,
+            "direction_2": [0, 1],
+            "count_2": 1,
+            "spacing_2": 0,
+        },
+        "diameter": 6,
+        "depth": "through",
+    }
+    source_path = tmp_path / "source.SLDPRT"
+    source_path.write_bytes(b"source-native-part")
+
+    with pytest.raises(SolidWorksExecutionError, match=message):
+        verify_solidworks_editability(
+            replay_plan(model_data),
+            source_path,
+            tmp_path / "mutated.SLDPRT",
+            mutations,
         )
 
 

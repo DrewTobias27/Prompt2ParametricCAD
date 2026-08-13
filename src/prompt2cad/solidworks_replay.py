@@ -498,12 +498,15 @@ def verify_solidworks_editability(
         raise SolidWorksExecutionError(
             "Unknown native parameter IDs: " + ", ".join(unknown)
         )
-    for parameter_id, value in mutations.items():
-        _validate_native_mutation(
+    native_mutations = {
+        parameter_id: _validate_native_mutation(
             parameter_id,
             float(value),
             bindings[parameter_id],
         )
+        for parameter_id, value in mutations.items()
+    }
+    _validate_native_mutation_set(plan, bindings, native_mutations)
     mutation_document = {
         "format": "prompt2cad.solidworks-mutations",
         "version": 1,
@@ -1277,7 +1280,12 @@ def _dimension_binding(
         "native_properties": [],
         "value": float(dimension["value_mm"]),
         "unit": dimension["unit"],
+        "minimum_value": 0.0,
+        "minimum_inclusive": False,
     }
+    if dimension["unit"] == "deg":
+        binding["maximum_value"] = 360.0
+        binding["maximum_inclusive"] = True
     if "mutation_mode" in dimension:
         binding["mutation_mode"] = dimension["mutation_mode"]
         binding["source_value"] = float(dimension["source_value"])
@@ -1288,7 +1296,7 @@ def _validate_native_mutation(
     parameter_id: str,
     value: float,
     binding: dict,
-) -> None:
+) -> float:
     """Reject edits a native control cannot represent without rebuilding.
 
     SOLIDWORKS point-to-point dimensions store a positive distance. The side
@@ -1300,17 +1308,103 @@ def _validate_native_mutation(
             f"Native parameter '{parameter_id}' requires a finite value"
         )
 
-    if binding.get("mutation_mode") != "absolute_same_side":
-        return
+    native_value = value
+    if binding.get("mutation_mode") == "absolute_same_side":
+        source_value = float(binding["source_value"])
+        if abs(value) <= 1e-12 or source_value * value <= 0:
+            raise SolidWorksExecutionError(
+                f"Native coordinate parameter '{parameter_id}' cannot cross "
+                "or land on the sketch origin during an in-place SolidWorks "
+                "edit. Regenerate the SolidWorks package from the updated "
+                "CAD model to change sides safely."
+            )
+        native_value = abs(value)
 
-    source_value = float(binding["source_value"])
-    if abs(value) <= 1e-12 or source_value * value <= 0:
+    if binding.get("integer_only") and not native_value.is_integer():
         raise SolidWorksExecutionError(
-            f"Native coordinate parameter '{parameter_id}' cannot cross or "
-            "land on the sketch origin during an in-place SolidWorks edit. "
-            "Regenerate the SolidWorks package from the updated CAD model "
-            "to change sides safely."
+            f"Native parameter '{parameter_id}' requires a whole-number value"
         )
+
+    minimum = binding.get("minimum_value")
+    if minimum is not None and (
+        native_value < float(minimum)
+        or (
+            native_value == float(minimum)
+            and not binding.get("minimum_inclusive", True)
+        )
+    ):
+        comparison = (
+            "at least"
+            if binding.get("minimum_inclusive")
+            else "greater than"
+        )
+        raise SolidWorksExecutionError(
+            f"Native parameter '{parameter_id}' must be {comparison} {minimum}"
+        )
+
+    maximum = binding.get("maximum_value")
+    if maximum is not None and (
+        native_value > float(maximum)
+        or (
+            native_value == float(maximum)
+            and not binding.get("maximum_inclusive", True)
+        )
+    ):
+        comparison = (
+            "at most"
+            if binding.get("maximum_inclusive")
+            else "less than"
+        )
+        raise SolidWorksExecutionError(
+            f"Native parameter '{parameter_id}' must be {comparison} {maximum}"
+        )
+    return native_value
+
+
+def _validate_native_mutation_set(
+    plan: SolidWorksReplayPlan,
+    bindings: dict[str, dict],
+    native_mutations: dict[str, float],
+) -> None:
+    """Validate dependent controls before any native document is changed."""
+    projected = {
+        parameter_id: float(binding["value"])
+        for parameter_id, binding in bindings.items()
+    }
+    projected.update(native_mutations)
+
+    for step in plan.features:
+        if step.feature.get("kind") == "countersink":
+            hole_id = f"{step.id}.feature.diameter"
+            countersink_id = f"{step.id}.feature.countersink_diameter"
+            if projected[countersink_id] <= projected[hole_id]:
+                raise SolidWorksExecutionError(
+                    f"Native countersink '{step.id}' requires its countersink "
+                    "diameter to remain larger than its hole diameter"
+                )
+
+        pattern = step.pattern
+        if pattern is None or pattern.get("kind") != "linear_pattern":
+            continue
+        count_1 = projected[f"{step.id}.pattern.count_1"]
+        count_2 = projected[f"{step.id}.pattern.count_2"]
+        spacing_1 = projected[f"{step.id}.pattern.spacing_1"]
+        spacing_2 = projected[f"{step.id}.pattern.spacing_2"]
+        if count_1 * count_2 < 2:
+            raise SolidWorksExecutionError(
+                f"Native linear pattern '{step.id}' must retain at least two "
+                "instances; regenerate the package to remove the pattern"
+            )
+        if count_1 > 1 and spacing_1 <= 0:
+            raise SolidWorksExecutionError(
+                f"Native linear pattern '{step.id}' requires positive "
+                "direction-1 spacing when count 1 exceeds one"
+            )
+        if count_2 > 1 and spacing_2 <= 0:
+            raise SolidWorksExecutionError(
+                f"Native linear pattern '{step.id}' requires positive "
+                "direction-2 spacing when count 2 exceeds one"
+            )
 
 
 def _feature_property_binding(
@@ -1319,7 +1413,7 @@ def _feature_property_binding(
     owner_name: str,
     native_properties: list[str],
 ) -> dict:
-    return {
+    binding = {
         "parameter_id": dimension["parameter_id"],
         "native_name": dimension["native_name"],
         "binding_kind": "feature_property",
@@ -1328,7 +1422,13 @@ def _feature_property_binding(
         "native_properties": native_properties,
         "value": float(dimension["value_mm"]),
         "unit": dimension["unit"],
+        "minimum_value": 0.0,
+        "minimum_inclusive": False,
     }
+    if dimension["unit"] == "deg":
+        binding["maximum_value"] = 180.0
+        binding["maximum_inclusive"] = False
+    return binding
 
 
 def _pattern_parameter_bindings(
@@ -1361,18 +1461,28 @@ def _pattern_parameter_bindings(
     bindings = []
     for parameter_name, native_property, value, unit in values:
         parameter_id = f"{feature.id}.pattern.{parameter_name}"
-        bindings.append(
-            {
-                "parameter_id": parameter_id,
-                "native_name": _dimension_name(parameter_id, parameter_name),
-                "binding_kind": "feature_property",
-                "owner_kind": "pattern",
-                "owner_name": feature_name,
-                "native_properties": [native_property],
-                "value": value,
-                "unit": unit,
-            }
-        )
+        binding = {
+            "parameter_id": parameter_id,
+            "native_name": _dimension_name(parameter_id, parameter_name),
+            "binding_kind": "feature_property",
+            "owner_kind": "pattern",
+            "owner_name": feature_name,
+            "native_properties": [native_property],
+            "value": value,
+            "unit": unit,
+            "minimum_value": 0.0,
+            "minimum_inclusive": parameter_name.startswith("spacing_"),
+        }
+        if unit == "count":
+            binding["integer_only"] = True
+            binding["minimum_value"] = (
+                2.0 if kind == "circular_pattern" else 1.0
+            )
+            binding["minimum_inclusive"] = True
+        elif unit == "deg":
+            binding["maximum_value"] = 360.0
+            binding["maximum_inclusive"] = True
+        bindings.append(binding)
     return bindings
 
 

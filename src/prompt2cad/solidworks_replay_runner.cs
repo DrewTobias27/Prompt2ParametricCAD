@@ -413,6 +413,21 @@ namespace Prompt2Cad.SolidWorks
 
         [DataMember(Name = "source_value", EmitDefaultValue = false)]
         public double? SourceValue { get; set; }
+
+        [DataMember(Name = "minimum_value", EmitDefaultValue = false)]
+        public double? MinimumValue { get; set; }
+
+        [DataMember(Name = "minimum_inclusive", EmitDefaultValue = false)]
+        public bool MinimumInclusive { get; set; }
+
+        [DataMember(Name = "maximum_value", EmitDefaultValue = false)]
+        public double? MaximumValue { get; set; }
+
+        [DataMember(Name = "maximum_inclusive", EmitDefaultValue = false)]
+        public bool MaximumInclusive { get; set; }
+
+        [DataMember(Name = "integer_only", EmitDefaultValue = false)]
+        public bool IntegerOnly { get; set; }
     }
 
     [DataContract]
@@ -4861,6 +4876,11 @@ namespace Prompt2Cad.SolidWorks
             }
 
             var mutated = new HashSet<string>(StringComparer.Ordinal);
+            var nativeValues = bindings.ToDictionary(
+                item => item.Key,
+                item => item.Value.Value,
+                StringComparer.Ordinal
+            );
             foreach (ParameterMutation mutation in mutations)
             {
                 if (!mutated.Add(mutation.ParameterId))
@@ -4889,11 +4909,17 @@ namespace Prompt2Cad.SolidWorks
                     );
                 }
 
-                double nativeValue = ResolveNativeMutationValue(
+                nativeValues[mutation.ParameterId] = ResolveNativeMutationValue(
                     binding,
                     mutation.Value
                 );
+            }
+            ValidateNativeMutationSet(plan, nativeValues);
 
+            foreach (ParameterMutation mutation in mutations)
+            {
+                NativeParameterBinding binding = bindings[mutation.ParameterId];
+                double nativeValue = nativeValues[mutation.ParameterId];
                 if (String.Equals(
                     binding.BindingKind,
                     "named_dimension",
@@ -4927,6 +4953,69 @@ namespace Prompt2Cad.SolidWorks
             }
         }
 
+        private static void ValidateNativeMutationSet(
+            ReplayPlan plan,
+            IDictionary<string, double> values)
+        {
+            foreach (ReplayStep step in plan.Features)
+            {
+                if (step.Feature != null && String.Equals(
+                    step.Feature.Kind,
+                    "countersink",
+                    StringComparison.Ordinal))
+                {
+                    double holeDiameter = values[
+                        step.Id + ".feature.diameter"
+                    ];
+                    double countersinkDiameter = values[
+                        step.Id + ".feature.countersink_diameter"
+                    ];
+                    if (countersinkDiameter <= holeDiameter)
+                    {
+                        throw new InvalidOperationException(
+                            "Countersink '" + step.Id + "' requires its " +
+                            "countersink diameter to remain larger than its " +
+                            "hole diameter."
+                        );
+                    }
+                }
+
+                if (step.Pattern == null || !String.Equals(
+                    step.Pattern.Kind,
+                    "linear_pattern",
+                    StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                double count1 = values[step.Id + ".pattern.count_1"];
+                double count2 = values[step.Id + ".pattern.count_2"];
+                double spacing1 = values[step.Id + ".pattern.spacing_1"];
+                double spacing2 = values[step.Id + ".pattern.spacing_2"];
+                if (count1 * count2 < 2.0)
+                {
+                    throw new InvalidOperationException(
+                        "Linear pattern '" + step.Id + "' must retain at " +
+                        "least two instances; regenerate the package to " +
+                        "remove the pattern."
+                    );
+                }
+                if (count1 > 1.0 && spacing1 <= 0.0)
+                {
+                    throw new InvalidOperationException(
+                        "Linear pattern '" + step.Id + "' requires positive " +
+                        "direction-1 spacing when count 1 exceeds one."
+                    );
+                }
+                if (count2 > 1.0 && spacing2 <= 0.0)
+                {
+                    throw new InvalidOperationException(
+                        "Linear pattern '" + step.Id + "' requires positive " +
+                        "direction-2 spacing when count 2 exceeds one."
+                    );
+                }
+            }
+        }
+
         private static double ResolveNativeMutationValue(
             NativeParameterBinding binding,
             double requestedValue)
@@ -4938,12 +5027,13 @@ namespace Prompt2Cad.SolidWorks
                     "' requires a finite mutation value."
                 );
             }
+            double nativeValue = requestedValue;
             if (!String.Equals(
                 binding.MutationMode,
                 "absolute_same_side",
                 StringComparison.Ordinal))
             {
-                return requestedValue;
+                return ValidateNativeMutationRange(binding, nativeValue);
             }
             if (!binding.SourceValue.HasValue ||
                 Math.Abs(binding.SourceValue.Value) <= 1e-12)
@@ -4962,7 +5052,47 @@ namespace Prompt2Cad.SolidWorks
                     "in-place edit. Regenerate the part to change sides."
                 );
             }
-            return Math.Abs(requestedValue);
+            nativeValue = Math.Abs(requestedValue);
+            return ValidateNativeMutationRange(binding, nativeValue);
+        }
+
+        private static double ValidateNativeMutationRange(
+            NativeParameterBinding binding,
+            double nativeValue)
+        {
+            if (binding.IntegerOnly &&
+                Math.Abs(nativeValue - Math.Round(nativeValue)) > 1e-9)
+            {
+                throw new InvalidOperationException(
+                    "Parameter '" + binding.ParameterId +
+                    "' requires a whole-number value."
+                );
+            }
+            if (binding.MinimumValue.HasValue &&
+                (nativeValue < binding.MinimumValue.Value ||
+                 (nativeValue == binding.MinimumValue.Value &&
+                  !binding.MinimumInclusive)))
+            {
+                throw new InvalidOperationException(
+                    "Parameter '" + binding.ParameterId + "' must be " +
+                    (binding.MinimumInclusive ? "at least " : "greater than ") +
+                    binding.MinimumValue.Value.ToString(CultureInfo.InvariantCulture) +
+                    "."
+                );
+            }
+            if (binding.MaximumValue.HasValue &&
+                (nativeValue > binding.MaximumValue.Value ||
+                 (nativeValue == binding.MaximumValue.Value &&
+                  !binding.MaximumInclusive)))
+            {
+                throw new InvalidOperationException(
+                    "Parameter '" + binding.ParameterId + "' must be " +
+                    (binding.MaximumInclusive ? "at most " : "less than ") +
+                    binding.MaximumValue.Value.ToString(CultureInfo.InvariantCulture) +
+                    "."
+                );
+            }
+            return nativeValue;
         }
 
         private static void SetNamedDimension(
