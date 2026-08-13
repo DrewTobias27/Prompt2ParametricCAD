@@ -11,12 +11,16 @@ from zipfile import ZipFile
 
 import pytest
 
+from prompt2cad.editable_model import model_data_to_editable_document
 from prompt2cad.interpreter import build_model
 from prompt2cad.solidworks_package import create_solidworks_package
 from prompt2cad.solidworks_package import SOLIDWORKS_PACKAGE_FORMAT
 from prompt2cad.solidworks_package import SOLIDWORKS_PACKAGE_VERSION
+from prompt2cad.solidworks_replay import build_solidworks_replay_plan
 from prompt2cad.solidworks_verification import compare_geometry_metrics
 from prompt2cad.solidworks_verification import geometry_metrics
+from prompt2cad.solidworks_verification import validate_native_build_result
+from prompt2cad.solidworks_verification import validate_published_references
 
 
 PROJECT_ROOT = Path(__file__).parents[1]
@@ -478,7 +482,12 @@ def test_setup_check_rejects_unknown_semantic_datum_plane(tmp_path: Path):
     reason="Set P2P_RUN_SOLIDWORKS_NATIVE=1 to open installed SolidWorks",
 )
 def test_extracted_package_builds_verified_native_part(tmp_path: Path):
-    package = create_solidworks_package(fixture_model_data(), "Native package")
+    model_data = fixture_model_data()
+    expected_geometry = geometry_metrics(build_model(model_data))
+    plan = build_solidworks_replay_plan(
+        model_data_to_editable_document(model_data)
+    )
+    package = create_solidworks_package(model_data, "Native package")
     extract_package(package.content, tmp_path)
     output_path = tmp_path / "native-package.SLDPRT"
 
@@ -504,13 +513,21 @@ def test_extracted_package_builds_verified_native_part(tmp_path: Path):
     report_path = Path(f"{output_path}.result.json")
     assert report_path.is_file()
     report = json.loads(report_path.read_text(encoding="utf-8-sig"))
-    assert report["status"] == "success"
-    assert report["feature_count"] == 2
-    assert report["verified_parameter_count"] == report["declared_parameter_count"]
-    assert report["health"]["feature_error_count"] == 0
-    assert report["health"]["under_defined_sketch_count"] == 0
-    assert report["published_references"]
-    assert all(item["resolved"] for item in report["published_references"])
+    contract = validate_native_build_result(
+        plan,
+        report,
+        context="downloaded package",
+    )
+    references = validate_published_references(
+        plan,
+        report,
+        context="downloaded package",
+    )
+    comparison = compare_geometry_metrics(expected_geometry, report["geometry"])
+
+    assert contract["verification_passed"] is True
+    assert references["resolved_count"] == references["expected_count"]
+    assert comparison["passed"] is True
 
 
 @pytest.mark.skipif(
@@ -522,6 +539,9 @@ def test_curved_side_attachment_matches_cadquery_in_native_solidworks(
 ):
     model_data = curved_side_attachment_model_data()
     expected_geometry = geometry_metrics(build_model(model_data))
+    plan = build_solidworks_replay_plan(
+        model_data_to_editable_document(model_data)
+    )
     package = create_solidworks_package(
         model_data,
         "Curved side attachment",
@@ -551,10 +571,18 @@ def test_curved_side_attachment_matches_cadquery_in_native_solidworks(
     report_path = Path(f"{output_path}.result.json")
     assert report_path.is_file()
     report = json.loads(report_path.read_text(encoding="utf-8-sig"))
-    assert report["status"] == "success"
-    assert report["feature_count"] == 5
-    assert report["verified_parameter_count"] == report["declared_parameter_count"]
-    assert report["health"]["feature_error_count"] == 0
-    assert report["health"]["under_defined_sketch_count"] == 0
+    contract = validate_native_build_result(
+        plan,
+        report,
+        context="curved-side package",
+    )
+    references = validate_published_references(
+        plan,
+        report,
+        context="curved-side package",
+    )
     comparison = compare_geometry_metrics(expected_geometry, report["geometry"])
+
+    assert contract["verification_passed"] is True
+    assert references["resolved_count"] == references["expected_count"]
     assert comparison["passed"] is True
