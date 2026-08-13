@@ -22,7 +22,7 @@ from prompt2cad.solidworks_editability import native_parameter_coverage
 from prompt2cad.solidworks_package import SOLIDWORKS_PACKAGE_FORMAT
 from prompt2cad.solidworks_package import SOLIDWORKS_PACKAGE_PAYLOAD_FILES
 from prompt2cad.solidworks_package import SOLIDWORKS_PACKAGE_VERSION
-from prompt2cad.solidworks_package import solidworks_package_editability_summary
+from prompt2cad.solidworks_package import solidworks_package_manifest
 from prompt2cad.solidworks_package import solidworks_package_static_payload
 from prompt2cad.solidworks_replay import SolidWorksReplayPlan
 from prompt2cad.solidworks_replay import SOLIDWORKS_MUTATION_FORMAT
@@ -163,24 +163,6 @@ def verify_solidworks_package(
             "Editability coverage does not match the packaged source model"
         )
 
-    expected_replay_manifest = {
-        "format": plan.format_name,
-        "version": plan.format_version,
-        "feature_count": len(plan.features),
-        "build_order": list(plan.source_build_order),
-    }
-    if not _json_values_equal(
-        manifest.get("replay_plan"),
-        expected_replay_manifest,
-    ):
-        raise RuntimeError("Manifest replay metadata does not match the replay plan")
-    if not _json_values_equal(
-        manifest.get("editability"),
-        solidworks_package_editability_summary(coverage),
-    ):
-        raise RuntimeError(
-            "Manifest editability metadata does not match the source model"
-        )
     expected_static_payload = solidworks_package_static_payload(
         manifest["native_output"],
         coverage,
@@ -194,6 +176,20 @@ def verify_solidworks_package(
                 "Package executable or instruction file does not match the "
                 f"current release: {relative_path}"
             )
+
+    expected_manifest = solidworks_package_manifest(
+        manifest["native_output"],
+        plan,
+        coverage,
+        {
+            relative_path: (root / relative_path).read_bytes()
+            for relative_path in SOLIDWORKS_PACKAGE_PAYLOAD_FILES
+        },
+    )
+    if not _json_values_equal(manifest, expected_manifest):
+        raise RuntimeError(
+            "Package manifest does not match the canonical release contract"
+        )
 
     return VerifiedSolidWorksPackage(
         root=root,

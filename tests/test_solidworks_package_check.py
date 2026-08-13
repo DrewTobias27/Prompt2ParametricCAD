@@ -129,6 +129,30 @@ def test_package_checker_rejects_payload_hash_mismatch(tmp_path: Path):
         verify_solidworks_package(extracted)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("requirements", {"solidworks": "Anything"}),
+        ("unrecognized_contract", {"enabled": True}),
+    ],
+)
+def test_package_checker_rejects_noncanonical_manifest_metadata(
+    tmp_path: Path,
+    field: str,
+    value: object,
+):
+    archive_path = write_package_zip(tmp_path)
+    extracted = tmp_path / "verified-package"
+    extract_verified_solidworks_package(archive_path, extracted)
+    manifest_path = extracted / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest[field] = value
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="canonical release contract"):
+        verify_solidworks_package(extracted)
+
+
 def test_package_checker_rebuilds_plan_instead_of_trusting_manifest_hashes(
     tmp_path: Path,
 ):

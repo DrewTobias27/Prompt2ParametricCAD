@@ -78,7 +78,33 @@ def create_solidworks_package(
         "editability-coverage.json": _json_bytes(editability_coverage),
         "solidworks-replay-plan.json": _json_bytes(replay_plan.to_dict()),
     }
-    manifest = {
+    if set(files) != set(SOLIDWORKS_PACKAGE_PAYLOAD_FILES):
+        raise RuntimeError("SolidWorks package payload contract is incomplete")
+    manifest = solidworks_package_manifest(
+        native_filename,
+        replay_plan,
+        editability_coverage,
+        files,
+    )
+    files["manifest.json"] = _json_bytes(manifest)
+
+    return SolidWorksPackage(
+        filename=(
+            f"{stem}-v{SOLIDWORKS_PACKAGE_VERSION}-solidworks.zip"
+        ),
+        content=_zip_bytes(files),
+        manifest=manifest,
+    )
+
+
+def solidworks_package_manifest(
+    native_filename: str,
+    replay_plan,
+    editability_coverage: dict,
+    files: dict[str, bytes],
+) -> dict:
+    """Build the canonical, fully verifiable package manifest."""
+    return {
         "format": SOLIDWORKS_PACKAGE_FORMAT,
         "version": SOLIDWORKS_PACKAGE_VERSION,
         "native_output": native_filename,
@@ -106,17 +132,6 @@ def create_solidworks_package(
             for path, content in sorted(files.items())
         ],
     }
-    if set(files) != set(SOLIDWORKS_PACKAGE_PAYLOAD_FILES):
-        raise RuntimeError("SolidWorks package payload contract is incomplete")
-    files["manifest.json"] = _json_bytes(manifest)
-
-    return SolidWorksPackage(
-        filename=(
-            f"{stem}-v{SOLIDWORKS_PACKAGE_VERSION}-solidworks.zip"
-        ),
-        content=_zip_bytes(files),
-        manifest=manifest,
-    )
 
 
 def solidworks_package_editability_summary(coverage: dict) -> dict:
