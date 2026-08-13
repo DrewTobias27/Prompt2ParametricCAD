@@ -1,6 +1,7 @@
 """Contract checks for the one-command deterministic release gate."""
 
 from pathlib import Path
+import json
 import os
 import shutil
 import subprocess
@@ -122,6 +123,8 @@ def test_native_release_script_restores_shell_state_after_failure(
         [
             powershell_path(),
             "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
             "-Command",
             (
                 "$before=(Get-Location).Path; "
@@ -145,6 +148,14 @@ def test_native_release_script_restores_shell_state_after_failure(
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+    failure_report = json.loads(
+        (tmp_path / "evidence" / "release-failure.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert failure_report["status"] == "fail"
+    assert failure_report["public_release_ready"] is False
+    assert "exit code 17" in failure_report["error"]
 
 
 def test_release_script_keeps_native_execution_explicit():
@@ -227,6 +238,9 @@ def test_native_release_script_runs_every_focused_live_gate():
     assert "package_version = 8" not in source
     assert "source_zip_sha256" in source
     assert "release-summary.json" in source
+    assert "Write-Utf8TextAtomically" in source
+    assert "release-failure.json" in source
+    assert 'status = "fail"' in source
     assert "OPENAI_API_KEY" not in source
 
 

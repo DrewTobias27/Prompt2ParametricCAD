@@ -121,7 +121,9 @@ embeds the edited geometry in a version-2 mutation document, applies it to the
 downloaded SLDPRT, and saves and reopens a second SLDPRT. The runner refuses to
 publish a mismatched edit. The evidence folder retains both native
 parts, the mutation, machine-readable verification reports, and a complete
-terminal transcript.
+terminal transcript. Evidence JSON is moved into place only after a complete
+write. A failed run records `release-failure.json`; only
+`release-summary.json` with `public_release_ready: true` is release proof.
 
 ### Most recent verification
 

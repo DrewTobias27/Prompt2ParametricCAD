@@ -78,6 +78,35 @@ function Invoke-NativeReleaseStep {
     }
 }
 
+function Write-Utf8TextAtomically {
+    param(
+        [string]$Path,
+        [string]$Content
+    )
+
+    $resolvedPath = [System.IO.Path]::GetFullPath($Path)
+    if (Test-Path -LiteralPath $resolvedPath) {
+        throw "Refusing to overwrite existing release evidence: $resolvedPath"
+    }
+    $temporaryPath = (
+        $resolvedPath + ".tmp-" + [Guid]::NewGuid().ToString("N")
+    )
+    try {
+        $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText(
+            $temporaryPath,
+            $Content,
+            $utf8WithoutBom
+        )
+        Move-Item -LiteralPath $temporaryPath -Destination $resolvedPath
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporaryPath) {
+            Remove-Item -LiteralPath $temporaryPath -Force
+        }
+    }
+}
+
 $previousLocation = Get-Location
 $previousNativeSetting = $env:P2P_RUN_SOLIDWORKS_NATIVE
 $previousPythonPath = $env:PYTHONPATH
@@ -202,8 +231,9 @@ try {
             if (-not $editResultText) {
                 throw "Downloaded-package edit returned no verification result."
             }
-            $editResultText |
-                Set-Content -LiteralPath $editedResult -Encoding UTF8
+            Write-Utf8TextAtomically `
+                -Path $editedResult `
+                -Content $editResultText
         }
 
         $editVerificationReport = Join-Path `
@@ -317,7 +347,7 @@ try {
         }
     }
     $releaseSummaryPath = Join-Path $OutputRoot "release-summary.json"
-    [ordered]@{
+    $releaseSummaryText = [ordered]@{
         format = "prompt2cad.solidworks-release-evidence"
         version = 1
         status = $releaseStatus
@@ -334,8 +364,10 @@ try {
         smoke_report = $smokeReportPath
         golden_report = $goldenReportPath
         transcript = $transcriptPath
-    } | ConvertTo-Json -Depth 8 |
-        Set-Content -LiteralPath $releaseSummaryPath -Encoding UTF8
+    } | ConvertTo-Json -Depth 8
+    Write-Utf8TextAtomically `
+        -Path $releaseSummaryPath `
+        -Content $releaseSummaryText
 
     Write-Host ""
     Write-Host "Installed-SolidWorks release checks passed." -ForegroundColor Green
@@ -346,6 +378,31 @@ try {
     }
     Write-Host "Evidence: $OutputRoot"
     Write-Host "Summary:  $releaseSummaryPath"
+}
+catch {
+    $failureSummaryPath = Join-Path $OutputRoot "release-failure.json"
+    $failureSummaryText = [ordered]@{
+        format = "prompt2cad.solidworks-release-evidence"
+        version = 1
+        status = "fail"
+        failed_at_utc = [DateTime]::UtcNow.ToString("o")
+        package_version = $packageVersion
+        public_release_ready = $false
+        error = $_.Exception.Message
+        transcript = $transcriptPath
+    } | ConvertTo-Json -Depth 4
+    try {
+        Write-Utf8TextAtomically `
+            -Path $failureSummaryPath `
+            -Content $failureSummaryText
+    }
+    catch {
+        Write-Warning (
+            "Could not write native-release failure evidence: " +
+            $_.Exception.Message
+        )
+    }
+    throw
 }
 finally {
     try {
