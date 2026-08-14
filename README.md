@@ -229,8 +229,7 @@ regression-tested without opening SolidWorks; each installed SolidWorks version
 still requires a native smoke test before release use.
 The hosted application packages the source model, editable-model document,
 validated replay plan, and local runner into a ZIP. On Windows with SolidWorks
-installed, extract the ZIP and double-click `Build-SolidWorks-Part.cmd`; no
-terminal commands are required. The launcher
+installed, extract the ZIP and double-click `Build-SolidWorks-Part.cmd`. The launcher
 checks package hashes and local prerequisites before creating the SLDPRT and a
 machine-readable verification report. No API credential is included.
 Every executable native replay path carries source CadQuery body, volume,

@@ -612,87 +612,34 @@ def _check_cmd_launcher_script() -> str:
     ).lstrip()
 
 
-def _readme_text(native_filename: str, editability_coverage: dict) -> str:
-    parameter_count = editability_coverage["numeric_source_count"]
-    named_count = editability_coverage["bound_count"]
-    relation_count = editability_coverage["relation_controlled_count"]
-    derived_count = editability_coverage["derived_geometry_count"]
-    unsupported_count = len(
-        editability_coverage["unsupported_parameter_ids"]
-    )
-    restricted_count = len(
-        editability_coverage["restricted_parameter_ids"]
-    )
+def _readme_text(native_filename: str, _editability_coverage: dict) -> str:
     return dedent(
         f"""
         Prompt2ParametricCAD SolidWorks Package v{SOLIDWORKS_PACKAGE_VERSION}
         ==========================================
 
-        This bundle contains the validated feature history used to create the
-        STEP model. It does not contain a prebuilt SLDPRT file because native
-        SolidWorks files must be created through an installed SolidWorks copy.
-
         Requirements
         ------------
-        - Windows
-        - An installed and licensed copy of SolidWorks
-        - Windows PowerShell 5.1 or newer
+        - A Windows computer
+        - SolidWorks installed and licensed
 
         Build the editable part
         -----------------------
         1. Extract every file in this ZIP into one folder.
         2. Double-click Build-SolidWorks-Part.cmd.
-        3. Leave the window open while SolidWorks creates and verifies the part.
+        3. Keep the window open until it says the build is complete.
 
-        No PowerShell or terminal commands are required.
-
-        Expected outputs
-        ----------------
+        The editable part will be saved as:
 
            {native_filename}
-           {native_filename}.result.json
-
-        Keep these two files together. The SLDPRT is the editable SolidWorks
-        part. The JSON file is its verification receipt.
 
         If the build does not finish
         ----------------------------
-        The window identifies the failed stage and leaves a
-        `<part>.SLDPRT.replay.log` file with troubleshooting details. No
-        incomplete SLDPRT is published. Double-click
-        Check-SolidWorks-Setup.cmd if the message reports an installation,
-        API, or package problem.
+        The window explains what failed. If it reports a setup problem,
+        double-click Check-SolidWorks-Setup.cmd. A
+        `<part>.SLDPRT.replay.log` file contains details for troubleshooting.
 
-        The runner will not overwrite an existing SLDPRT or verification
-        report. Move or rename prior outputs before rebuilding the package.
-
-        Editability summary
-        -------------------
-        - Source numeric parameters: {parameter_count}
-        - Named automated edit bindings: {named_count}
-        - Zero coordinates held by sketch relations: {relation_count}
-        - Derived coordinates retained as native reference geometry: {derived_count}
-        - Parameters without automated mutation bindings: {unsupported_count}
-        - Coordinate controls limited to their current origin side: {restricted_count}
-
-        Every operation is replayed as native SolidWorks history. The counts
-        above distinguish stable automated controls from redundant geometry
-        retained in native sketches; they do not prevent normal manual
-        feature-tree editing. See editability-coverage.json for the exact
-        parameter IDs.
-        A side-limited coordinate remains editable in its current direction;
-        regenerate the package to move it across or onto the sketch origin.
-
-        What the launcher checks
-        ------------------------
-        The launcher verifies the package and SolidWorks installation, creates
-        named native sketches and ordered features, rebuilds the part, and
-        compares its body count, volume, surface area, envelope, and center of
-        mass with the source CadQuery model. It publishes the SLDPRT from a
-        temporary staged file only after every check passes.
-
-        The JSON receipt records hashes of the exact replay plan and SLDPRT.
-        Successful runs remove the diagnostic replay log. Failed retries retain
-        and append to that log instead of erasing earlier evidence.
+        The builder will not replace an existing part. Move or rename the old
+        SLDPRT before running it again.
         """
     ).lstrip()
