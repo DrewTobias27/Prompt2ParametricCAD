@@ -638,6 +638,34 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
         - An installed and licensed copy of SolidWorks
         - Windows PowerShell 5.1 or newer
 
+        Build the editable part
+        -----------------------
+        1. Extract every file in this ZIP into one folder.
+        2. Double-click Build-SolidWorks-Part.cmd.
+        3. Leave the window open while SolidWorks creates and verifies the part.
+
+        No PowerShell or terminal commands are required.
+
+        Expected outputs
+        ----------------
+
+           {native_filename}
+           {native_filename}.result.json
+
+        Keep these two files together. The SLDPRT is the editable SolidWorks
+        part. The JSON file is its verification receipt.
+
+        If the build does not finish
+        ----------------------------
+        The window identifies the failed stage and leaves a
+        `<part>.SLDPRT.replay.log` file with troubleshooting details. No
+        incomplete SLDPRT is published. Double-click
+        Check-SolidWorks-Setup.cmd if the message reports an installation,
+        API, or package problem.
+
+        The runner will not overwrite an existing SLDPRT or verification
+        report. Move or rename prior outputs before rebuilding the package.
+
         Editability summary
         -------------------
         - Source numeric parameters: {parameter_count}
@@ -655,51 +683,16 @@ def _readme_text(native_filename: str, editability_coverage: dict) -> str:
         A side-limited coordinate remains editable in its current direction;
         regenerate the package to move it across or onto the sketch origin.
 
-        Build the editable part
-        -----------------------
-        1. Extract every file in this ZIP into one folder.
-        2. Optional: double-click Check-SolidWorks-Setup.cmd. It checks the
-           package and compiles the replay engine without creating a part.
-        3. Double-click Build-SolidWorks-Part.cmd.
-        4. Keep the window open while SolidWorks creates and verifies the part.
+        What the launcher checks
+        ------------------------
+        The launcher verifies the package and SolidWorks installation, creates
+        named native sketches and ordered features, rebuilds the part, and
+        compares its body count, volume, surface area, envelope, and center of
+        mass with the source CadQuery model. It publishes the SLDPRT from a
+        temporary staged file only after every check passes.
 
-        If more than one SolidWorks version is installed, the setup check
-        prints the API folder and interop version it selected. To choose a
-        different installation for the current PowerShell window, set:
-
-           $env:P2P_SOLIDWORKS_ROOT = "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS"
-
-        The runner will not overwrite an existing SLDPRT or verification
-        report. Move or rename prior outputs before rebuilding the package.
-
-        PowerShell alternative
-        ----------------------
-        Open PowerShell in the extracted folder and run:
-
-           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\Build-SolidWorks-Part.ps1 -Visible
-
-        Expected outputs
-        ----------------
-
-           {native_filename}
-           {native_filename}.result.json
-
-        Keep the files together. Before opening SolidWorks, the launcher checks
-        that the package files match their recorded SHA-256 hashes and that the
-        required 64-bit SolidWorks API is available. It then creates named,
-        constrained sketches and ordered native features; verifies parameters,
-        feature health, and semantic face/edge references; compares the saved
-        body's count, volume, surface area, envelope, and center of mass with
-        the source CadQuery result; rebuilds; and publishes the SLDPRT from a
-        temporary staged file only after those checks pass. The JSON report
-        records the verified native result and SHA-256 digests of the exact
-        replay plan and SLDPRT bytes; the launcher independently recomputes
-        those digests before accepting the result. If any stage fails, the
-        staged file is removed, the window identifies the failing condition, and a
-        `<part>.SLDPRT.replay.log` file retains the completed stage history for
-        troubleshooting. Successful runs remove this diagnostic log. Failed
-        retries append a timestamped attempt instead of erasing the preceding
-        evidence. No successful native export should be assumed after a
-        reported failure.
+        The JSON receipt records hashes of the exact replay plan and SLDPRT.
+        Successful runs remove the diagnostic replay log. Failed retries retain
+        and append to that log instead of erasing earlier evidence.
         """
     ).lstrip()

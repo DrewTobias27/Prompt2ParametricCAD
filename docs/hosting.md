@@ -51,16 +51,17 @@ The hosted application exports STEP, editable model data, and a validated
 SolidWorks replay package. The package is generated in memory and contains no
 API credentials. Native `SLDPRT` creation remains a local Windows step because
 it requires an installed and licensed SolidWorks application: extract the ZIP
-and optionally double-click `Check-SolidWorks-Setup.cmd` first. That preflight
-checks the package, 64-bit PowerShell, SolidWorks registration and API files,
-compiles the replay engine, and validates the replay-plan contract without
-creating a part. The repository's compile-only release gate also executes the
+and double-click `Build-SolidWorks-Part.cmd`. No terminal commands are required.
+If the launcher reports a setup problem, `Check-SolidWorks-Setup.cmd` checks the
+package, 64-bit PowerShell, SolidWorks registration and API files, compiles the
+replay engine, and validates the replay-plan contract without creating a part.
+The repository's compile-only release gate also executes the
 same C# geometry comparator directly: an exact oracle must pass and an
 out-of-tolerance volume must fail before native COM execution is trusted. It
 also executes the production C# mutation preflight with valid pattern controls
-and a deliberately collapsed linear pattern. Then run
-`Build-SolidWorks-Part.cmd`; package v12 stages the native part, closes and
-reopens it, verifies the saved history, exact parameter/helper identities,
+and a deliberately collapsed linear pattern. Package v12 then stages the native
+part, closes and reopens it, verifies the saved history, exact
+parameter/helper identities,
 localized datum/template resolution, and body/volume/area/bounds/center against
 the embedded CadQuery geometry oracle, and only then writes the final part plus
 a JSON verification report. The same fail-closed oracle is required by CLI,

@@ -198,6 +198,10 @@ def test_package_contains_validated_native_replay_and_local_runner():
     check_launcher = files["Check-SolidWorks-Setup.cmd"]
     runner = files["solidworks_replay_runner.cs"]
     assert b"Build-SolidWorks-Part.cmd" in readme
+    assert b"No PowerShell or terminal commands are required" in readme
+    assert b"The SLDPRT is the editable SolidWorks" in readme
+    assert b"If the build does not finish" in readme
+    assert b"PowerShell alternative" not in readme
     assert b"Editability summary" in readme
     assert b"retained as native reference geometry" in readme
     assert b"editability-coverage.json" in readme
@@ -205,9 +209,7 @@ def test_package_contains_validated_native_replay_and_local_runner():
     assert b"will not overwrite an existing SLDPRT or verification" in readme
     assert b"temporary staged file" in readme
     assert b"SLDPRT.replay.log" in readme
-    assert b"Successful runs remove this diagnostic log" in readme
-    assert b"P2P_SOLIDWORKS_ROOT" in readme
-    assert b"interop version it selected" in readme
+    assert b"Successful runs remove the diagnostic replay log" in readme
     assert b"solidworks-replay-plan.json" in launcher
     assert b"SolidWorks package version 12" in launcher
     assert b"Saved file reopened" in launcher

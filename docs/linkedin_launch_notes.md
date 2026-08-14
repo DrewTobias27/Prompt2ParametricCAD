@@ -19,6 +19,15 @@ publish the post until Drew asks.
 Do not link the SolidWorks claim publicly until the release gate in
 `docs/hosting.md` passes against a package downloaded from the deployed website.
 
+## Outstanding before the post
+
+- [ ] Connect SolidWorks replay failures to the existing refinement loop. The
+  application should preserve the prior design intent, translate the failed
+  replay stage and diagnostics into safe structured feedback, and offer a
+  corrected package without making the user reconstruct the original prompt.
+  Prove the workflow with a controlled replay failure, repair, rebuild, and
+  native verification test. Do not silently retry the same package.
+
 ## Verified release evidence
 
 Verified against the public deployment on August 10, 2026:
